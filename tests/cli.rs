@@ -307,6 +307,7 @@ fn report_rejects_typescript_destinations_even_when_missing_or_unselected() {
         "new.cts",
         "new.d.ts",
         "new.TS",
+        ".ts",
     ] {
         let output = dir.path().join(file);
         let result = at(

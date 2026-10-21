@@ -4,10 +4,11 @@ use std::{io::Write, path::Path};
 
 // Include declarations and case variants too: output is never a TS destination.
 fn typescript(path: &Path) -> bool {
-    path.extension().is_some_and(|ext| {
-        ["ts", "tsx", "mts", "cts"]
+    path.file_name().is_some_and(|name| {
+        let name = name.to_string_lossy().to_ascii_lowercase();
+        [".ts", ".tsx", ".mts", ".cts"]
             .iter()
-            .any(|candidate| ext.eq_ignore_ascii_case(candidate))
+            .any(|extension| name.ends_with(extension))
     })
 }
 

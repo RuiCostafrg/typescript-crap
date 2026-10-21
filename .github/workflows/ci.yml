@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: 24
       - name: Release security regression tests
-        run: python3 -m unittest discover -s tests -p "test_release_security.py"
+        run: python3 -B -m unittest discover -s tests -p "test_release_security.py"
       - run: cargo fmt --check
       - run: python3 -m unittest discover -s tests -p "test_coverage_summary.py"
       - name: Check publishable package contents

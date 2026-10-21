@@ -5,7 +5,12 @@ use std::{fs, process::Command};
 #[test]
 fn json_xml_html_reports_contain_locations_scores_and_escape_user_source() {
     let dir = tempfile::tempdir().unwrap();
-    let source = dir.path().join("quote'&<file>.ts");
+    let filename = if cfg!(windows) {
+        "quote'& ü.ts"
+    } else {
+        "quote'&<file>.ts"
+    };
+    let source = dir.path().join(filename);
     fs::write(&source,"export const obj = { ['<script>alert(1)</script>'](flag: boolean) { if(flag) return 1; if(!flag) return 2; return 0; } };").unwrap();
     for format in ["json", "xml", "html"] {
         let output = dir.path().join(format!("report.{format}"));
@@ -35,14 +40,19 @@ fn json_xml_html_reports_contain_locations_scores_and_escape_user_source() {
         match format {
             "json" => {
                 let value: serde_json::Value = serde_json::from_str(&report).unwrap();
-                assert_eq!(value["functions"][0]["path"], "quote'&<file>.ts");
+                assert_eq!(value["functions"][0]["path"], filename);
                 assert_eq!(value["functions"][0]["complexity"], 3);
                 assert_eq!(value["functions"][0]["crap"], 12.0);
                 assert_eq!(value["failed"], true);
             }
             "xml" => {
                 assert!(report.contains("&lt;script&gt;"));
-                assert!(report.contains("quote&apos;&amp;&lt;file&gt;.ts"));
+                let escaped = if cfg!(windows) {
+                    "quote&apos;&amp; ü.ts"
+                } else {
+                    "quote&apos;&amp;&lt;file&gt;.ts"
+                };
+                assert!(report.contains(escaped));
                 let mut reader = Reader::from_str(&report);
                 let mut count = 0;
                 loop {
@@ -121,7 +131,10 @@ fn output_creation_replacement_and_canonical_input_aliases() {
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("cannot overwrite a source file"));
+    assert!(
+        String::from_utf8_lossy(&out.stderr)
+            .contains("cannot overwrite a TypeScript source destination")
+    );
     assert_eq!(fs::read_to_string(root.join("a.ts")).unwrap(), text);
 }
 

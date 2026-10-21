@@ -1,4 +1,5 @@
 mod cli;
+mod output;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {

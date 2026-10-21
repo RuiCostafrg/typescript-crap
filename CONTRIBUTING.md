@@ -52,7 +52,11 @@ cancelled. They require no publishing credentials or external coverage-service t
 
 - **`.github/workflows/ci.yml`**: push, PR, and manual runs; Rust 1.90/stable
   matrix; formatting, strict Clippy, debug/release tests, Python helper tests,
-  publishable-package content checks, rustdoc and Node syntax checks. Separate jobs run RustSec auditing and actionlint.
+  publishable-package content checks, rustdoc and Node syntax checks. Separate
+  jobs run RustSec auditing and actionlint. macOS and Windows jobs run
+  CLI/path/output, Git selection, report and real Node coverage behavior tests,
+  including spaces, Unicode and native path separators. These jobs retain the
+  owner-only actor gate and receive no publishing credentials.
 - **`.github/workflows/coverage.yml`**: push, PR, and manual runs; actual Rust
   instrumentation through cargo-llvm-cov 0.9.1 and llvm-tools-preview. The complete
   library/binary/integration suite runs, including spawned CLI binaries and Node/V8

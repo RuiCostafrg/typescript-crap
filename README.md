@@ -143,6 +143,20 @@ from a nonempty passing scan. Thresholds must be finite and nonnegative.
 - `--diff` and `--pr` are mutually exclusive. A shallow checkout missing a base
   commit is an error; fetch sufficient history (e.g. `fetch-depth: 0` in CI).
 
+### Report output safety
+
+`--output` paths are relative to the caller's current directory. Reports are
+written to a securely created sibling temporary file, synced, then atomically
+replaced at the destination. A failed write preserves the previous report.
+TypeScript destinations (`.ts`, `.tsx`, `.mts`, `.cts`, including declarations
+and case variants), symbolic links, directories, coverage-input aliases, and
+hardlinks to TypeScript files anywhere under the project root are rejected.
+The alias check includes hidden, ignored and unselected sources; directory
+symlinks are not followed. Concurrent project mutation is not supported.
+
+Analysis uses iterative tree traversal so deeply nested valid expressions do
+not consume the application's call stack.
+
 ## Scoring contract
 
 ```text

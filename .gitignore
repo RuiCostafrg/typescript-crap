@@ -4,5 +4,6 @@
 /reports/
 /node_modules/
 /mutants.out*/
+/REPO_IMPROVEMENT_REPORT.md
 __pycache__/
 *.py[cod]

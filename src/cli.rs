@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
 use ts_crap::{Format, ScanOptions};
@@ -46,8 +46,11 @@ fn threshold(raw: &str) -> Result<f64, String> {
 
 pub fn execute() -> Result<bool> {
     let args = Args::parse();
+    if let Some(path) = &args.output {
+        crate::output::validate(&args.root, path, args.coverage.as_deref())?;
+    }
     let report = ts_crap::scan(&ScanOptions {
-        root: args.root,
+        root: args.root.clone(),
         paths: args.paths,
         threshold: args.threshold,
         coverage: args.coverage.clone(),
@@ -56,26 +59,7 @@ pub fn execute() -> Result<bool> {
     })?;
     let rendered = ts_crap::render(&report, args.format)?;
     if let Some(path) = args.output {
-        // Only existing destinations can alias an input. Missing destinations
-        // are created by write(), which also reports missing-parent/I/O errors.
-        if path.try_exists()? {
-            let resolved = path.canonicalize()?;
-            if report.is_source_path(&resolved) {
-                bail!("report output cannot overwrite a source file");
-            }
-            if args
-                .coverage
-                .as_ref()
-                .map(|p| p.canonicalize())
-                .transpose()?
-                .as_ref()
-                == Some(&resolved)
-            {
-                bail!("report output cannot overwrite coverage input");
-            }
-        }
-        std::fs::write(&path, rendered)
-            .with_context(|| format!("cannot write report {}", path.display()))?;
+        crate::output::write_report(&args.root, &path, args.coverage.as_deref(), &rendered)?;
     } else {
         use std::io::Write;
         std::io::stdout().lock().write_all(rendered.as_bytes())?;

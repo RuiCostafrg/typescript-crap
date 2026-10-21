@@ -22,16 +22,19 @@ fn runner(root: &Path, output: &Path, entry: &str) -> std::process::Output {
 #[test]
 fn snapshot_hash_survives_source_mutation_and_uncovered_same_line_branch_is_zero() {
     use sha2::{Digest, Sha256};
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::Builder::new()
+        .prefix("ts crap ü ")
+        .tempdir()
+        .unwrap();
     let root = dir.path();
     let source = "export function branch(flag: boolean) { const emoji = '😀'; return flag ? emoji.length : 0; }\n";
-    fs::write(root.join("branch.mts"), source).unwrap();
+    fs::write(root.join("branch ü.mts"), source).unwrap();
     fs::write(root.join("unused.cts"), "const unused: number = 1;\n").unwrap();
     for excluded in ["node_modules", ".git", "target"] {
         fs::create_dir(root.join(excluded)).unwrap();
         fs::write(root.join(excluded).join("ignored.ts"), "ignored();").unwrap();
     }
-    fs::write(root.join("test.mjs"), "import { branch } from './branch.mts';\nimport { writeFileSync } from 'node:fs';\nimport assert from 'node:assert/strict';\nassert.equal(branch(true), 2);\nwriteFileSync('branch.mts', '// mutated after import\\n');\n").unwrap();
+    fs::write(root.join("test.mjs"), "import { branch } from './branch ü.mts';\nimport { writeFileSync } from 'node:fs';\nimport assert from 'node:assert/strict';\nassert.equal(branch(true), 2);\nwriteFileSync('branch ü.mts', '// mutated after import\\n');\n").unwrap();
     let report = root.join("coverage.json");
     let result = runner(root, &report, "test.mjs");
     assert!(
@@ -41,10 +44,10 @@ fn snapshot_hash_survives_source_mutation_and_uncovered_same_line_branch_is_zero
     );
     let native: serde_json::Value = serde_json::from_slice(&fs::read(report).unwrap()).unwrap();
     assert_eq!(
-        native["files"]["branch.mts"]["sha256"],
+        native["files"]["branch ü.mts"]["sha256"],
         format!("{:x}", Sha256::digest(source.as_bytes()))
     );
-    assert_eq!(native["files"]["branch.mts"]["lines"]["1"], 0);
+    assert_eq!(native["files"]["branch ü.mts"]["lines"]["1"], 0);
     assert_eq!(
         native["files"]["unused.cts"]["lines"],
         serde_json::json!({})

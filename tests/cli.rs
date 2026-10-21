@@ -269,3 +269,210 @@ fn empty_and_type_only_projects_succeed_with_explicit_zero_counts() {
     let out = at(dir.path(), &["--format", "json"]);
     assert_eq!(json(&out)["files_scanned"], 0);
 }
+
+#[test]
+fn report_rejects_selected_unselected_and_ignored_source_hardlinks() {
+    let source = "export function f(){return 1;}";
+    let dir = project(&[
+        ("selected.ts", source),
+        ("hidden ü/unselected.ts", source),
+        (".gitignore", "hidden ü/\n"),
+    ]);
+    for file in ["selected.ts", "hidden ü/unselected.ts"] {
+        let output = dir.path().join("report.json");
+        fs::hard_link(dir.path().join(file), &output).unwrap();
+        let result = at(
+            dir.path(),
+            &["selected.ts", "--output", output.to_str().unwrap()],
+        );
+        assert_eq!(result.status.code(), Some(2), "{result:?}");
+        assert!(
+            String::from_utf8_lossy(&result.stderr).contains("source file"),
+            "{result:?}"
+        );
+        assert_eq!(fs::read_to_string(dir.path().join(file)).unwrap(), source);
+        assert_eq!(fs::read_to_string(&output).unwrap(), source);
+        fs::remove_file(output).unwrap();
+    }
+}
+
+#[test]
+fn report_rejects_typescript_destinations_even_when_missing_or_unselected() {
+    let source = "export function f(){return 1;}";
+    let dir = project(&[("selected.ts", source), ("unselected.ts", source)]);
+    for file in [
+        "unselected.ts",
+        "new.tsx",
+        "new.mts",
+        "new.cts",
+        "new.d.ts",
+        "new.TS",
+        ".ts",
+    ] {
+        let output = dir.path().join(file);
+        let result = at(
+            dir.path(),
+            &["selected.ts", "--output", output.to_str().unwrap()],
+        );
+        assert_eq!(result.status.code(), Some(2), "{result:?}");
+        assert!(String::from_utf8_lossy(&result.stderr).contains("source destination"));
+    }
+    assert_eq!(
+        fs::read_to_string(dir.path().join("unselected.ts")).unwrap(),
+        source
+    );
+    assert!(!dir.path().join("new.tsx").exists());
+}
+
+#[test]
+fn report_rejects_coverage_input_and_hardlink_alias() {
+    let dir = project(&[("a.ts", "export function f(){return 1;}")]);
+    let coverage = dir.path().join("coverage.json");
+    let original = r#"{"version":1,"files":{}}"#;
+    fs::write(&coverage, original).unwrap();
+    let alias = dir.path().join("alias.json");
+    fs::hard_link(&coverage, &alias).unwrap();
+    for output in [&coverage, &alias] {
+        let result = at(
+            dir.path(),
+            &[
+                "--coverage",
+                coverage.to_str().unwrap(),
+                "--output",
+                output.to_str().unwrap(),
+            ],
+        );
+        assert_eq!(result.status.code(), Some(2), "{result:?}");
+        assert!(String::from_utf8_lossy(&result.stderr).contains("coverage input"));
+        assert_eq!(fs::read_to_string(&coverage).unwrap(), original);
+    }
+}
+
+#[test]
+fn atomic_report_replacement_preserves_other_links_and_cleans_temporary_files() {
+    let dir = project(&[("path with ü/a.ts", "export function f(){return 1;}")]);
+    let output = dir.path().join("report ü.json");
+    let previous = dir.path().join("previous.json");
+    fs::write(&output, "previous report").unwrap();
+    fs::hard_link(&output, &previous).unwrap();
+    let result = at(
+        dir.path(),
+        &[
+            "path with ü/a.ts",
+            "--format",
+            "json",
+            "--output",
+            output.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(result.status.code(), Some(0), "{result:?}");
+    let report: serde_json::Value = serde_json::from_slice(&fs::read(&output).unwrap()).unwrap();
+    assert_eq!(report["functions"][0]["path"], "path with ü/a.ts");
+    assert_eq!(fs::read_to_string(previous).unwrap(), "previous report");
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 3);
+    // A failed scan must leave a previously published report byte-for-byte intact.
+    let bytes = fs::read(&output).unwrap();
+    fs::write(dir.path().join("broken.ts"), "function {").unwrap();
+    assert_eq!(
+        at(dir.path(), &["--output", output.to_str().unwrap()])
+            .status
+            .code(),
+        Some(2)
+    );
+    assert_eq!(fs::read(output).unwrap(), bytes);
+}
+
+#[cfg(unix)]
+#[test]
+fn report_rejects_symlinks_including_extension_changing_and_dangling_links() {
+    use std::os::unix::fs::symlink;
+    let dir = project(&[("a.ts", "export function f(){return 1;}")]);
+    for target in ["a.ts", "missing.ts"] {
+        let output = dir.path().join("alias.json");
+        symlink(dir.path().join(target), &output).unwrap();
+        let result = at(dir.path(), &["--output", output.to_str().unwrap()]);
+        assert_eq!(result.status.code(), Some(2), "{result:?}");
+        assert!(String::from_utf8_lossy(&result.stderr).contains("symbolic link"));
+        fs::remove_file(output).unwrap();
+    }
+    assert_eq!(
+        fs::read_to_string(dir.path().join("a.ts")).unwrap(),
+        "export function f(){return 1;}"
+    );
+    assert!(!dir.path().join("missing.ts").exists());
+}
+
+#[test]
+fn deeply_nested_valid_expressions_do_not_abort() {
+    let dir = tempfile::tempdir().unwrap();
+    for depth in [1, 64, 512, 4_096, 20_000] {
+        let source = format!(
+            "export function f(){{return {}1{};}}",
+            "(".repeat(depth),
+            ")".repeat(depth)
+        );
+        fs::write(dir.path().join("deep.ts"), source).unwrap();
+        let result = at(dir.path(), &["--format", "json"]);
+        assert_eq!(result.status.code(), Some(0), "depth {depth}: {result:?}");
+        assert_eq!(json(&result)["functions"][0]["complexity"], 1);
+    }
+}
+
+#[test]
+fn deeply_nested_function_names_do_not_recurse() {
+    let dir = tempfile::tempdir().unwrap();
+    let depth = 64;
+    let source = format!(
+        "{}return 1;{}",
+        "function f(){".repeat(depth),
+        "}".repeat(depth)
+    );
+    fs::write(dir.path().join("deep.ts"), source).unwrap();
+    let result = at(dir.path(), &["--format", "json"]);
+    assert_eq!(result.status.code(), Some(0), "{result:?}");
+    assert_eq!(json(&result)["functions"].as_array().unwrap().len(), depth);
+    assert_eq!(
+        json(&result)["functions"][depth - 1]["name"],
+        vec!["f"; depth].join("::")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn failed_report_write_preserves_existing_report_and_removes_staging_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let source: String = (0..100)
+        .map(|i| format!("export function f{i}(){{return 1;}}\n"))
+        .collect();
+    fs::write(dir.path().join("a.ts"), source).unwrap();
+    let output = dir.path().join("report.json");
+    fs::write(&output, "previous complete report").unwrap();
+    let result = Command::new("python3")
+        // The file-size limit also truncates LLVM's exit-time profile. Keep
+        // this one failure-injection child out of the coverage merge inputs.
+        .env("LLVM_PROFILE_FILE", "/dev/null")
+        .args([
+            "-c",
+            r#"
+import resource, signal, subprocess, sys
+signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+resource.setrlimit(resource.RLIMIT_FSIZE, (1024, 1024))
+sys.exit(subprocess.call(sys.argv[1:], restore_signals=False))
+"#,
+        ])
+        .arg(env!("CARGO_BIN_EXE_ts-crap"))
+        .arg("--root")
+        .arg(dir.path())
+        .args(["--format", "json", "--output"])
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(2), "{result:?}");
+    assert!(String::from_utf8_lossy(&result.stderr).contains("cannot write report"));
+    assert_eq!(
+        fs::read_to_string(output).unwrap(),
+        "previous complete report"
+    );
+    assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 2);
+}

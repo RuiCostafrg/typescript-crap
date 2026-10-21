@@ -447,6 +447,9 @@ fn failed_report_write_preserves_existing_report_and_removes_staging_file() {
     let output = dir.path().join("report.json");
     fs::write(&output, "previous complete report").unwrap();
     let result = Command::new("python3")
+        // The file-size limit also truncates LLVM's exit-time profile. Keep
+        // this one failure-injection child out of the coverage merge inputs.
+        .env("LLVM_PROFILE_FILE", "/dev/null")
         .args([
             "-c",
             r#"

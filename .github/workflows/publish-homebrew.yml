@@ -46,3 +46,25 @@ jobs:
             git commit -m "Update ts-crap to $RELEASE_TAG"
             git push origin HEAD:main
           fi
+  install:
+    name: Homebrew install (${{ matrix.runner }})
+    needs: publish
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-14, ubuntu-22.04]
+    steps:
+      - name: Install from public tap
+        shell: bash
+        env:
+          VERSION: ${{ fromJson(inputs.plan).releases[0].app_version }}
+          HOMEBREW_NO_ANALYTICS: "1"
+        run: |
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          fi
+          brew install RuiCostafrg/tap/ts-crap
+          ts-crap --version | grep -Fx "ts-crap $VERSION"
+          ts-crap --help

@@ -7,7 +7,49 @@ Scans a project, selected files/directories, or files changed in a Git/GitHub PR
 Reports each function's relative path, one-based start line/column, end line,
 cyclomatic complexity, coverage, CRAP score, and gate result.
 
-## Build and run
+## Install
+
+Prebuilt releases require **no Rust toolchain, C compiler, or Node.js** to scan
+TypeScript. Available for macOS (Apple Silicon / Intel), Linux with glibc 2.35+
+(ARM64 / x86-64), and Windows (x86-64).
+
+### macOS and Linux
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/RuiCostafrg/typescript-crap/releases/latest/download/ts-crap-installer.sh | sh
+```
+
+The installer detects your platform and installs to `~/.local/bin`. Follow its
+PATH instructions, or open a new terminal, then run `ts-crap --help`.
+Run the same installer again to update to the latest release.
+
+### Homebrew (macOS and Linux)
+
+```sh
+brew install RuiCostafrg/tap/ts-crap
+# Upgrade later:
+brew update && brew upgrade ts-crap
+```
+
+### Windows PowerShell
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/RuiCostafrg/typescript-crap/releases/latest/download/ts-crap-installer.ps1 | iex"
+```
+
+### Manual download
+
+Download the archive for your OS and CPU from [GitHub Releases](https://github.com/RuiCostafrg/typescript-crap/releases/latest),
+verify its SHA-256 using the accompanying `.sha256` file, extract it, and place
+`ts-crap` (or `ts-crap.exe`) in a directory on your PATH. Unix archives use
+`.tar.xz`; Windows archives use `.zip`. Linux binaries target glibc distributions;
+Alpine/musl, Android/Termux, and Windows ARM64 do not have native release builds.
+
+Git is needed for diff mode, and authenticated `gh` for GitHub PR discovery.
+The optional coverage collector lives in this repository under `scripts/` and
+requires Node 24+; the prebuilt CLI itself does not.
+
+## Build from source
 
 Requires Rust 1.90+ and a C compiler (for the Tree-sitter parser). Node is **not**
 required to analyze code; Node 24+ is required for the bundled coverage collector

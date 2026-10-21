@@ -6,6 +6,7 @@ rust-version = "1.90"
 description = "Source-aware CRAP scores for TypeScript functions"
 license = "MIT"
 repository = "https://github.com/RuiCostafrg/typescript-crap"
+homepage = "https://github.com/RuiCostafrg/typescript-crap"
 readme = "README.md"
 # An explicit allowlist prevents local reports, mutation logs and caches shipping.
 include = [
@@ -66,3 +67,8 @@ lto = "thin"
 codegen-units = 1
 overflow-checks = true
 strip = "debuginfo"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

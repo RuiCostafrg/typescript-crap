@@ -179,3 +179,38 @@ file/coverage reads, parsing, scoring, and sorting—not JSON/HTML serialization
 Use `TS_CRAP_BENCH_FUNCTIONS` to change the workload. Local wall-clock measurements
 are informational: mobile CPU throttling, concurrent compilation, filesystem
 caches, and proot affect results. There is no flaky timing assertion in CI.
+
+
+## Publishing releases
+
+Release automation uses cargo-dist **0.33.1**, configured in `dist-workspace.toml`.
+The generated `.github/workflows/release.yml` builds five native targets, creates
+SHA-256 checksums and platform-detecting shell/PowerShell installers, and publishes
+GitHub Release assets. Archive smoke tests run on each target OS/CPU before
+publication, verifying checksums, `--version`, `--help`, and a real TypeScript scan.
+The Homebrew formula installs the same prebuilt archives; users need no Rust.
+
+To publish after the main CI passes:
+
+1. Set the next version in `Cargo.toml`, update `Cargo.lock` with `cargo check`,
+   and commit/push the changes.
+2. Create and push the matching tag, for example `git tag v0.2.0` followed by
+   `git push origin v0.2.0`. The tag version must match `Cargo.toml`.
+3. Check the **Release** workflow. Stable releases automatically update
+   `RuiCostafrg/homebrew-tap`; prereleases are published to GitHub without updating
+   Homebrew. Never move an already-published tag to another commit.
+
+After editing distribution configuration, run `dist generate` using the pinned
+cargo-dist version and commit the generated workflow. `dist plan` validates the
+release plan without publishing. The Homebrew tap uses a dedicated SSH deploy key
+with write access only to that tap. Its private half is stored as the Actions
+secret `HOMEBREW_TAP_DEPLOY_KEY` in this repository. To rotate it, create a fresh
+key, replace the secret, add the public key to the tap's deploy keys with write
+access, then remove the old deploy key. The normal `GITHUB_TOKEN` publishes release
+assets in this repository. No personal access token is needed.
+
+The cargo-dist warning about the built-in Homebrew publisher being disabled is
+expected: `publish-homebrew.yml` handles publication after the release is public.
+Binary archives include the README and MIT license; the optional Node coverage
+collector is available from the source repository rather than installed with the
+CLI.

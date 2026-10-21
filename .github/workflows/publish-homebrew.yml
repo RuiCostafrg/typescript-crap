@@ -1,0 +1,48 @@
+name: Publish Homebrew
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+    secrets:
+      HOMEBREW_TAP_DEPLOY_KEY:
+        required: true
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: ${{ !fromJson(inputs.plan).announcement_is_prerelease }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    concurrency:
+      group: homebrew-tap
+      cancel-in-progress: false
+    steps:
+      - name: Download published formula
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ fromJson(inputs.plan).announcement_tag }}
+        run: |
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern ts-crap.rb --dir "$RUNNER_TEMP/formula"
+          ruby -c "$RUNNER_TEMP/formula/ts-crap.rb"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: RuiCostafrg/homebrew-tap
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          path: tap
+      - name: Update tap
+        working-directory: tap
+        env:
+          RELEASE_TAG: ${{ fromJson(inputs.plan).announcement_tag }}
+        run: |
+          mkdir -p Formula
+          cp "$RUNNER_TEMP/formula/ts-crap.rb" Formula/ts-crap.rb
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Formula/ts-crap.rb
+          if ! git diff --cached --quiet; then
+            git commit -m "Update ts-crap to $RELEASE_TAG"
+            git push origin HEAD:main
+          fi

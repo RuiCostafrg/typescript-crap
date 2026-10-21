@@ -1,0 +1,68 @@
+name: Verify release archives
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  smoke:
+    name: Smoke test (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: aarch64-apple-darwin
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: artifacts-build-local-*
+          path: artifacts
+          merge-multiple: true
+      - name: Verify checksum, unpack, and run
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ fromJson(inputs.plan).releases[0].app_version }}
+        run: |
+          cd artifacts
+          if [[ "$TARGET" == *windows* ]]; then
+            archive="ts-crap-$TARGET.zip"
+            binary=ts-crap.exe
+          else
+            archive="ts-crap-$TARGET.tar.xz"
+            binary=ts-crap
+          fi
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum --check "$archive.sha256"
+          else
+            shasum -a 256 --check "$archive.sha256"
+          fi
+          mkdir unpacked
+          if [[ "$archive" == *.zip ]]; then
+            unzip "$archive" -d unpacked
+          else
+            tar -xf "$archive" -C unpacked
+          fi
+          executable=$(find "$PWD/unpacked" -type f -name "$binary")
+          test -n "$executable"
+          "$executable" --version | grep -Fx "ts-crap $VERSION"
+          "$executable" --help
+          # A real scan must work with the packaged parser and no Rust/Node calls.
+          "$executable" --root "$GITHUB_WORKSPACE/examples/shop" --threshold 20

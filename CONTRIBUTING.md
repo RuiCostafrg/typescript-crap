@@ -1,0 +1,181 @@
+# Rust development and quality gates
+
+## Layout
+
+This is a single Cargo package with both a library and a binary. Flat modules are
+idiomatic here; do not add a directory per file or a workspace without a real need.
+
+- `src/main.rs`: process entry point and exit-code mapping only.
+- `src/cli.rs`: Clap arguments, stdout/report-file publication, user diagnostics.
+- `src/lib.rs`: public `scan`, `render`, `ScanOptions`, and report types.
+- `src/analysis.rs`: private Tree-sitter TypeScript analysis.
+- `src/coverage.rs`: private native coverage validation and borrowed per-source view.
+- `src/coverage/tests.rs`: its `#[cfg(test)]` unit module; separate physical file
+  keeps test code out of production coverage measurements.
+- `src/selection.rs`: private source discovery and Git/gh integration.
+- `src/report.rs`: private report encoders.
+- `tests/`: public-interface integration and real CLI/Node/Git end-to-end tests.
+- `tests/fixtures/`: TypeScript input data, not Rust compilation targets.
+- `benches/scan.rs`: repeatable optimized scan benchmark.
+- `examples/shop/`: executable TypeScript example, not a Rust example target.
+- `scripts/`: optional Node coverage adapter and its loader-integrity hook.
+- `.cargo/`: Cargo developer-tool configuration.
+- `.github/workflows/`: automated validation.
+
+Tests should exercise public behavior, not expose private modules just to increase
+coverage. `tests/core.rs` is a fast public-library contract suite; keep the separate
+CLI, filesystem, Git, and actual Node/V8 tests as well.
+
+## Commands
+
+```sh
+cargo fmt --check
+cargo clippy --locked -j 1 --all-targets -- -D warnings
+cargo test --locked -j 1
+cargo test --locked -j 1 --release
+cargo doc --locked --no-deps -j 1
+cargo bench --locked -j 1 --bench scan
+node --check scripts/coverage.mjs
+node --check scripts/coverage-hook.mjs
+```
+
+Use `-j 1` on the Termux/proot development machine to limit compiler/linker memory.
+The minimum supported Rust version is **1.90**, matching the current lockfile's
+`tree-sitter-language` requirement; CI also checks that toolchain. Stable is tested
+separately. Do not claim an MSRV based only on the syntax in our own crate.
+
+## GitHub Actions
+
+All workflows use read-only repository permissions, immutable action commit SHAs,
+and disabled checkout credential persistence. Obsolete runs on the same ref are
+cancelled. They require no publishing credentials or external coverage-service token.
+
+- **`.github/workflows/ci.yml`**: push, PR, and manual runs; Rust 1.90/stable
+  matrix; formatting, strict Clippy, debug/release tests, Python helper tests,
+  publishable-package content checks, rustdoc and Node syntax checks. Separate jobs run RustSec auditing and actionlint.
+- **`.github/workflows/coverage.yml`**: push, PR, and manual runs; actual Rust
+  instrumentation through cargo-llvm-cov 0.9.1 and llvm-tools-preview. The complete
+  library/binary/integration suite runs, including spawned CLI binaries and Node/V8
+  tests. Production Rust files are reported; tests/benchmarks are excluded.
+  Uploads `rust-coverage` (LCOV, JSON summary, and HTML) and adds totals to the job
+  summary. Available reports are uploaded even when tests fail.
+- **`.github/workflows/mutation.yml`**: relevant PR changes and manual runs;
+  full production mutation analysis, including Node/Git tests; uploads
+  `mutation-results` with diffs and logs even on failure.
+
+Coverage and mutation artifacts are retained for 14 days. Coverage measurement has
+no arbitrary percentage gate yet: choose a threshold after measuring the initial
+baseline. Mutation survivors and audit warnings/advisories do fail their jobs;
+there is no `continue-on-error` hiding these failures.
+
+The Cargo manifest has an explicit package allowlist: local reports, mutation logs,
+coverage data, and Python caches must not be included in a crate archive. This does
+not yet create/publish a release or install the Node helper alongside the executable.
+
+Rust source coverage from CI is distinct from the TypeScript coverage used in CRAP
+scores. Inspect `coverage/html/index.html` locally or download the Actions artifact.
+`scripts/coverage-summary.py` converts LLVM JSON totals into the job's Markdown
+summary; its CLI is exercised by three Python standard-library tests.
+
+These definitions are local until committed and pushed to GitHub. Running them
+locally or validating YAML is not evidence of a successful hosted Actions run.
+
+## Mutation tests
+
+Pinned tool version: **cargo-mutants 27.1.0**.
+
+```sh
+# Ordinary Linux:
+cargo install cargo-mutants --version 27.1.0 --locked
+# Termux toolchain in proot (Android reflink dependency compatibility fallback):
+bash scripts/install-mutants-termux.sh /root/.local
+export PATH=/root/.local/bin:$PATH
+
+# List mutations without changing files:
+cargo mutants --list
+# Full run: production mutations against the entire test suite:
+cargo mutants -j 1 --jobserver-tasks 1 --timeout 60 --build-timeout 180
+# Focused development run (not a replacement for the full run):
+cargo mutants --file src/coverage.rs -j 1 -- --test core
+```
+
+`.cargo/mutants.toml` selects **all production `src/**/*.rs`** and does not mutate
+test assertions or benchmarks. The full run includes the real Node/V8 and Git tests.
+The default skip of capacity-only allocation calls is the tool's built-in
+behavior, not an application-logic exclusion. Baseline tests must pass first.
+The mutation tool caps lints only in its scratch builds: a lint failure must not
+masquerade as a test killing a mutant. Normal CI retains all strict lints.
+
+Mutations are tested in isolated copies, never with `--in-place`. Results in
+`mutants.out/` include `outcomes.json`, diffs and per-mutant build/test logs. The
+GitHub mutation workflow runs on relevant PR changes or manual dispatch and uploads
+these artifacts even on failure. A surviving mutant fails that job; do not silently
+whitelist survivors or claim timeouts/unbuildable mutants were caught by assertions.
+Review equivalent mutants explicitly. Scores measure the selected operators and
+tests, not proof of correctness, security, or complete branch coverage.
+
+The Termux installer modifies only temporary local copies of the tool and
+`reflink`. It retains the original locked versions, asserting the only lockfile
+change is replacing reflink's registry source/checksum with the patched local path.
+Android then uses `reflink`'s existing unsupported path and cargo-mutants uses
+ordinary `fs::copy`. No application dependency is patched.
+
+## Dependency auditing
+
+```sh
+cargo install cargo-audit --version 0.22.2 --locked
+cargo audit --deny warnings
+```
+
+CI uses the same pinned audit-tool version with the current RustSec database and no
+advisory ignores. The audit includes dev-dependencies. Results describe known
+advisories at the database revision used, not an assurance of no unknown flaws.
+
+## Safety and lint policy
+
+Cargo.toml is the source of truth. It applies to both library and binary targets.
+
+- **Forbid unsafe Rust** in this crate.
+- **Deny ignored must-use results**.
+- Clippy correctness, suspicious, and performance groups are denied.
+- Clippy's remaining default lints are warnings; CI promotes all warnings to errors.
+- Deny production `unwrap`, `expect`, explicit `panic!`, `todo!`,
+  `unimplemented!`, `dbg!`, and `process::exit`.
+- Test/benchmark assertion code explicitly allows unwrap/expect/panic. This exception
+  must remain local to test targets or `#[cfg(test)]` modules, never the whole library.
+- Prefer `Result` with context for user/filesystem/parser errors.
+- Use `write!`/`writeln!` when appending formatted text to an existing String;
+  do not create an intermediate `format!` allocation per row.
+- Commit Cargo.lock for this CLI; build/test/audit with `--locked`.
+
+These checks do **not** prove memory safety of dependencies, the absence of every
+panic, or freedom from vulnerabilities. Tree-sitter includes native C and FFI;
+forbidding our own unsafe blocks does not remove that trusted dependency.
+Rust string indexing is bounds checked; AST byte ranges originate from the parser
+of the same source. Do not introduce unchecked indexing or unsafe shortcuts.
+
+Source freshness hashes are integrity checks, not authentication. Test commands
+are trusted executable code, not sandboxed input. Git and gh are launched with
+argument arrays, not shell interpolation.
+
+## Performance policy
+
+Measure before optimizing. There is no lint switch for “maximum performance.”
+
+The release profile uses thin LTO, one codegen unit, and overflow checks. We keep
+the default unwinding panic behavior rather than hiding faults with abort or
+unchecked operations. LTO/codegen settings increase build cost, so benchmark
+release builds separately from debug tests.
+
+Coverage SHA256 and line-range validation happen **once per selected file**.
+Line keys are parsed to numeric keys once at load; function scoring borrows the
+validated file view. Avoid rehashing a whole file for every function or repeatedly
+allocating decimal line-number strings.
+
+Keep deterministic ordering and source/error validation when optimizing.
+The benchmark creates real TypeScript and source-hashed coverage for 2,000 functions,
+warms up once, then reports five samples (median/min/max). It includes selection,
+file/coverage reads, parsing, scoring, and sorting—not JSON/HTML serialization.
+Use `TS_CRAP_BENCH_FUNCTIONS` to change the workload. Local wall-clock measurements
+are informational: mobile CPU throttling, concurrent compilation, filesystem
+caches, and proot affect results. There is no flaky timing assertion in CI.

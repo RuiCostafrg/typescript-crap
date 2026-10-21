@@ -1,0 +1,9 @@
+# Mutate production code only; do not mutate assertions/fixtures/benchmarks.
+examine_globs = ["src/**/*.rs"]
+# Keep lints enabled for ordinary CI, but don't let lint errors count as killed mutants.
+cap_lints = true
+# Bound memory on mobile/proot; CLI -j 1 also serializes mutation workers.
+additional_cargo_args = ["--locked", "-j", "1"]
+minimum_test_timeout = 20
+# Run the full Rust suite, including the real Node/V8 and Git CLI tests, by default.
+# Targeted local runs may pass cargo test target selectors after --.

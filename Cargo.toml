@@ -1,0 +1,68 @@
+[package]
+name = "ts-crap"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+description = "Source-aware CRAP scores for TypeScript functions"
+license = "MIT"
+repository = "https://github.com/RuiCostafrg/typescript-crap"
+readme = "README.md"
+# An explicit allowlist prevents local reports, mutation logs and caches shipping.
+include = [
+    "/src/**",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/CONTRIBUTING.md",
+    "/LICENSE*",
+    "/assets/icon.svg",
+    "/scripts/**",
+    "/examples/shop/**",
+    "/tests/*.rs",
+    "/tests/fixtures/**",
+    "/tests/test_coverage_summary.py",
+    "/benches/*.rs",
+]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+ignore = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tree-sitter = "0.25"
+tree-sitter-typescript = "0.23"
+
+[dev-dependencies]
+tempfile = "3"
+quick-xml = "0.42"
+
+[[bench]]
+name = "scan"
+harness = false
+
+[lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -2 }
+correctness = { level = "deny", priority = -1 }
+suspicious = { level = "deny", priority = -1 }
+perf = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+exit = "deny"
+format_push_string = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+overflow-checks = true
+strip = "debuginfo"

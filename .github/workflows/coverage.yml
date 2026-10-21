@@ -1,0 +1,58 @@
+name: Rust coverage
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: coverage-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+        with:
+          tool: cargo-llvm-cov@0.9.1
+      - name: Clear only previous coverage data
+        run: cargo llvm-cov clean --workspace
+      - name: Run instrumented Rust tests
+        id: instrumented
+        run: cargo llvm-cov --locked --lib --bins --tests --no-report
+      - name: Generate LCOV, JSON and HTML reports
+        if: ${{ always() && steps.instrumented.outcome != 'skipped' }}
+        shell: bash
+        run: |
+          mkdir -p coverage
+          cargo llvm-cov report --ignore-filename-regex '(^|/)(tests|benches)/|(^|/)src/.*/tests[.]rs$' --lcov --output-path coverage/lcov.info
+          cargo llvm-cov report --ignore-filename-regex '(^|/)(tests|benches)/|(^|/)src/.*/tests[.]rs$' --json --summary-only --output-path coverage/summary.json
+          cargo llvm-cov report --ignore-filename-regex '(^|/)(tests|benches)/|(^|/)src/.*/tests[.]rs$' --html --output-dir coverage
+      - name: Add coverage to job summary
+        if: always()
+        shell: bash
+        run: |
+          if test -f coverage/summary.json; then
+            python3 scripts/coverage-summary.py coverage/summary.json >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf 'Rust coverage was unavailable. Check the instrumented test/build logs.\n' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload coverage even if tests fail
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rust-coverage
+          path: coverage/
+          retention-days: 14
+          if-no-files-found: warn

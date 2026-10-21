@@ -1,0 +1,8 @@
+/target/
+/coverage/
+/coverage.json
+/reports/
+/node_modules/
+/mutants.out*/
+__pycache__/
+*.py[cod]

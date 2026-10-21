@@ -19,7 +19,9 @@ TypeScript. Available for macOS (Apple Silicon / Intel), Linux with glibc 2.35+
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/RuiCostafrg/typescript-crap/releases/latest/download/ts-crap-installer.sh | sh
 ```
 
-The installer detects your platform and installs to `~/.local/bin`. Follow its
+The shell installer uses `curl` (or `wget`) and `tar`; Linux also needs `xz`
+(usually provided by the `xz-utils` package). It detects your platform and
+installs to `~/.local/bin`. Follow its
 PATH instructions, or open a new terminal, then run `ts-crap --help`.
 Run the same installer again to update to the latest release.
 

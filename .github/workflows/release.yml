@@ -133,7 +133,8 @@ jobs:
         env:
           TAG: ${{ needs.plan.outputs.tag }}
         run: |
-          dist build --tag "$TAG" --artifacts=global --output-format=json > target/distrib/dist-manifest.json
+          dist build --tag "$TAG" --artifacts=global --output-format=json > assembled-manifest.json
+          cp assembled-manifest.json target/distrib/dist-manifest.json
           python3 scripts/prepare-release.py target/distrib release-assets
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:

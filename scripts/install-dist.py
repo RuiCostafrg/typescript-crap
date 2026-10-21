@@ -27,7 +27,7 @@ def install(target, directory):
     if hashlib.sha256(archive).hexdigest() != digest:
         raise ValueError("cargo-dist checksum mismatch")
     binary = "dist.exe" if extension == "zip" else "dist"
-    expected = f"cargo-dist-{target}/{binary}"
+    expected = binary if extension == "zip" else f"cargo-dist-{target}/{binary}"
     if extension == "zip":
         with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
             data = bundle.read(expected)

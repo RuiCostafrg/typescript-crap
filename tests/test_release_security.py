@@ -5,6 +5,7 @@ import io
 from pathlib import Path
 import tarfile
 import tempfile
+import zipfile
 import unittest
 from unittest.mock import patch
 
@@ -44,6 +45,21 @@ class ReleaseSecurityTests(unittest.TestCase):
             self.assertEqual(executable.read_bytes(), b'expected executable')
             self.assertEqual(list((root / 'bin').iterdir()), [executable])
             self.assertFalse((root / 'escaped').exists())
+
+    def test_flat_windows_archive_installs_only_the_verified_executable(self):
+        data = io.BytesIO()
+        with zipfile.ZipFile(data, mode='w') as archive:
+            archive.writestr('dist.exe', b'windows executable')
+            archive.writestr('../../unexpected', b'must not extract')
+        raw = data.getvalue()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch.dict(installer.ARCHIVES, {'test': ('zip', hashlib.sha256(raw).hexdigest())}):
+                with patch.object(installer.urllib.request, 'urlopen', return_value=io.BytesIO(raw)):
+                    executable = installer.install('test', root / 'bin')
+            self.assertEqual(executable.name, 'dist.exe')
+            self.assertEqual(executable.read_bytes(), b'windows executable')
+            self.assertEqual(list((root / 'bin').iterdir()), [executable])
 
     def fixture(self, source):
         for target in release.TARGETS:

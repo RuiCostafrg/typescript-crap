@@ -16,8 +16,8 @@ install-path = "~/.local/bin"
 # A GitHub repo to push Homebrew formulas to
 tap = "RuiCostafrg/homebrew-tap"
 # Post-announce jobs to run in CI
-global-artifacts-jobs = ["./verify-release"]
-post-announce-jobs = ["./publish-homebrew"]
+# The release workflow is hand-maintained to isolate build and publishing tokens.
+allow-dirty = ["ci"]
 # Which actions to run on pull requests
 pr-run-mode = "plan"
 # Generate and dist a source tarball

@@ -1,7 +1,0 @@
-# cargo-dist owns this file. Its template intentionally splits the optional
-# prerelease flag and uses repeated output redirects. Keep other checks enabled.
-paths:
-  .github/workflows/release.yml:
-    ignore:
-      - 'shellcheck reported issue in this script: SC2086:info:.+'
-      - 'shellcheck reported issue in this script: SC2129:style:.+'

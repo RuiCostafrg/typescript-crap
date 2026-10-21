@@ -272,3 +272,11 @@ Clippy, rustdoc, Node/helper checks, dependency auditing, and workflow linting.
 Separate workflows produce Rust coverage artifacts (LCOV/JSON/HTML) and run
 mutation tests with downloadable diffs/logs. See CONTRIBUTING.md for triggers,
 artifact names, safety settings, and the distinction from TypeScript coverage.
+
+## Contributions and security
+
+This project is maintained by RuiCostafrg. Please use issues for bugs and feature
+requests; pull requests are restricted to collaborators. See [SECURITY.md](SECURITY.md)
+for private vulnerability reporting, release protections and download verification.
+The original v0.1.0 predates artifact attestations; future hardened releases include
+provenance. Public source and forks remain available under MIT.

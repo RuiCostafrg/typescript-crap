@@ -7,6 +7,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   test:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     timeout-minutes: 30
     runs-on: ubuntu-latest
     strategy:
@@ -23,6 +24,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
+      - name: Release security regression tests
+        run: python3 -m unittest discover -s tests -p "test_release_security.py"
       - run: cargo fmt --check
       - run: python3 -m unittest discover -s tests -p "test_coverage_summary.py"
       - name: Check publishable package contents
@@ -41,6 +44,7 @@ jobs:
           RUSTDOCFLAGS: -D warnings
       - run: node --check scripts/coverage.mjs && node --check scripts/coverage-hook.mjs
   audit:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
@@ -52,6 +56,7 @@ jobs:
           tool: cargo-audit@0.22.2
       - run: cargo audit --deny warnings
   workflows:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

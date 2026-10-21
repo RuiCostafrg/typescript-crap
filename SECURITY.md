@@ -44,8 +44,8 @@ cannot enable or verify them.
   GitHub App private keys, personal tokens, or inherited secrets.
 - The Homebrew tap independently verifies a newer stable formula’s attestation
   against this workflow, tag and commit, then requires owner approval in its own
-  homebrew environment. It writes using its own temporary token. Sync checks run
-  hourly or can be manually dispatched; GitHub can delay scheduled runs.
+  homebrew environment. It opens an update PR using its own temporary token;
+  the owner merges after read-only checks pass. Sync checks run hourly or can be manually dispatched; GitHub can delay scheduled runs.
 
 ## Verifying downloads
 

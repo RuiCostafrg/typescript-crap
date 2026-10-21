@@ -202,7 +202,8 @@ with `dist generate`. `dist plan` still validates the packaging configuration.
    source SHA and checks. This publishes attested archives, installers and formula.
 4. The Homebrew tap checks hourly or can be manually dispatched via its
    **Sync verified release** workflow. It rejects missing/wrong provenance or
-   downgrades. Approve its **homebrew** environment deployment to update the tap.
+   downgrades. Approve its **homebrew** environment deployment to open an update PR, then
+   review and merge it after Tap CI passes.
    Prereleases do not update Homebrew.
 
 Manual dispatch of **Release** on main is a dry run: it builds and tests without

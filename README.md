@@ -216,7 +216,7 @@ Node's built-in stripping (or `.mts` as in the example); **there is no transpile
 or source-map remapping**. The Rust parser supports TSX, but Node's built-in type
 stripper cannot execute JSX or every TypeScript construct. For transpiled TS/TSX
 projects, supply source-mapped coverage in the native schema using an adapter;
-Istanbul/LCOV inputs are not directly supported in this version.
+Istanbul/LCOV inputs use the source-snapshot collection adapter described below.
 
 V8 offsets are mapped as UTF-16 code units (including Unicode). If an uncovered
 branch occupies part of a line, that line is conservatively uncovered. Hits from
@@ -294,3 +294,92 @@ requests; pull requests are restricted to collaborators. See [SECURITY.md](SECUR
 for private vulnerability reporting, release protections and download verification.
 The original v0.1.0 predates artifact attestations; future hardened releases include
 provenance. Public source and forks remain available under MIT.
+
+## Adoption gates (v0.2)
+
+`ts-crap.json` in the project root configures selection. Unknown fields and unknown
+versions are errors. Globs use forward slashes relative to `--root`; `*` stops at directory boundaries and `**` matches
+across directories. Includes default to all supported sources and excludes default
+to empty. Built-in generated/dependency exclusions and ignore rules still apply.
+Explicit paths and Git selection intersect these rules. Excludes always win.
+`--config FILE` selects a config relative to the caller; repeated `--include` or
+`--exclude` flags replace the corresponding configured list. No environment or
+ancestor config is loaded, so results do not depend on the caller's directory.
+
+```json
+{"version":1,"include":["packages/**/src/**/*.ts"],"exclude":["**/*.test.ts"]}
+```
+
+`--require-coverage` fails when any selected file has no coverage entry or any
+function-owned statement start has no line entry. A recorded zero is evidence of
+an uncovered line; it still affects CRAP normally. Reports count files and
+functions missing evidence. `--fail-on-empty` fails selections with no implemented
+functions. Both are opt-in; empty diffs keep passing by default. Completeness
+failures remain failures when using a regression baseline.
+
+### Regression baselines
+
+```sh
+ts-crap --root . --write-baseline crap-baseline.json # absolute gate exit still applies
+ts-crap --root . --baseline crap-baseline.json
+# A function edited while moving files needs an explicit mapping:
+ts-crap --baseline crap-baseline.json --baseline-rename src/old.ts=src/new.ts
+```
+
+Review and commit the version-1 baseline. It stores absolute scores, threshold,
+paths, qualified names and SHA256 token identities, without source text. The
+threshold must match. Only scores strictly above the threshold and strictly above
+the matched baseline score fail. New violations fail; removed/improved violations
+pass. Absolute gates remain the default. Baseline creation never changes gate
+exit codes or silently updates an existing baseline during comparison.
+
+A unique path plus qualified function name matches edits. Token fingerprints
+ignore comments, formatting and separately scored descendant functions and match unique unchanged functions across file
+moves, including anonymous functions whose locations shifted. Renamed functions
+are new identities; edited moves require the explicit mapping above. Ambiguous
+matches fail conservatively as new violations. Duplicate names should be given
+unique scopes before relying on name-based matching. Prefer full-project baselines;
+a diff-generated baseline only records the selected functions. Baselines are
+reviewed policy inputs, not authenticated proof of past code quality.
+
+### Istanbul and LCOV collection
+
+Jest/nyc `coverage-final.json`, Vitest's Istanbul reporter, and LCOV line records
+can be collected through the dependency-free Node adapter. Use fresh input/output
+paths (the adapter rejects existing destinations). Paths passed on the command
+line are relative to the caller; the test command runs inside `--root`.
+
+```sh
+node scripts/import-coverage.mjs --root . --format istanbul \
+  --input coverage/coverage-final.json --output imported-coverage.json -- \
+  npx jest --coverage --coverageReporters=json
+node scripts/import-coverage.mjs --root . --format lcov \
+  --input coverage/lcov.info --output imported-coverage.json -- \
+  npx vitest run --coverage --coverage.reporter=lcov
+ts-crap --coverage imported-coverage.json --require-coverage
+```
+
+Source hashes are captured **before** running the trusted test command and verified
+after collection. Imports never invent freshness by hashing only when importing an
+old file. A failing test command, changed source, empty report, invalid counters,
+unmappable location, or source outside the collected TypeScript snapshot rejects
+the entire import. Missing file records remain missing coverage evidence.
+
+Already remapped TypeScript paths work directly. Generated JavaScript uses
+Istanbul's `inputSourceMap`, or its final `sourceMappingURL` (external JSON or inline
+base64). Flat source maps v3, relative paths, `sourceRoot`, and file URLs are
+supported. Maps must embed `sourcesContent` matching the pre-test snapshot;
+URL schemes such as webpack virtual paths and indexed maps are rejected with an
+error. Configure the reporter to remap these to original TypeScript instead.
+Statement starts map using their UTF-16 generated column; LCOV maps line segments.
+Uncovered overlapping statements/segments keep a line uncovered. This conservative
+line approximation does not claim branch coverage. Existing native V8 collection
+remains available for Node's direct TypeScript execution.
+
+### Review output
+
+`--format sarif --output crap.sarif` emits SARIF 2.1.0 with stable `TSCRAP001`
+(score) and `TSCRAP002` (completeness) rule IDs, relative percent-encoded URIs and
+function fingerprints. Upload it with your repository's SARIF integration; output
+does not change gate exit codes. Text and error diagnostics escape controls and
+bidirectional formatting characters; JSON retains raw values for machine readers.

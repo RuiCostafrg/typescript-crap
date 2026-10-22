@@ -48,3 +48,15 @@ class CoverageSummaryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class CoverageFloorTests(unittest.TestCase):
+    def test_floor_boundary_missing_zero_invalid_and_below_floor(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('coverage_summary', SCRIPT)
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+        self.assertIsNone(helper.enforce_floor({'data':[CoverageSummaryTests.entry(95,100)]},95))
+        for covered,total in [(949,1000),(0,0),(101,100)]:
+            with self.assertRaises(ValueError): helper.enforce_floor({'data':[CoverageSummaryTests.entry(covered,total)]},95)
+        for minimum in [-1,101,float('nan')]:
+            with self.assertRaises(ValueError): helper.enforce_floor({'data':[CoverageSummaryTests.entry(95,100)]},minimum)

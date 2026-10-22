@@ -76,3 +76,6 @@ pub fn write_report(
     };
     write().with_context(|| format!("cannot write report {}", path.display()))
 }
+
+#[cfg(test)]
+mod tests;

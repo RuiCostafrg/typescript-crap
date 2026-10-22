@@ -1,8 +1,11 @@
 //! TypeScript CRAP analysis. Filesystem/Git selection, source-bound coverage, and reports.
 //! See the README for the scoring convention and coverage approximation.
 mod analysis;
+pub mod baseline;
+mod config;
 mod coverage;
 mod report;
+pub use report::terminal as escape_terminal;
 mod selection;
 
 use anyhow::{Context, Result, bail};
@@ -16,6 +19,7 @@ pub enum Format {
     Json,
     Xml,
     Html,
+    Sarif,
 }
 
 /// Source selection and quality-gate settings. Input paths are root-relative;
@@ -28,6 +32,11 @@ pub struct ScanOptions {
     pub coverage: Option<PathBuf>,
     pub diff: Option<String>,
     pub pr: Option<String>,
+    pub config: Option<PathBuf>,
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+    pub require_coverage: bool,
+    pub fail_on_empty: bool,
 }
 impl Default for ScanOptions {
     fn default() -> Self {
@@ -38,6 +47,11 @@ impl Default for ScanOptions {
             coverage: None,
             diff: None,
             pr: None,
+            config: None,
+            include: Vec::new(),
+            exclude: Vec::new(),
+            require_coverage: false,
+            fail_on_empty: false,
         }
     }
 }
@@ -52,10 +66,13 @@ pub fn validate_threshold(value: f64) -> Result<()> {
 
 #[derive(Debug, Serialize)]
 pub struct FunctionScore {
+    pub identity: String,
     pub path: String,
     pub name: String,
     pub line: usize,
     pub column: usize,
+    /// One-based UTF-16 column for SARIF consumers (column remains byte based).
+    pub column_utf16: usize,
     pub end_line: usize,
     pub complexity: u32,
     /// Fraction in [0, 1], not percentage
@@ -72,6 +89,9 @@ pub struct Report {
     pub threshold: f64,
     pub files_scanned: usize,
     pub failed: bool,
+    pub files_missing_coverage: usize,
+    pub functions_missing_coverage: usize,
+    pub completeness_failed: bool,
     pub functions: Vec<FunctionScore>,
 }
 
@@ -99,13 +119,25 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
     if !root.is_dir() {
         bail!("project root is not a directory");
     }
-    let files = selection::files(&root, &args.paths, args.diff.as_deref(), args.pr.as_deref())?;
+    let rules = config::Rules::load(&root, args.config.as_ref(), &args.include, &args.exclude)?;
+    let mut files = selection::files(&root, &args.paths, args.diff.as_deref(), args.pr.as_deref())?;
+    files.retain(|path| {
+        rules.matches(
+            &path
+                .strip_prefix(&root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .replace('\\', "/"),
+        )
+    });
     let coverage = args
         .coverage
         .as_deref()
         .map(coverage::Coverage::load)
         .transpose()?;
     let mut functions = Vec::new();
+    let mut files_missing_coverage = 0;
+    let mut functions_missing_coverage = 0;
     for path in &files {
         let relative = path
             .strip_prefix(&root)?
@@ -120,7 +152,13 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
             .as_ref()
             .map(|cov| cov.for_source(&relative, &source))
             .transpose()?;
+        let missing_file = source_coverage.as_ref().is_none_or(|c| !c.present());
+        files_missing_coverage += usize::from(missing_file);
         for method in methods {
+            let missing = source_coverage
+                .as_ref()
+                .is_none_or(|c| !c.complete(&method.lines));
+            functions_missing_coverage += usize::from(missing);
             let cov = match &source_coverage {
                 Some(c) => c.fraction(&method.lines)?,
                 None => 0.0,
@@ -128,10 +166,12 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
             let cc = f64::from(method.complexity);
             let crap = cc * cc * (1.0 - cov).powi(3) + cc;
             functions.push(FunctionScore {
+                identity: method.identity,
                 path: relative.clone(),
                 name: method.name,
                 line: method.line,
                 column: method.column,
+                column_utf16: method.column_utf16,
                 end_line: method.end_line,
                 complexity: method.complexity,
                 coverage: cov,
@@ -142,12 +182,18 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
     }
     functions
         .sort_unstable_by(|a, b| (&a.path, a.line, a.column).cmp(&(&b.path, b.line, b.column)));
+    let completeness_failed = (args.fail_on_empty && functions.is_empty())
+        || (args.require_coverage
+            && (files_missing_coverage > 0 || functions_missing_coverage > 0));
     let report = Report {
         version: 1,
         source_paths: files.clone(),
         threshold: args.threshold,
         files_scanned: files.len(),
-        failed: functions.iter().any(|f| f.failed),
+        files_missing_coverage,
+        functions_missing_coverage,
+        completeness_failed,
+        failed: completeness_failed || functions.iter().any(|f| f.failed),
         functions,
     };
     Ok(report)

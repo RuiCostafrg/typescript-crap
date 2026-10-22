@@ -1,16 +1,9 @@
 name: Rust mutation tests
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
   pull_request:
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "scripts/**"
-      - "examples/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".cargo/mutants.toml"
-      - ".github/workflows/mutation.yml"
 permissions:
   contents: read
 concurrency:
@@ -34,7 +27,19 @@ jobs:
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
         with:
           tool: cargo-mutants@27.1.0
-      - run: cargo mutants -j 2 --jobserver-tasks 2 --timeout 60 --build-timeout 180
+      - name: Run all production mutations
+        id: mutations
+        shell: bash
+        run: |
+          set +e
+          cargo mutants -j 2 --jobserver-tasks 2 --timeout 60 --build-timeout 180
+          status=$?
+          # Exit 2 means survivors; the explicit score gate decides their impact.
+          # All other failures (including baseline/build infrastructure) stay fatal.
+          if [[ "$status" != 0 && "$status" != 2 ]]; then exit "$status"; fi
+      - name: Require at least 90 percent assertion-killed mutations
+        if: ${{ always() && steps.mutations.outcome != 'skipped' }}
+        run: python3 scripts/mutation-score.py mutants.out/outcomes.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:

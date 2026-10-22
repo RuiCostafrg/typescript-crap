@@ -2,6 +2,20 @@ use crate::{Format, Report};
 use anyhow::Result;
 use std::fmt::Write;
 
+pub fn terminal(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c.is_control()
+            || matches!(c, '\u{2028}' | '\u{2029}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+        {
+            out.extend(c.escape_unicode());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 fn escape(s: &str) -> String {
     let mut escaped = String::with_capacity(s.len());
     for c in s.chars() {
@@ -20,6 +34,35 @@ fn escape(s: &str) -> String {
 
 pub fn render(report: &Report, format: Format) -> Result<String> {
     Ok(match format {
+        Format::Sarif => {
+            let results: Vec<_> = report.functions.iter().filter(|f| f.failed).map(|f| {
+                // URI encode UTF-8 bytes, including percent, fragments and path controls.
+                let mut uri = String::new();
+                for byte in f.path.bytes() {
+                    if byte.is_ascii_alphanumeric() || b"-._~/".contains(&byte) { uri.push(char::from(byte)); }
+                    else { write!(uri, "%{byte:02X}")?; }
+                }
+                Ok(serde_json::json!({"ruleId":"TSCRAP001", "level":"error",
+                    "message":{"text":format!("{} has CRAP {:.3} (threshold {})", f.name, f.crap, report.threshold)},
+                    "partialFingerprints":{"function/v1":f.identity},
+                    "locations":[{"physicalLocation":{"artifactLocation":{"uri":uri,"uriBaseId":"%SRCROOT%"},
+                        "region":{"startLine":f.line,"startColumn":f.column_utf16,"endLine":f.end_line}}}]}))
+            }).collect::<Result<Vec<_>>>()?;
+            let mut results = results;
+            if report.completeness_failed {
+                results.push(serde_json::json!({"ruleId":"TSCRAP002","level":"error",
+                "message":{"text":format!("Incomplete selection: {} files and {} functions missing coverage; {} functions selected", report.files_missing_coverage, report.functions_missing_coverage, report.functions.len())}}));
+            }
+            format!(
+                "{}\n",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "$schema":"https://json.schemastore.org/sarif-2.1.0.json", "version":"2.1.0",
+                    "runs":[{"columnKind":"utf16CodeUnits","tool":{"driver":{"name":"ts-crap","rules":[
+                        {"id":"TSCRAP001","shortDescription":{"text":"CRAP threshold exceeded"}},
+                        {"id":"TSCRAP002","shortDescription":{"text":"Missing quality evidence"}}]}}, "results":results}]
+                }))?
+            )
+        }
         Format::Json => format!("{}\n", serde_json::to_string_pretty(report)?),
         Format::Text => {
             let mut s = format!(
@@ -33,16 +76,21 @@ pub fn render(report: &Report, format: Format) -> Result<String> {
                 writeln!(
                     s,
                     "{}:{}:{}  {}  {}  {:.1}%  {:.3}  {}",
-                    f.path,
+                    terminal(&f.path),
                     f.line,
                     f.column,
-                    f.name,
+                    terminal(&f.name),
                     f.complexity,
                     f.coverage * 100.0,
                     f.crap,
                     if f.failed { "FAIL" } else { "PASS" }
                 )?;
             }
+            writeln!(
+                s,
+                "Missing coverage: {} files, {} functions",
+                report.files_missing_coverage, report.functions_missing_coverage
+            )?;
             if report.functions.is_empty() {
                 s.push_str("No implemented TypeScript functions found in the selection.\n");
             }
@@ -50,8 +98,13 @@ pub fn render(report: &Report, format: Format) -> Result<String> {
         }
         Format::Xml => {
             let mut s = format!(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<crap-report version=\"1\" threshold=\"{}\" files-scanned=\"{}\" failed=\"{}\">\n",
-                report.threshold, report.files_scanned, report.failed
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<crap-report version=\"1\" threshold=\"{}\" files-scanned=\"{}\" failed=\"{}\" files-missing-coverage=\"{}\" functions-missing-coverage=\"{}\" completeness-failed=\"{}\">\n",
+                report.threshold,
+                report.files_scanned,
+                report.failed,
+                report.files_missing_coverage,
+                report.functions_missing_coverage,
+                report.completeness_failed
             );
             for f in &report.functions {
                 writeln!(

@@ -98,6 +98,13 @@ impl Coverage {
 }
 
 impl SourceCoverage<'_> {
+    pub fn present(&self) -> bool {
+        self.file.is_some()
+    }
+    pub fn complete(&self, lines: &BTreeSet<usize>) -> bool {
+        self.file
+            .is_some_and(|file| lines.iter().all(|line| file.lines.contains_key(line)))
+    }
     pub fn fraction(&self, owned_lines: &BTreeSet<usize>) -> Result<f64> {
         if owned_lines
             .iter()

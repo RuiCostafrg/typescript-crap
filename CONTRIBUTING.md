@@ -63,14 +63,15 @@ cancelled. They require no publishing credentials or external coverage-service t
   tests. Production Rust files are reported; tests/benchmarks are excluded.
   Uploads `rust-coverage` (LCOV, JSON summary, and HTML) and adds totals to the job
   summary. Available reports are uploaded even when tests fail.
-- **`.github/workflows/mutation.yml`**: relevant PR changes and manual runs;
+- **`.github/workflows/mutation.yml`**: all PRs, main pushes and manual runs;
   full production mutation analysis, including Node/Git tests; uploads
   `mutation-results` with diffs and logs even on failure.
 
-Coverage and mutation artifacts are retained for 14 days. Coverage measurement has
-no arbitrary percentage gate yet: choose a threshold after measuring the initial
-baseline. Mutation survivors and audit warnings/advisories do fail their jobs;
-there is no `continue-on-error` hiding these failures.
+Coverage and mutation artifacts are retained for 14 days. Coverage enforces the production-source line floor documented in
+`docs/QUALITY_BASELINE.md`. Mutation score must be at least 90%; only assertion-killed
+mutants count as caught, unbuildable mutants are excluded, and timeouts or partial
+runs fail independently. Audit warnings/advisories fail. There is no
+`continue-on-error` hiding failures.
 
 The Cargo manifest has an explicit package allowlist: local reports, mutation logs,
 coverage data, and Python caches must not be included in a crate archive. This does
@@ -112,9 +113,10 @@ masquerade as a test killing a mutant. Normal CI retains all strict lints.
 
 Mutations are tested in isolated copies, never with `--in-place`. Results in
 `mutants.out/` include `outcomes.json`, diffs and per-mutant build/test logs. The
-GitHub mutation workflow runs on relevant PR changes or manual dispatch and uploads
-these artifacts even on failure. A surviving mutant fails that job; do not silently
-whitelist survivors or claim timeouts/unbuildable mutants were caught by assertions.
+GitHub mutation workflow runs on every PR, main pushes or manual dispatch and uploads
+these artifacts even on failure. The explicit score gate accepts at least 90%
+assertion-killed viable mutants; investigate every survivor and aim for none.
+Do not whitelist survivors or claim timeouts/unbuildable mutants were caught by assertions.
 Review equivalent mutants explicitly. Scores measure the selected operators and
 tests, not proof of correctness, security, or complete branch coverage.
 
@@ -221,3 +223,16 @@ credentials should exist locally, in artifacts, or in repository secrets.
 The owner can use the PR-only review bypass because self-authored PRs cannot
 receive an independent owner review. Mandatory CI remains enforced separately.
 Future collaborators require an explicit reconsideration of this policy.
+
+## P2 adoption features
+
+See the README for versioned selection config, source-bound Istanbul/LCOV imports,
+regression baselines, completeness flags, terminal escaping and SARIF. Baseline
+matching indexes identities once per report rather than scanning all prior
+functions for each current function. Coverage hashes and validation remain once
+per source; source-map rows and line counts are prepared once per imported file.
+
+Daily advisory scans and weekly reviewed dependency/action updates are documented
+in [docs/DEPENDENCY_UPDATES.md](docs/DEPENDENCY_UPDATES.md). Bot PR code never runs
+with trusted credentials. Release validation requires successful main CI, coverage
+and mutation runs for the exact tagged SHA, and all PR checks must pass before merge.

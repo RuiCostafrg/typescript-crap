@@ -40,6 +40,8 @@ jobs:
           cargo llvm-cov report --ignore-filename-regex '(^|/)(tests|benches)/|(^|/)src/.*/tests[.]rs$' --lcov --output-path coverage/lcov.info
           cargo llvm-cov report --ignore-filename-regex '(^|/)(tests|benches)/|(^|/)src/.*/tests[.]rs$' --json --summary-only --output-path coverage/summary.json
           cargo llvm-cov report --ignore-filename-regex '(^|/)(tests|benches)/|(^|/)src/.*/tests[.]rs$' --html --output-dir coverage
+      - name: Enforce measured production-source coverage floor
+        run: python3 scripts/coverage-summary.py coverage/summary.json --min-lines 95
       - name: Add coverage to job summary
         if: always()
         shell: bash

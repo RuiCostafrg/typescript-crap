@@ -73,3 +73,11 @@ still influence a build; least privilege limits credential exposure but does not
 prove binary correctness. Release installers and installed tools run with the
 user’s permissions; they are not a sandbox. Code signing/notarization requires
 separate Apple/Windows signing credentials and is not configured here.
+
+Daily advisory scans are the narrowly scoped scheduling exception: they run only
+the default branch with read-only permissions and no publication secrets, even
+when GitHub records a scheduling actor other than the owner. Dependabot updates
+require owner review and an owner-authored PR; see
+[the dependency update process](docs/DEPENDENCY_UPDATES.md). PR actor gates remain
+unchanged. Coverage and mutation checks are required alongside ordinary CI before
+merging or releasing.

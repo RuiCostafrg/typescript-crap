@@ -218,25 +218,80 @@ fn collect(node: Node<'_>, source: &str, out: &mut Vec<Method>) {
     });
 }
 
-pub fn analyze(path: &str, source: &str) -> Result<Vec<Method>> {
-    let mut parser = Parser::new();
-    let language = if path.ends_with(".tsx") {
-        tree_sitter_typescript::LANGUAGE_TSX
-    } else {
-        tree_sitter_typescript::LANGUAGE_TYPESCRIPT
-    };
-    parser
-        .set_language(&language.into())
-        .context("cannot initialize TypeScript parser")?;
-    let tree = parser
-        .parse(source, None)
-        .context("TypeScript parser failed")?;
-    if tree.root_node().has_error() {
-        bail!("invalid TypeScript syntax in {path}");
+/// One parser per grammar, reused for all files in one scan. Trees are never
+/// reused between sources, so no stale incremental parse state is retained.
+#[derive(Default)]
+pub struct Analyzer {
+    typescript: Option<Parser>,
+    tsx: Option<Parser>,
+}
+
+impl std::fmt::Debug for Analyzer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Analyzer")
+            .field("typescript_initialized", &self.typescript.is_some())
+            .field("tsx_initialized", &self.tsx.is_some())
+            .finish()
     }
-    let mut out = Vec::new();
-    collect(tree.root_node(), source, &mut out);
-    Ok(out)
+}
+
+impl Analyzer {
+    pub fn analyze(&mut self, path: &str, source: &str) -> Result<Vec<Method>> {
+        let tsx = path.ends_with(".tsx");
+        let slot = if tsx {
+            &mut self.tsx
+        } else {
+            &mut self.typescript
+        };
+        if slot.is_none() {
+            let mut parser = Parser::new();
+            let language = if tsx {
+                tree_sitter_typescript::LANGUAGE_TSX
+            } else {
+                tree_sitter_typescript::LANGUAGE_TYPESCRIPT
+            };
+            parser
+                .set_language(&language.into())
+                .context("cannot initialize TypeScript parser")?;
+            *slot = Some(parser);
+        }
+        let tree = slot
+            .as_mut()
+            .context("TypeScript parser unavailable")?
+            .parse(source, None)
+            .context("TypeScript parser failed")?;
+        if tree.root_node().has_error() {
+            let mut issue = None;
+            // Descend to the earliest concrete ERROR or missing token using the
+            // same bounded-stack traversal as metrics, including malformed input.
+            walk(tree.root_node(), |node| {
+                if issue.is_some() {
+                    return false;
+                }
+                if node.is_error() || node.is_missing() {
+                    issue = Some(node.start_position());
+                    return false;
+                }
+                node.has_error()
+            });
+            let position = issue.unwrap_or_else(|| tree.root_node().start_position());
+            let snippet: String = source
+                .lines()
+                .nth(position.row)
+                .unwrap_or("")
+                .chars()
+                .take(160)
+                .collect();
+            bail!(
+                "invalid TypeScript syntax in {path}:{}:{} (UTF-8 byte column): {snippet}",
+                position.row + 1,
+                position.column + 1
+            );
+        }
+        let mut out = Vec::new();
+        collect(tree.root_node(), source, &mut out);
+        Ok(out)
+    }
 }
 
 #[cfg(test)]

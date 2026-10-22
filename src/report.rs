@@ -1,4 +1,4 @@
-use crate::{Format, Report};
+use crate::{Format, RenderOptions, Report, Sort};
 use anyhow::Result;
 use std::fmt::Write;
 
@@ -32,7 +32,22 @@ fn escape(s: &str) -> String {
     escaped
 }
 
-pub fn render(report: &Report, format: Format) -> Result<String> {
+pub fn render(report: &Report, format: Format, options: &RenderOptions) -> Result<String> {
+    let mut rows: Vec<_> = report
+        .functions
+        .iter()
+        .filter(|f| !options.only_failing || f.failed)
+        .collect();
+    rows.sort_by(|a, b| {
+        let location = (&a.path, a.line, a.column).cmp(&(&b.path, b.line, b.column));
+        match options.sort {
+            Sort::Path => location,
+            Sort::Crap => b.crap.total_cmp(&a.crap).then(location),
+        }
+    });
+    if let Some(top) = options.top {
+        rows.truncate(top);
+    }
     Ok(match format {
         Format::Sarif => {
             let results: Vec<_> = report.functions.iter().filter(|f| f.failed).map(|f| {
@@ -72,7 +87,7 @@ pub fn render(report: &Report, format: Format) -> Result<String> {
                 report.files_scanned,
                 report.functions.len()
             );
-            for f in &report.functions {
+            for f in &rows {
                 writeln!(
                     s,
                     "{}:{}:{}  {}  {}  {:.1}%  {:.3}  {}",
@@ -93,6 +108,14 @@ pub fn render(report: &Report, format: Format) -> Result<String> {
             )?;
             if report.functions.is_empty() {
                 s.push_str("No implemented TypeScript functions found in the selection.\n");
+            }
+            if rows.len() != report.functions.len() {
+                writeln!(
+                    s,
+                    "Showing {} of {} functions; gate uses all functions.",
+                    rows.len(),
+                    report.functions.len()
+                )?;
             }
             s
         }
@@ -126,17 +149,18 @@ pub fn render(report: &Report, format: Format) -> Result<String> {
         }
         Format::Html => {
             let mut s = format!(
-                "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>TypeScript CRAP report</title><style>body{{font:16px system-ui;margin:2rem;color:#17243a;background:#f4f7fb}}table{{border-collapse:collapse;background:white;width:100%}}th,td{{padding:.7rem;text-align:left;border-bottom:1px solid #ccd3dd}}.fail{{color:#b42318}}.pass{{color:#067647}}code{{overflow-wrap:anywhere}}caption{{text-align:left;margin-bottom:1rem}}@media(max-width:700px){{body{{margin:.5rem}}td,th{{padding:.3rem}}}}</style></head><body><h1>TypeScript CRAP report</h1><p class=\"{}\"><strong>{}</strong> · Threshold {} · {} files · {} functions</p><p>CRAP = CC² × (1 − coverage)³ + CC. Missing coverage is 0%. A score strictly above the threshold fails.</p><table><caption>Function quality gate results</caption><thead><tr><th>Relative path : line : column</th><th>Function</th><th>CC</th><th>Coverage</th><th>CRAP</th><th>Gate</th></tr></thead><tbody>",
+                "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>TypeScript CRAP report</title><style>body{{font:16px system-ui;margin:2rem;color:#17243a;background:#f4f7fb}}table{{border-collapse:collapse;background:white;width:100%}}th,td{{padding:.7rem;text-align:left;border-bottom:1px solid #ccd3dd}}.fail{{color:#b42318}}.pass{{color:#067647}}code{{overflow-wrap:anywhere}}caption{{text-align:left;margin-bottom:1rem}}@media(max-width:700px){{body{{margin:.5rem}}td,th{{padding:.3rem}}}}</style></head><body><h1>TypeScript CRAP report</h1><p class=\"{}\"><strong>{}</strong> · Threshold {} · {} files · {} functions</p><p>CRAP = CC² × (1 − coverage)³ + CC. Missing coverage is 0%. A score strictly above the threshold fails.</p><label>Filter path or function <input id=\"filter\" type=\"search\"></label> <label><input id=\"only-failing\" type=\"checkbox\"> Only failing</label><p id=\"visible-count\" aria-live=\"polite\"></p><table><caption>Function quality gate results</caption><thead><tr><th>Relative path : line : column</th><th>Function</th><th>CC</th><th>Coverage</th><th>CRAP</th><th>Gate</th></tr></thead><tbody>",
                 if report.failed { "fail" } else { "pass" },
                 if report.failed { "FAIL" } else { "PASS" },
                 report.threshold,
                 report.files_scanned,
                 report.functions.len()
             );
-            for f in &report.functions {
+            for f in &rows {
                 write!(
                     s,
-                    "<tr><td><code>{}:{}:{}</code></td><td><code>{}</code></td><td>{}</td><td>{:.1}%</td><td>{:.3}</td><td class=\"{}\">{}</td></tr>",
+                    "<tr data-failed=\"{}\"><td><code>{}:{}:{}</code></td><td><code>{}</code></td><td>{}</td><td>{:.1}%</td><td>{:.3}</td><td class=\"{}\">{}</td></tr>",
+                    f.failed,
                     escape(&f.path),
                     f.line,
                     f.column,
@@ -148,7 +172,16 @@ pub fn render(report: &Report, format: Format) -> Result<String> {
                     if f.failed { "FAIL" } else { "PASS" }
                 )?;
             }
-            s.push_str("</tbody></table></body></html>\n");
+            write!(
+                s,
+                "</tbody></table><p>Showing {} of {} functions; gate uses all functions.</p><p>Missing coverage: {} files, {} functions.</p>",
+                rows.len(),
+                report.functions.len(),
+                report.files_missing_coverage,
+                report.functions_missing_coverage
+            )?;
+            s.push_str(include_str!("report-filter.html"));
+            s.push_str("</body></html>\n");
             s
         }
     })

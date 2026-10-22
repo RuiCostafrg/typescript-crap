@@ -179,7 +179,7 @@ validated file view. Avoid rehashing a whole file for every function or repeated
 allocating decimal line-number strings.
 
 Keep deterministic ordering and source/error validation when optimizing.
-The benchmark creates real TypeScript and source-hashed coverage for 2,000 functions,
+The benchmark creates TypeScript and source-hashed coverage for 2,000 functions,
 warms up once, then reports five samples (median/min/max). It includes selection,
 file/coverage reads, parsing, scoring, and sorting—not JSON/HTML serialization.
 Use `TS_CRAP_BENCH_FUNCTIONS` to change the workload. Local wall-clock measurements
@@ -236,3 +236,23 @@ Daily advisory scans and weekly reviewed dependency/action updates are documente
 in [docs/DEPENDENCY_UPDATES.md](docs/DEPENDENCY_UPDATES.md). Bot PR code never runs
 with trusted credentials. Release validation requires successful main CI, coverage
 and mutation runs for the exact tagged SHA, and all PR checks must pass before merge.
+
+
+## Remaining review improvements
+
+See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the expanded multi-file and
+mixed-grammar benchmarks, parser reuse measurements and CI timing artifacts.
+Required test/mutation checks and floors are preserved; the duplicate Python
+coverage-summary invocation was removed.
+
+`scripts/coverage-lines.mjs` contains the pure V8 range sweep and independent-process
+line merging. `scripts/coverage.mjs` owns snapshots, child commands and publishing.
+Run the Node unit tests with `node --test tests/*.test.mjs`; `cargo test` also
+invokes them, and retains the real loader/process freshness tests. Node 24+ is
+required. Test files ship in the crate so packaged test runs retain these checks.
+
+Human report controls are exposed through `RenderOptions` and
+`render_with_options`; default `render` preserves the existing full report.
+Machine formats reject non-default presentation settings. Filtering never mutates
+the `Report` used for exit codes or baselines. HTML uses escaped DOM text for
+search and fixed JavaScript, without interpolating source into executable code.

@@ -36,3 +36,36 @@ The initial full hosted mutation run on `c452d65` tested 260 mutants: 243 caught
 missing coverage in type-only selections, duplicate qualified-name matching on
 both sides of a baseline, and report staging across filesystems. Final release
 results supersede this initial run; no survivors are excluded from mutation.
+
+
+## Review follow-up validation (2026-10-22)
+
+The remaining P3 implementation adds parser reuse, multi-file/real-module
+benchmarks, a pure V8 conversion layer, syntax diagnostics, report navigation,
+CI timings, and runnable inventory/retry examples. Fresh instrumentation with
+Rust 1.96.0 and matching LLVM 21.1.8 measures **1044 / 1069 production lines
+(97.66%)**, **98 / 102 functions (96.08%)**, and **1777 / 1870 regions (95.03%)**.
+All ten production Rust modules are included; test/benchmark/dependency sources
+are excluded. The existing 95% line floor passes without modification.
+
+The local raw profiles live in `coverage/p3-raw/`, with
+`coverage/p3-summary.json` and `coverage/p3.profdata`. They were freshly collected
+for this source revision, including the full instrumented integration suite.
+All **76 Rust tests** pass in debug and release; **14 Python tests** and
+**8 Node unit tests** pass. Strict Clippy,
+formatting, rustdoc, actionlint and package-content validation are checked locally.
+Hosted macOS/Windows runs and visual browser inspection are not claimed: the T3
+browser host lacks its required shared libraries. HTML filter logic and generated
+markup are covered by Node and Rust tests.
+
+
+Changed-line mutation testing exercised **23 mutations** against the full Rust
+suite: 20 caught, 2 unviable and 1 survivor, with no timeouts. The initial
+assertion-killed score was **95.24%**, passing the unchanged 90% gate. The survivor
+removed the internal parser-state `Debug` output. Parser-lifecycle assertions now
+check lazy grammar initialization; a separate focused rerun killed that mutation.
+All **21 viable changed-code mutations** were therefore caught across the two
+rounds, with no unresolved survivors or application-logic exclusions. The complete
+277-case production mutation run remains a required CI check; this local run was
+scoped to changed code. Detailed outcomes/diffs/logs are retained under
+`reports/p3-mutations/` and `reports/p3-parser-lifecycle-mutations/`.

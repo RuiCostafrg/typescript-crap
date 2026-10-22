@@ -1,6 +1,67 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use std::{fs, path::Path, process::Command};
 
+#[test]
+fn pure_node_conversion_and_report_filter_tests_pass() {
+    let result = Command::new("node")
+        .args([
+            "--test",
+            "tests/coverage-lines.test.mjs",
+            "tests/report-filter.test.mjs",
+        ])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[test]
+fn separate_node_processes_merge_complementary_branch_evidence() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::write(root.join("choose.mts"), "export function choose(flag: boolean) {\n  if (flag) {\n    return 1;\n  }\n  return 0;\n}\n").unwrap();
+    fs::write(root.join("test.mjs"), r#"
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+for (const flag of [true, false]) {
+  const result = spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e',
+    `import { choose } from './choose.mts'; if (choose(${flag}) !== ${Number(flag)}) throw Error('bad result');`],
+    { stdio: 'inherit' });
+  assert.equal(result.status, 0);
+}
+"#).unwrap();
+    let coverage = root.join("coverage.json");
+    let collected = runner(root, &coverage, "test.mjs");
+    assert!(
+        collected.status.success(),
+        "{}",
+        String::from_utf8_lossy(&collected.stderr)
+    );
+    let raw: serde_json::Value = serde_json::from_slice(&fs::read(&coverage).unwrap()).unwrap();
+    assert_eq!(raw["files"]["choose.mts"]["lines"]["3"], 1);
+    assert_eq!(raw["files"]["choose.mts"]["lines"]["5"], 1);
+    let report = Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+        .arg("--root")
+        .arg(root)
+        .arg("--coverage")
+        .arg(coverage)
+        .args(["--format", "json", "--require-coverage"])
+        .output()
+        .unwrap();
+    assert!(
+        report.status.success(),
+        "{}",
+        String::from_utf8_lossy(&report.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&report.stdout).unwrap();
+    assert_eq!(report["functions"][0]["coverage"], 1.0);
+}
+
 fn runner(root: &Path, output: &Path, entry: &str) -> std::process::Output {
     Command::new("node")
         .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/coverage.mjs"))

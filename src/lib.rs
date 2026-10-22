@@ -22,6 +22,35 @@ pub enum Format {
     Sarif,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum Sort {
+    #[default]
+    Path,
+    Crap,
+}
+
+/// Presentation only: the full report always determines the gate and baseline.
+#[derive(Debug, Default)]
+pub struct RenderOptions {
+    pub only_failing: bool,
+    pub sort: Sort,
+    pub top: Option<usize>,
+}
+
+impl RenderOptions {
+    pub fn validate(&self, format: Format) -> Result<()> {
+        if self.top == Some(0) {
+            bail!("--top must be greater than zero");
+        }
+        if (self.only_failing || self.sort != Sort::Path || self.top.is_some())
+            && !matches!(format, Format::Text | Format::Html)
+        {
+            bail!("report navigation options require text or html format");
+        }
+        Ok(())
+    }
+}
+
 /// Source selection and quality-gate settings. Input paths are root-relative;
 /// coverage paths are relative to the caller's current directory.
 #[derive(Debug)]
@@ -138,6 +167,7 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
     let mut functions = Vec::new();
     let mut files_missing_coverage = 0;
     let mut functions_missing_coverage = 0;
+    let mut analyzer = analysis::Analyzer::default();
     for path in &files {
         let relative = path
             .strip_prefix(&root)?
@@ -146,7 +176,7 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
             .replace('\\', "/");
         let source =
             std::fs::read_to_string(path).with_context(|| format!("cannot read {relative}"))?;
-        let methods = analysis::analyze(&relative, &source)?;
+        let methods = analyzer.analyze(&relative, &source)?;
         // Validate coverage even for selected files with no implemented functions.
         let source_coverage = coverage
             .as_ref()
@@ -201,5 +231,15 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
 
 /// Render a report without changing files or writing to stdout.
 pub fn render(report: &Report, format: Format) -> Result<String> {
-    report::render(report, format)
+    render_with_options(report, format, &RenderOptions::default())
+}
+
+/// Filter/order human-readable rows without changing gate decisions or totals.
+pub fn render_with_options(
+    report: &Report,
+    format: Format,
+    options: &RenderOptions,
+) -> Result<String> {
+    options.validate(format)?;
+    report::render(report, format, options)
 }

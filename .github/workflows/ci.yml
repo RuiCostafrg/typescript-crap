@@ -28,10 +28,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      - name: Release security regression tests
+      - name: Python helper and release security regression tests
         run: python3 -B -m unittest discover -s tests -p "test_*.py"
       - run: cargo fmt --check
-      - run: python3 -m unittest discover -s tests -p "test_coverage_summary.py"
       - name: Check publishable package contents
         shell: bash
         run: |
@@ -40,13 +39,25 @@ jobs:
             echo 'Generated/private artifacts must not be packaged.' >&2
             exit 1
           fi
-      - run: cargo clippy --locked --all-targets -- -D warnings
-      - run: cargo test --locked
-      - run: cargo test --locked --release
-      - run: cargo doc --locked --no-deps
+      - name: Strict Clippy
+        run: python3 scripts/time-command.py --label clippy --output reports/ci-timings.jsonl -- cargo clippy --locked --all-targets -- -D warnings
+      - name: Debug tests
+        run: python3 scripts/time-command.py --label debug-tests --output reports/ci-timings.jsonl -- cargo test --locked
+      - name: Release tests
+        run: python3 scripts/time-command.py --label release-tests --output reports/ci-timings.jsonl -- cargo test --locked --release
+      - name: Rust documentation
+        run: python3 scripts/time-command.py --label rustdoc --output reports/ci-timings.jsonl -- cargo doc --locked --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
-      - run: node --check scripts/coverage.mjs && node --check scripts/coverage-hook.mjs && node --check scripts/import-coverage.mjs
+      - run: node --check scripts/coverage.mjs && node --check scripts/coverage-lines.mjs && node --check scripts/coverage-hook.mjs && node --check scripts/import-coverage.mjs
+      - name: Upload measured CI costs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-timings-${{ matrix.rust }}
+          path: reports/ci-timings.jsonl
+          if-no-files-found: warn
+          retention-days: 14
   platform-behavior:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     timeout-minutes: 20
@@ -66,7 +77,15 @@ jobs:
         with:
           node-version: 24
       - name: Paths, Git selection, reports and real Node coverage
-        run: cargo test --locked --test cli --test git_diff --test reports --test coverage_e2e --test adoption --test coverage_import
+        run: python scripts/time-command.py --label platform-tests --output reports/ci-timings.jsonl -- cargo test --locked --test cli --test git_diff --test reports --test coverage_e2e --test adoption --test coverage_import --test example
+      - name: Upload measured platform costs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-timings-${{ matrix.os }}
+          path: reports/ci-timings.jsonl
+          if-no-files-found: warn
+          retention-days: 14
   audit:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     timeout-minutes: 15

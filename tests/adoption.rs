@@ -423,3 +423,72 @@ fn nested_function_edits_change_only_their_owned_fingerprints() {
     assert_eq!(before.functions[0].identity, after.functions[0].identity);
     assert_ne!(before.functions[1].identity, after.functions[1].identity);
 }
+
+#[test]
+fn coverage_gate_requires_evidence_for_type_only_files_without_functions() {
+    let dir = project("export type T = string;");
+    let mut options = opts(&dir);
+    options.require_coverage = true;
+    let report = scan(&options).unwrap();
+    assert!(report.functions.is_empty());
+    assert_eq!(report.files_missing_coverage, 1);
+    assert_eq!(report.functions_missing_coverage, 0);
+    assert!(report.completeness_failed && report.failed);
+    options.require_coverage = false;
+    assert!(!scan(&options).unwrap().failed);
+}
+
+#[test]
+fn duplicate_qualified_names_do_not_borrow_an_unrelated_baseline_score() {
+    let dir = project(BAD);
+    let baseline = Baseline::capture(&scan(&opts(&dir)).unwrap());
+    let first = BAD.replace("return 0;", "return 5;");
+    let second = BAD.replace("return 0;", "return 6;");
+    fs::write(dir.path().join("a.ts"), format!("{first}\n{second}")).unwrap();
+    let mut ambiguous_current = scan(&opts(&dir)).unwrap();
+    baseline.apply(&mut ambiguous_current, &[]).unwrap();
+    assert_eq!(ambiguous_current.functions.len(), 2);
+    assert!(ambiguous_current.functions.iter().all(|f| f.failed));
+
+    let ambiguous_baseline = Baseline::capture(&scan(&opts(&dir)).unwrap());
+    fs::write(
+        dir.path().join("a.ts"),
+        BAD.replace("return 0;", "return 7;"),
+    )
+    .unwrap();
+    let mut unique_current = scan(&opts(&dir)).unwrap();
+    ambiguous_baseline.apply(&mut unique_current, &[]).unwrap();
+    assert!(unique_current.failed && unique_current.functions[0].failed);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn report_is_staged_on_the_destination_filesystem() {
+    use std::os::unix::fs::MetadataExt;
+    let shared_memory = std::path::Path::new("/dev/shm");
+    if !shared_memory.is_dir() {
+        eprintln!("No /dev/shm mount for cross-filesystem output test");
+        return;
+    }
+    let dir = project("function f(){return 1;}");
+    let destination = tempfile::tempdir_in(shared_memory).unwrap();
+    if fs::metadata(dir.path()).unwrap().dev() == fs::metadata(destination.path()).unwrap().dev() {
+        eprintln!("/dev/shm shares the project filesystem; cross-filesystem case unavailable");
+        return;
+    }
+    let report = destination.path().join("report.json");
+    let out = Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+        .current_dir(dir.path())
+        .args(["--format", "json", "--output"])
+        .arg(&report)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&fs::read(report).unwrap()).unwrap();
+    assert_eq!(json["functions"][0]["name"], "f");
+    assert_eq!(fs::read_dir(destination.path()).unwrap().count(), 1);
+}

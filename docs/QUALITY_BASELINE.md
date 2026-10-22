@@ -30,3 +30,9 @@ Android Rust toolchain, equivalent instrumentation uses `-C instrument-coverage`
 unique `%p-%m.profraw` filenames, matching `llvm-profdata merge -sparse` and
 `llvm-cov export --summary-only` over all test and CLI executables, selecting only
 production source paths. Do not reuse raw profiles from previous source revisions.
+
+The initial full hosted mutation run on `c452d65` tested 260 mutants: 243 caught,
+3 missed, 14 unviable and zero timeouts (**98.78%**). Follow-up behavior tests cover
+missing coverage in type-only selections, duplicate qualified-name matching on
+both sides of a baseline, and report staging across filesystems. Final release
+results supersede this initial run; no survivors are excluded from mutation.

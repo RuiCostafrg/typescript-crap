@@ -34,6 +34,22 @@ def render(report):
     return "\n".join(rows) + "\n"
 
 
+def enforce_floor(report, minimum):
+    if not 0 <= minimum <= 100:
+        raise ValueError("invalid coverage floor")
+    # Validate every metric before trusting the line total.
+    render(report)
+    total = sum(entry["totals"]["lines"]["count"] for entry in report["data"])
+    covered = sum(entry["totals"]["lines"]["covered"] for entry in report["data"])
+    if total == 0 or covered * 100 < minimum * total:
+        raise ValueError(f"production line coverage below {minimum}% floor")
+
+
 if __name__ == "__main__":
     with open(sys.argv[1], encoding="utf-8") as source:
-        print(render(json.load(source)), end="")
+        report = json.load(source)
+    if len(sys.argv) == 4 and sys.argv[2] == "--min-lines":
+        enforce_floor(report, float(sys.argv[3]))
+    elif len(sys.argv) != 2:
+        raise ValueError("Usage: coverage-summary.py REPORT [--min-lines PERCENT]")
+    print(render(report), end="")

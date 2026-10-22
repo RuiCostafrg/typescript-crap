@@ -7,7 +7,7 @@ fn main() -> ExitCode {
         Ok(false) => ExitCode::SUCCESS,
         Ok(true) => ExitCode::from(1),
         Err(error) => {
-            eprintln!("error: {error:#}");
+            eprintln!("error: {}", ts_crap::escape_terminal(&format!("{error:#}")));
             ExitCode::from(2)
         }
     }

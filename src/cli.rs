@@ -26,6 +26,30 @@ struct Args {
     /// Current GitHub PR (or number/URL); requires gh and a checkout of its HEAD
     #[arg(long, num_args = 0..=1, default_missing_value = "", conflicts_with = "diff")]
     pr: Option<String>,
+    /// Explicit config file (default: ROOT/ts-crap.json)
+    #[arg(long)]
+    config: Option<PathBuf>,
+    /// Root-relative include globs; repeated flags replace configured includes
+    #[arg(long)]
+    include: Vec<String>,
+    /// Root-relative exclude globs; repeated flags replace configured excludes
+    #[arg(long)]
+    exclude: Vec<String>,
+    /// Fail if selected files or function statements lack coverage evidence
+    #[arg(long)]
+    require_coverage: bool,
+    /// Fail if the selection contains no implemented functions
+    #[arg(long)]
+    fail_on_empty: bool,
+    /// Fail only for new or worsened violations relative to this snapshot
+    #[arg(long, conflicts_with = "write_baseline")]
+    baseline: Option<PathBuf>,
+    /// Write an absolute-score baseline (gate exit code still applies)
+    #[arg(long)]
+    write_baseline: Option<PathBuf>,
+    /// Explicit file move mapping for changed functions, OLD=NEW
+    #[arg(long, requires = "baseline")]
+    baseline_rename: Vec<String>,
     /// Report format; defaults to a readable table
     #[arg(long, value_enum, default_value = "text")]
     format: Format,
@@ -45,18 +69,67 @@ fn threshold(raw: &str) -> Result<f64, String> {
 }
 
 pub fn execute() -> Result<bool> {
-    let args = Args::parse();
+    let args = match Args::try_parse() {
+        Ok(args) => args,
+        Err(error)
+            if matches!(
+                error.kind(),
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+            ) =>
+        {
+            print!("{error}");
+            return Ok(false);
+        }
+        Err(error) => return Err(error.into()),
+    };
     if let Some(path) = &args.output {
         crate::output::validate(&args.root, path, args.coverage.as_deref())?;
     }
-    let report = ts_crap::scan(&ScanOptions {
+    let config_path = args
+        .config
+        .clone()
+        .unwrap_or_else(|| args.root.join("ts-crap.json"));
+    if config_path.exists() {
+        for destination in [&args.output, &args.write_baseline].into_iter().flatten() {
+            crate::output::validate(&args.root, destination, Some(&config_path))?;
+        }
+    }
+    let mut report = ts_crap::scan(&ScanOptions {
         root: args.root.clone(),
         paths: args.paths,
         threshold: args.threshold,
         coverage: args.coverage.clone(),
         diff: args.diff,
         pr: args.pr,
+        config: args.config,
+        include: args.include,
+        exclude: args.exclude,
+        require_coverage: args.require_coverage,
+        fail_on_empty: args.fail_on_empty,
     })?;
+    if let Some(path) = &args.baseline {
+        if let Some(output) = &args.output {
+            crate::output::validate(&args.root, output, Some(path))?;
+        }
+        let snapshot = ts_crap::baseline::Baseline::load(&std::fs::read(path)?)?;
+        snapshot.apply(&mut report, &args.baseline_rename)?;
+    }
+    if let Some(path) = &args.write_baseline {
+        if let Some(output) = &args.output
+            && output == path
+        {
+            anyhow::bail!("baseline and report destinations must differ");
+        }
+        crate::output::write_report(
+            &args.root,
+            path,
+            args.coverage.as_deref(),
+            &ts_crap::baseline::Baseline::capture(&report).render()?,
+        )?;
+    }
+    if let (Some(path), Some(output)) = (&args.write_baseline, &args.output) {
+        crate::output::validate(&args.root, output, Some(path))?;
+    }
     let rendered = ts_crap::render(&report, args.format)?;
     if let Some(path) = args.output {
         crate::output::write_report(&args.root, &path, args.coverage.as_deref(), &rendered)?;

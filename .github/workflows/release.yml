@@ -36,8 +36,10 @@ jobs:
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
           if [[ "$EVENT" == push ]]; then
             [[ "$REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
-            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push&status=success" \
-              --jq '[.workflow_runs[] | select(.head_branch == "main")] | length > 0' | grep -Fx true
+            for workflow in ci.yml coverage.yml mutation.yml; do
+              gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$GITHUB_SHA&event=push" \
+                --jq '[.workflow_runs[] | select(.head_branch == "main")] | sort_by(.run_number, .run_attempt) | last | .conclusion == "success"' | grep -Fx true
+            done
           fi
       - name: Install checksum-pinned cargo-dist
         run: python3 scripts/install-dist.py x86_64-unknown-linux-gnu

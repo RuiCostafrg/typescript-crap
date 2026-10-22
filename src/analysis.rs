@@ -1,12 +1,15 @@
 use anyhow::{Context, Result, bail};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use tree_sitter::{Node, Parser};
 
 #[derive(Debug)]
 pub struct Method {
     pub name: String,
+    pub identity: String,
     pub line: usize,
     pub column: usize,
+    pub column_utf16: usize,
     pub end_line: usize,
     pub complexity: u32,
     pub lines: BTreeSet<usize>,
@@ -180,10 +183,30 @@ fn collect(node: Node<'_>, source: &str, out: &mut Vec<Method>) {
             if let Some(parameters) = node.child_by_field_name("parameters") {
                 metrics(parameters, source, &mut complexity, &mut lines);
             }
+            // Hash token kinds and bytes, excluding comments/formatting; line shifts do not change identity.
+            let mut hash = Sha256::new();
+            walk(node, |token| {
+                if token.kind() == "comment" {
+                    return false;
+                }
+                if token.child_count() == 0 {
+                    hash.update(token.kind().as_bytes());
+                    hash.update([0]);
+                    hash.update(text(token, source).as_bytes());
+                    hash.update([0]);
+                }
+                true
+            });
             out.push(Method {
+                identity: format!("{:x}", hash.finalize()),
                 name: qualified_name(node, source),
                 line: node.start_position().row + 1,
                 column: node.start_position().column + 1,
+                column_utf16: source
+                    [node.start_byte() - node.start_position().column..node.start_byte()]
+                    .encode_utf16()
+                    .count()
+                    + 1,
                 end_line: node.end_position().row + 1,
                 complexity,
                 lines,
@@ -213,3 +236,6 @@ pub fn analyze(path: &str, source: &str) -> Result<Vec<Method>> {
     collect(tree.root_node(), source, &mut out);
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,0 +1,26 @@
+name: Scheduled dependency advisories
+on:
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    # Scheduled runs use the default branch. No PR code or publishing credentials.
+    if: >-
+      github.repository == 'RuiCostafrg/typescript-crap' &&
+      (github.event_name == 'schedule' || github.actor_id == '35194998')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283
+        with:
+          tool: cargo-audit@0.22.2
+      - run: cargo audit --deny warnings

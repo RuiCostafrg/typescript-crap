@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use globset::{Glob, GlobSet, GlobSetBuilder};
+use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -28,7 +28,7 @@ fn compile(patterns: &[String]) -> Result<GlobSet> {
         {
             bail!("selection patterns must be nonempty root-relative forward-slash globs");
         }
-        builder.add(Glob::new(pattern)?);
+        builder.add(GlobBuilder::new(pattern).literal_separator(true).build()?);
     }
     Ok(builder.build()?)
 }

@@ -13,7 +13,9 @@ const excluded = new Set(['.git', 'node_modules', 'target', 'dist', 'build', 'co
 async function snapshot(root) {
   const files = new Map();
   async function walk(directory) {
-    for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+    const entries = await fs.readdir(directory, { withFileTypes: true });
+    entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    for (const entry of entries) {
       const absolute = path.join(directory, entry.name);
       if (entry.isDirectory() && !excluded.has(entry.name)) await walk(absolute);
       else if (entry.isFile() && supported(entry.name)) {

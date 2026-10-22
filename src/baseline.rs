@@ -95,28 +95,34 @@ impl Baseline {
         let mut current_ids = BTreeMap::new();
         for f in &report.functions {
             *current_names
-                .entry((f.path.clone(), f.name.clone()))
+                .entry((f.path.as_str(), f.name.as_str()))
                 .or_insert(0) += 1;
-            *current_ids.entry(f.identity.clone()).or_insert(0) += 1;
+            *current_ids.entry(f.identity.as_str()).or_insert(0) += 1;
         }
         let mut used = BTreeSet::new();
-        for f in &mut report.functions {
+        let mut failures = Vec::with_capacity(report.functions.len());
+        for f in &report.functions {
+            let mut failed = f.failed;
             let by_name = named
                 .get(&(f.path.as_str(), f.name.as_str()))
                 .filter(|entries| {
-                    entries.len() == 1 && current_names[&(f.path.clone(), f.name.clone())] == 1
+                    entries.len() == 1 && current_names[&(f.path.as_str(), f.name.as_str())] == 1
                 });
             let candidates = by_name.or_else(|| {
                 fingerprints
                     .get(f.identity.as_str())
-                    .filter(|entries| entries.len() == 1 && current_ids[&f.identity] == 1)
+                    .filter(|entries| entries.len() == 1 && current_ids[f.identity.as_str()] == 1)
             });
             if let Some(entries) = candidates {
                 let index = entries[0];
                 if used.insert(index) {
-                    f.failed = f.failed && f.crap > self.functions[index].crap;
+                    failed = f.failed && f.crap > self.functions[index].crap;
                 }
             }
+            failures.push(failed);
+        }
+        for (function, failed) in report.functions.iter_mut().zip(failures) {
+            function.failed = failed;
         }
         report.failed = report.completeness_failed || report.functions.iter().any(|f| f.failed);
         Ok(())

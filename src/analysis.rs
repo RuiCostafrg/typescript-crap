@@ -183,10 +183,12 @@ fn collect(node: Node<'_>, source: &str, out: &mut Vec<Method>) {
             if let Some(parameters) = node.child_by_field_name("parameters") {
                 metrics(parameters, source, &mut complexity, &mut lines);
             }
-            // Hash token kinds and bytes, excluding comments/formatting; line shifts do not change identity.
+            // Hash owned tokens, excluding trivia and descendant functions (which
+            // have their own identities). Pruning avoids quadratic hashing of
+            // deeply nested functions; line shifts do not change identity.
             let mut hash = Sha256::new();
             walk(node, |token| {
-                if token.kind() == "comment" {
+                if token.kind() == "comment" || (token != node && is_function(token)) {
                     return false;
                 }
                 if token.child_count() == 0 {

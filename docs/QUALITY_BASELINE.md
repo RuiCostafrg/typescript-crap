@@ -7,7 +7,10 @@ measured **940 / 971 lines (96.81%)**, **92 / 95 functions (96.84%)**, and
 All ten production modules were included; test modules, integration tests,
 benchmarks, dependencies and Rust runtime sources were excluded. These values are
 a current local measurement, not historical README percentages or hosted results.
-The final hosted artifact is the authoritative measurement for the release SHA.
+The initial hosted run on commit `c452d65` measured **949 / 971 lines (97.73%)**,
+**92 / 95 functions (96.84%)**, and **1617 / 1704 regions (94.89%)** using the pinned
+coverage workflow. Both exceeded the 95% line floor. The final hosted artifact is
+the authoritative measurement for the release SHA.
 
 The CI floor is **95% production line coverage**, leaving less than two percentage
 points of headroom from that measurement. The check uses integer covered/total

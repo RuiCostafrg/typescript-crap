@@ -298,7 +298,7 @@ provenance. Public source and forks remain available under MIT.
 ## Adoption gates (v0.2)
 
 `ts-crap.json` in the project root configures selection. Unknown fields and unknown
-versions are errors. Globs use forward slashes relative to `--root`; `**` matches
+versions are errors. Globs use forward slashes relative to `--root`; `*` stops at directory boundaries and `**` matches
 across directories. Includes default to all supported sources and excludes default
 to empty. Built-in generated/dependency exclusions and ignore rules still apply.
 Explicit paths and Git selection intersect these rules. Excludes always win.
@@ -334,7 +334,7 @@ pass. Absolute gates remain the default. Baseline creation never changes gate
 exit codes or silently updates an existing baseline during comparison.
 
 A unique path plus qualified function name matches edits. Token fingerprints
-ignore comments and formatting and match unique unchanged functions across file
+ignore comments, formatting and separately scored descendant functions and match unique unchanged functions across file
 moves, including anonymous functions whose locations shifted. Renamed functions
 are new identities; edited moves require the explicit mapping above. Ambiguous
 matches fail conservatively as new violations. Duplicate names should be given

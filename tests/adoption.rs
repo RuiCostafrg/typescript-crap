@@ -390,3 +390,36 @@ fn cli_help_config_protection_and_completeness_sarif() {
     assert_eq!(invalid.status.code(), Some(2));
     assert!(!invalid.stderr.contains(&27));
 }
+
+#[test]
+fn single_star_globs_stop_at_directory_boundaries_and_double_star_recurses() {
+    let dir = project("function root(){return 1;}");
+    fs::create_dir_all(dir.path().join("src/nested")).unwrap();
+    fs::write(dir.path().join("src/one.ts"), "function one(){return 1;}").unwrap();
+    fs::write(
+        dir.path().join("src/nested/two.ts"),
+        "function two(){return 2;}",
+    )
+    .unwrap();
+    let mut options = opts(&dir);
+    options.include = vec!["src/*.ts".into()];
+    let report = scan(&options).unwrap();
+    assert_eq!(report.files_scanned, 1);
+    assert_eq!(report.functions[0].name, "one");
+    options.include = vec!["src/**/*.ts".into()];
+    assert_eq!(scan(&options).unwrap().files_scanned, 2);
+}
+
+#[test]
+fn nested_function_edits_change_only_their_owned_fingerprints() {
+    let dir = project("function outer(){function inner(){return 1;} return inner();}");
+    let before = scan(&opts(&dir)).unwrap();
+    fs::write(
+        dir.path().join("a.ts"),
+        "function outer(){function inner(){return 2;} return inner();}",
+    )
+    .unwrap();
+    let after = scan(&opts(&dir)).unwrap();
+    assert_eq!(before.functions[0].identity, after.functions[0].identity);
+    assert_ne!(before.functions[1].identity, after.functions[1].identity);
+}

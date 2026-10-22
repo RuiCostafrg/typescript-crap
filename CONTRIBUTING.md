@@ -241,7 +241,7 @@ and mutation runs for the exact tagged SHA, and all PR checks must pass before m
 ## Remaining review improvements
 
 See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the expanded multi-file and
-mixed-grammar benchmarks, parser reuse measurements and CI timing artifacts.
+mixed-grammar benchmarks, parser reuse measurements and native Actions step timings.
 Required test/mutation checks and floors are preserved; the duplicate Python
 coverage-summary invocation was removed.
 

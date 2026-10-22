@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          python3 scripts/time-command.py --label full-mutations --output reports/mutation-timings.jsonl -- cargo mutants -j 2 --jobserver-tasks 2 --timeout 60 --build-timeout 180
+          cargo mutants -j 2 --jobserver-tasks 2 --timeout 60 --build-timeout 180
           status=$?
           # Exit 2 means survivors; the explicit score gate decides their impact.
           # All other failures (including baseline/build infrastructure) stay fatal.
@@ -44,8 +44,6 @@ jobs:
         if: always()
         with:
           name: mutation-results
-          path: |
-            mutants.out/
-            reports/mutation-timings.jsonl
+          path: mutants.out/
           if-no-files-found: warn
           retention-days: 14

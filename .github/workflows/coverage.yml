@@ -31,7 +31,7 @@ jobs:
         run: cargo llvm-cov clean --workspace
       - name: Run instrumented Rust tests
         id: instrumented
-        run: python3 scripts/time-command.py --label instrumented-tests --output coverage/timings.jsonl -- cargo llvm-cov --locked --lib --bins --tests --no-report
+        run: cargo llvm-cov --locked --lib --bins --tests --no-report
       - name: Generate LCOV, JSON and HTML reports
         if: ${{ always() && steps.instrumented.outcome != 'skipped' }}
         shell: bash

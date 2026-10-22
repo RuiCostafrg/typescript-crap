@@ -36,16 +36,13 @@ deferred because these measurements do not justify their added complexity.
 
 ## CI costs
 
-`scripts/time-command.py` runs an argument array directly, records monotonic wall
-time and the command exit code in append-only JSONL, and preserves failure exits.
-When `GITHUB_STEP_SUMMARY` is set, it also appends a readable timing line. Tests
-exercise success, failure, missing executables and summary output.
+Rust verification runs directly with Cargo: `cargo clippy`, `cargo test`,
+`cargo doc`, `cargo llvm-cov` and `cargo mutants`. GitHub Actions records each
+step's start/end times and conclusion, including failed steps. Compare those
+native timings for each Rust-version matrix leg, platform, coverage and mutation
+job. No additional runtime wraps Cargo.
 
-The CI Rust-version matrix records Clippy, debug tests, release tests and rustdoc
-individually. macOS/Windows behavior jobs, instrumented coverage tests and the
-full mutation job also record their own costs. Artifacts retain timings even
-when a check fails, allowing comparisons across actual hosted matrix legs.
-Local wall-time telemetry recorded 29.437 s for the initial debug run and
+Local measurements recorded 29.437 s for the initial debug run and
 31.205 s for the final debug run; the first release build plus tests took
 377.535 s, including 5 min 49 s of compilation. Build caches and concurrent
 validation workloads differed, so these numbers do not justify removing a
@@ -55,7 +52,8 @@ A redundant Python coverage-summary run was removed: the same tests already run
 in the full Python discovery step.
 
 The debug/release matrix, full PR/main mutation runs, release prerequisites,
-95% coverage floor and 90% mutation floor remain in force. No hosted timings were
-available for this change, so scheduling full mutations instead of PR runs would
-be premature. Compare multiple hosted timing artifacts before changing required
-checks; local proot timings cannot estimate GitHub runner costs reliably.
+95% coverage floor and 90% mutation floor remain in force. The initial hosted
+run took about two minutes for each Rust matrix leg and thirteen minutes for
+the full mutation job. Compare multiple hosted step timings before changing
+required checks or moving mutations off PRs; local proot timings cannot estimate
+GitHub runner costs reliably.

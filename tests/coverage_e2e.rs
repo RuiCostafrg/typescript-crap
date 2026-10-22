@@ -7,6 +7,7 @@ fn pure_node_conversion_and_report_filter_tests_pass() {
         .args([
             "--test",
             "tests/coverage-lines.test.mjs",
+            "tests/coverage-publication.test.mjs",
             "tests/report-filter.test.mjs",
         ])
         .current_dir(env!("CARGO_MANIFEST_DIR"))

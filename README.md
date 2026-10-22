@@ -107,6 +107,26 @@ directories must already exist. Reports are still emitted when the quality gate
 fails; input/processing errors instead produce stderr and no new report.
 Do not reuse an existing report after a failed command—check its exit code.
 
+### Finding and navigating failures
+
+```sh
+ts-crap --root . --only-failing --sort crap --top 20
+ts-crap --root . --format html --sort crap --output report.html
+```
+
+Text and HTML reports support `--only-failing`, descending `--sort crap` (ties
+use path/line/column), and positive `--top N`. Filtering happens before sorting
+and limiting. Default ordering remains path/line/column. The full selection
+always determines gate exits, completeness counts, totals and written baselines;
+rows hidden from view cannot hide a failure. JSON/XML/SARIF keep their complete
+schemas and reject presentation options that would filter, reorder or limit them.
+
+Standalone HTML includes a path/function search and an “Only failing” checkbox.
+Search is literal and case-insensitive; both controls combine. All rows remain
+readable with JavaScript disabled. Syntax errors include a one-based line and
+UTF-8 byte column plus a bounded source-line snippet, with terminal controls
+escaped in CLI diagnostics.
+
 ### Exit codes
 
 - **0:** all analyzed functions pass (also for an empty selection).
@@ -258,6 +278,20 @@ of safety in third-party/native dependencies.
 
 The real shop TypeScript source is in `examples/shop/src/pricing.mts`; its
 assertion-based tests are in `examples/shop/test.mjs`.
+
+Two additional runnable projects exercise everyday TypeScript:
+
+- `examples/inventory`: a stock service with class methods, a discriminated
+  result union, normalized Unicode keys and business/validation failures.
+- `examples/retry`: a generic asynchronous retry function with optional settings,
+  transient-error policy, exceptions and bounded attempts.
+
+Run either project's assertions directly with `node examples/inventory/test.mjs`
+or `node examples/retry/test.mjs`. Pass `--partial` to intentionally exercise less
+code. To compare coverage-driven scores, substitute either root for
+`examples/shop` in the collection command above and use a separate output file.
+Integration tests collect partial and full V8 coverage, verify exact complexity,
+require complete evidence, compare scores, and reject stale source for both.
 
 ```sh
 # Expected exit 1: discount scores 12 and shipping scores 20 without coverage

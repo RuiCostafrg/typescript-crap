@@ -1,0 +1,19 @@
+<script type="module">
+const search = document.querySelector('#filter');
+const failing = document.querySelector('#only-failing');
+const rows = [...document.querySelectorAll('tbody tr')];
+function update() {
+  const query = search.value.toLocaleLowerCase();
+  let visible = 0;
+  for (const row of rows) {
+    const name = row.cells[0].textContent + ' ' + row.cells[1].textContent;
+    row.hidden = !name.toLocaleLowerCase().includes(query)
+      || (failing.checked && row.dataset.failed !== 'true');
+    if (!row.hidden) visible++;
+  }
+  document.querySelector('#visible-count').textContent = `${visible} of ${rows.length} displayed rows visible`;
+}
+search.addEventListener('input', update);
+failing.addEventListener('change', update);
+update();
+</script>

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
-use ts_crap::{Format, ScanOptions};
+use ts_crap::{Format, RenderOptions, ScanOptions, Sort};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -53,6 +53,15 @@ struct Args {
     /// Report format; defaults to a readable table
     #[arg(long, value_enum, default_value = "text")]
     format: Format,
+    /// Show only failing functions (text/html); the gate still uses all functions
+    #[arg(long)]
+    only_failing: bool,
+    /// Order text/html rows by location or descending CRAP score
+    #[arg(long, value_enum, default_value = "path")]
+    sort: Sort,
+    /// Show at most N text/html rows, after filtering and sorting
+    #[arg(long)]
+    top: Option<usize>,
     /// Write report to this file rather than stdout (also written on gate failure)
     #[arg(long, short)]
     output: Option<PathBuf>,
@@ -82,6 +91,12 @@ pub fn execute() -> Result<bool> {
         }
         Err(error) => return Err(error.into()),
     };
+    let presentation = RenderOptions {
+        only_failing: args.only_failing,
+        sort: args.sort,
+        top: args.top,
+    };
+    presentation.validate(args.format)?;
     if let Some(path) = &args.output {
         crate::output::validate(&args.root, path, args.coverage.as_deref())?;
     }
@@ -130,7 +145,7 @@ pub fn execute() -> Result<bool> {
     if let (Some(path), Some(output)) = (&args.write_baseline, &args.output) {
         crate::output::validate(&args.root, output, Some(path))?;
     }
-    let rendered = ts_crap::render(&report, args.format)?;
+    let rendered = ts_crap::render_with_options(&report, args.format, &presentation)?;
     if let Some(path) = args.output {
         crate::output::write_report(&args.root, &path, args.coverage.as_deref(), &rendered)?;
     } else {

@@ -3,6 +3,106 @@ use quick_xml::{Reader, events::Event};
 use std::{fs, process::Command};
 
 #[test]
+fn report_navigation_preserves_full_gate_and_machine_formats() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("a.ts"), "function small(){return 1;}\nfunction tie(a:boolean,b:boolean){if(a)return 1;if(b)return 2;return 3;}\n").unwrap();
+    fs::write(dir.path().join("b.ts"), "function largest(a:boolean,b:boolean,c:boolean){if(a)return 1;if(b)return 2;if(c)return 3;return 4;}\nfunction tie(a:boolean,b:boolean){if(a)return 1;if(b)return 2;return 3;}\n").unwrap();
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+            .arg("--root")
+            .arg(dir.path())
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let out = run(&["--only-failing", "--sort", "crap", "--top", "2"]);
+    assert_eq!(out.status.code(), Some(1));
+    let text = String::from_utf8(out.stdout).unwrap();
+    assert!(text.contains("4 functions"));
+    assert!(!text.contains("  small  "));
+    assert!(text.find("  largest  ").unwrap() < text.find("  tie  ").unwrap());
+    assert!(
+        text.contains("a.ts:2:1  tie"),
+        "tie order is stable by location"
+    );
+    assert!(!text.contains("b.ts:2:1  tie"));
+    assert!(text.contains("Showing 2 of 4"));
+    let captured = run(&[
+        "--top",
+        "1",
+        "--write-baseline",
+        dir.path().join("baseline.json").to_str().unwrap(),
+    ]);
+    assert_eq!(captured.status.code(), Some(1));
+    let baseline: serde_json::Value =
+        serde_json::from_slice(&fs::read(dir.path().join("baseline.json")).unwrap()).unwrap();
+    assert_eq!(baseline["functions"].as_array().unwrap().len(), 4);
+    let html = run(&["--format", "html", "--only-failing", "--top", "1"]);
+    assert_eq!(html.status.code(), Some(1));
+    let html = String::from_utf8(html.stdout).unwrap();
+    assert_eq!(html.matches("<tr data-failed=").count(), 1);
+    assert!(html.contains("Showing 1 of 4"));
+    assert!(html.contains("id=\"filter\""));
+    assert!(html.find("id=\"filter\"") < html.find("<table>"));
+    for format in ["json", "xml", "sarif"] {
+        for options in [
+            vec!["--top", "1"],
+            vec!["--only-failing"],
+            vec!["--sort", "crap"],
+        ] {
+            let mut args = vec!["--format", format];
+            args.extend(options);
+            let out = run(&args);
+            assert_eq!(out.status.code(), Some(2));
+            assert!(out.stdout.is_empty());
+        }
+    }
+    for args in [
+        &["--top", "0"][..],
+        &["--top", "-1"],
+        &["--sort", "unknown"],
+    ] {
+        assert_eq!(run(args).status.code(), Some(2));
+    }
+    let unfiltered = run(&["--format", "json"]);
+    let explicit_path = run(&["--format", "json", "--sort", "path"]);
+    assert_eq!(unfiltered.stdout, explicit_path.stdout);
+    let json: serde_json::Value = serde_json::from_slice(&unfiltered.stdout).unwrap();
+    assert_eq!(json["functions"].as_array().unwrap().len(), 4);
+    // Empty filtered output cannot conceal a completeness failure or alter a baseline.
+    fs::write(dir.path().join("a.ts"), "function small(){return 1;}").unwrap();
+    fs::remove_file(dir.path().join("b.ts")).unwrap();
+    let empty = run(&["--only-failing", "--require-coverage"]);
+    assert_eq!(empty.status.code(), Some(1));
+    let text = String::from_utf8(empty.stdout).unwrap();
+    assert!(text.contains("Showing 0 of 1"));
+    assert!(text.contains("CRAP gate: FAIL"));
+    assert!(!text.contains("No implemented"));
+}
+
+#[test]
+fn syntax_diagnostics_escape_snippet_controls_and_emit_no_report() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("broken.ts"),
+        "// heading\nconst invalid = ; // \u{1b}[31mspoof\n",
+    )
+    .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+        .arg("--root")
+        .arg(dir.path())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(out.stdout.is_empty());
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(stderr.contains("broken.ts:2:"), "{stderr}");
+    assert!(stderr.contains("const invalid = ;"));
+    assert!(stderr.contains("\\u{1b}"));
+    assert!(!stderr.contains('\u{1b}'));
+}
+
+#[test]
 fn json_xml_html_reports_contain_locations_scores_and_escape_user_source() {
     let dir = tempfile::tempdir().unwrap();
     let filename = if cfg!(windows) {

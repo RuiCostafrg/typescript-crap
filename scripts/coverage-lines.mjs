@@ -34,6 +34,9 @@ export function lineHits(script, source) {
     for (const item of events.get(start).remove) active.delete(item);
     for (const item of events.get(start).add) active.add(item);
     let inner;
+    // Dense overlaps repeat this active-range scan. An ordered structure needs
+    // profiling evidence of a useful gain; preserve smallest-range and zero-hit
+    // tie rules if replacing it. See docs/PERFORMANCE.md's scaling investigation.
     for (const item of active) {
       if (!inner || item.end - item.start < inner.end - inner.start
           || (item.end - item.start === inner.end - inner.start && item.count < inner.count)) inner = item;

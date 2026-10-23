@@ -60,6 +60,9 @@ fn local_name(node: Node<'_>, source: &str) -> String {
     )
 }
 
+// Ancestor walks repeat under deep nesting; qualified-name output also grows
+// with depth. Scope caching awaits profiles that separate those costs and show
+// a practical benefit. See docs/PERFORMANCE.md, "Adversarial scaling and decision".
 fn qualified_name(node: Node<'_>, source: &str) -> String {
     let mut names = vec![local_name(node, source)];
     let mut scope = node.parent();
@@ -204,6 +207,9 @@ fn collect(node: Node<'_>, source: &str, out: &mut Vec<Method>) {
                 name: qualified_name(node, source),
                 line: node.start_position().row + 1,
                 column: node.start_position().column + 1,
+                // Many functions on one line repeatedly scan its prefix. A UTF-16
+                // index may help, but adds storage and Unicode-sensitive state;
+                // profile this cost before adding one (see docs/PERFORMANCE.md).
                 column_utf16: source
                     [node.start_byte() - node.start_position().column..node.start_byte()]
                     .encode_utf16()

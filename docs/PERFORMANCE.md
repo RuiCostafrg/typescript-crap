@@ -129,6 +129,9 @@ not used as comparison evidence.
 
 ### Adversarial scaling and decision
 
+This records the initial investigation. The three lookup optimizations were
+implemented in a subsequent follow-up; see "Lookup optimization follow-up" below.
+
 | Workload | Size | Median (ms) | Process RSS (KiB) |
 | --- | ---: | ---: | ---: |
 | Unicode, single-line functions | 500 | 30.162 | 7,940 |
@@ -181,3 +184,98 @@ Use **distinct `CARGO_TARGET_DIR` values** for both builds, retain logs and
 executable hashes, and compare production files against the baseline commit.
 This preserves the synthetic sequencing caveat above; use an actual CLI harness
 instead if exact historical CLI latency is the question.
+
+## Lookup optimization follow-up
+
+The three lookup changes are now implemented. This supersedes the initial
+deferral above; that investigation and its raw data remain historical evidence.
+No public report fields, scoring rules, source identities, or coverage tie rules
+change.
+
+- **UTF-16 columns:** preorder visits function starts in increasing source order.
+  A cursor counts only the slice between starts on the same line and resets at
+  a different line start. It uses constant state, without building a per-byte
+  index or repeatedly decoding a whole line prefix. Total prefix decoding is
+  linear in the visited source segments.
+- **Scope names:** a stack expires completed scopes at the next scope event.
+  Named classes reset qualification and anonymous classes inherit the enclosing
+  prefix, matching the original ancestor algorithm. Function entries reference
+  names already emitted in the report; class entries borrow their source names.
+  Auxiliary storage is O(depth), and name construction copies the required
+  output once. Deeply nested qualified names still have quadratic total output
+  size; caching does not remove that inherent cost.
+- **Coverage ranges:** a min-heap orders ranges by clipped length, then hit
+  count. Expired entries are removed lazily before selecting the root. Every
+  range is inserted once and removed at most once, bounding heap operations by
+  O(R log R) with O(R) heap storage. End boundaries still split source segments.
+  Equal-length ranges retain the lower count, including uncovered zero hits.
+
+### Paired measurements
+
+Baseline is `821229ad9302a6a683ca6f45a40ec738fd190104`. The release benchmark was
+built before editing the Rust implementation, copied outside Cargo's target
+directory and hashed. The current implementation was then rebuilt and copied
+separately. Both compiler logs identified the workspace package and the saved
+executables have distinct SHA256 hashes. The Node baseline module and benchmark
+were also copied before changing the converter. This comparison uses the same
+benchmark source at both revisions, with no output-validation adapter.
+
+Measured on Android 12/aarch64 in proot, Rust 1.96.0 and Node 26.3.1. All builds
+completed before timing. Each fresh process performs one warmup and five samples.
+Two paired rounds alternate baseline/current, then current/baseline, to reduce
+ordering bias. The table shows the range of the **two round medians**, in ms;
+all individual samples, process peak RSS, source hashes and executable hashes
+are in [the raw data](measurements/lookup-optimizations-2026-10-23.json).
+
+| Workload | Size | Baseline median range (ms) | Optimized median range (ms) |
+| --- | ---: | ---: | ---: |
+| Unicode, single-line functions | 1,000 | 98.072–119.175 | 60.576–80.607 |
+| Unicode, single-line functions | 4,000 | 682.880–688.422 | 201.230–216.094 |
+| Unicode, single-line functions | 8,000 | 2,222.354–2,242.225 | 291.985–309.502 |
+| Nested functions | 64 | 17.914–32.001 | 26.382–36.684 |
+| Nested functions | 128 | 160.057–160.157 | 7.395–15.627 |
+| Nested functions | 256 | 742.949–778.759 | 20.838–35.669 |
+| Overlapping V8 ranges | 32 | 0.255–0.497 | 0.217–0.313 |
+| Overlapping V8 ranges | 500 | 10.717–12.529 | 2.869–4.658 |
+| Overlapping V8 ranges | 2,000 | 32.634–36.866 | 3.938–4.408 |
+| Overlapping V8 ranges | 8,000 | 450.738–467.276 | 17.200–21.702 |
+
+The larger fixtures consistently improve in both rounds. The smallest nested
+case does not improve consistently; filesystem/scheduling variance is still
+visible. These are bounded synthetic workloads, not a general throughput or
+memory guarantee. Rust timings include selection, filesystem reads, parsing,
+scoring and sorting. The nested fixture uses separate lines and therefore does
+not benefit from avoiding long UTF-16 prefixes. Its emitted name bytes are
+unchanged (173,699 at depth 256). Both Rust changes are present in each optimized
+run, so the data is not an isolated instruction-level profile.
+
+RSS is the process high-water mark including fixture setup, initial scanning and
+runtime overhead. Keep those values as observations; do not infer per-stage
+allocation savings from them. No unstable timing assertions are added to CI.
+
+Reproduce with the existing `review` executable in release mode, using Unicode
+sizes 1000/4000/8000 and nesting 64/128/256. For Node use
+`node scripts/bench-coverage-lines.mjs SIZE` with 32/500/2000/8000. Preserve each
+revision's executable/module before rebuilding the other, verify source and
+artifact hashes, and run without concurrent builds.
+
+### Behavior verification
+
+The new analyzer reference test computes names by walking ancestors and computes
+UTF-16 columns from full prefixes, independently of the production caches. It
+covers named/anonymous/nested classes, inheritance expressions, default-parameter
+functions, computed names, adjacent siblings, abstract methods, TSX, BOM, astral
+Unicode and CRLF. Existing identity, complexity and source-ownership tests remain
+in place. A separate read-only code review found no correctness/security issues.
+
+The converter retains its 300 generated range cases against an independent
+per-code-unit oracle and adds a larger expired-priority/gap/tie case, each checked
+in both input orders. An isolated copy with the heap's count tie comparison
+reversed fails with an assertion, demonstrating that the tests reject that fault.
+
+Local formatting, strict all-target Clippy, the complete debug suite (89 Rust
+tests, including real Node/Git/CLI cases), rustdoc with warnings denied, Node
+syntax checking and package listing passed. All 15 library tests also passed
+in the release profile, including the analyzer reference test. The complete
+hosted release/platform/coverage/mutation/audit checks remain merge requirements;
+a local benchmark is not a replacement for those gates.

@@ -118,3 +118,53 @@ fn isolated(test_name: &str, test: impl FnOnce()) {
         std::thread::sleep(Duration::from_millis(10));
     }
 }
+
+#[test]
+fn owned_identity_and_metrics_survive_trivia_and_nested_edits() {
+    isolated(
+        "analysis::tests::owned_identity_and_metrics_survive_trivia_and_nested_edits",
+        || {
+            for (path, source) in [
+                (
+                    "a.ts",
+                    "const mark = '😀'; function café(x = mark ? 1 : 0) { function inner() { return 1; } if (x) return 2; return 3; }",
+                ),
+                (
+                    "view.tsx",
+                    "const mark = '😀'; const View = (x = mark ? 1 : 0) => { const inner = () => <b>😀</b>; return x ? <div/> : <span/>; };",
+                ),
+            ] {
+                let mut analyzer = super::Analyzer::default();
+                let original = analyzer.analyze(path, source).unwrap();
+                let trivia = source
+                    .replace("return", "/* ü trivia */ return")
+                    .replace("{", "{\n");
+                let shifted = analyzer.analyze(path, &trivia).unwrap();
+                assert_eq!(original.len(), shifted.len());
+                for (before, after) in original.iter().zip(&shifted) {
+                    assert_eq!(
+                        (&before.name, &before.identity, before.complexity),
+                        (&after.name, &after.identity, after.complexity)
+                    );
+                }
+                assert!(original[0].column > original[0].column_utf16);
+                let edited = source
+                    .replace("return 1;", "if (true) return 7; return 8;")
+                    .replace("<b>😀</b>", "(x ? <i/> : <em/>)");
+                let nested = analyzer.analyze(path, &edited).unwrap();
+                assert_eq!(original[0].identity, nested[0].identity);
+                assert_eq!(original[0].complexity, nested[0].complexity);
+                assert_eq!(original[0].lines, nested[0].lines);
+                assert_ne!(original[1].identity, nested[1].identity);
+                assert!(nested[1].complexity > original[1].complexity);
+            }
+            let deep = format!("{}return 1;{}", "function f() {".repeat(64), "}".repeat(64));
+            let methods = super::Analyzer::default()
+                .analyze("deep.ts", &deep)
+                .unwrap();
+            assert_eq!(methods.len(), 64);
+            assert!(methods.iter().all(|method| method.complexity == 1));
+            assert_eq!(methods.last().unwrap().name, vec!["f"; 64].join("::"));
+        },
+    );
+}

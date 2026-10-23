@@ -1,0 +1,118 @@
+#![allow(clippy::unwrap_used)]
+use super::Baseline;
+use crate::{FunctionScore, Report};
+
+fn report(entries: &[(&str, &str, u8, f64)]) -> Report {
+    Report {
+        version: 1,
+        source_paths: Vec::new(),
+        threshold: 10.0,
+        files_scanned: 1,
+        failed: entries.iter().any(|entry| entry.3 > 10.0),
+        files_missing_coverage: 0,
+        functions_missing_coverage: 0,
+        completeness_failed: false,
+        functions: entries
+            .iter()
+            .map(|&(path, name, identity, crap)| FunctionScore {
+                path: path.into(),
+                name: name.into(),
+                identity: format!("{identity:064x}"),
+                line: 1,
+                column: 1,
+                column_utf16: 1,
+                end_line: 1,
+                complexity: 1,
+                coverage: 0.0,
+                crap,
+                failed: crap > 10.0,
+            })
+            .collect(),
+    }
+}
+
+#[test]
+fn unique_entry_reordering_preserves_decisions_and_completeness_gate() {
+    let before = report(&[("a.ts", "a", 1, 40.0), ("b.ts", "b", 2, 20.0)]);
+    for reverse in [false, true] {
+        let mut baseline = Baseline::capture(&before);
+        if reverse {
+            baseline.functions.reverse();
+        }
+        let mut after = report(&[
+            ("b.ts", "b", 2, 30.0),
+            ("a.ts", "a", 1, 30.0),
+            ("new.ts", "new", 3, 12.0),
+        ]);
+        if reverse {
+            after.functions.reverse();
+        }
+        Baseline::load(baseline.render().unwrap().as_bytes())
+            .unwrap()
+            .apply(&mut after, &[])
+            .unwrap();
+        for function in &after.functions {
+            assert_eq!(function.failed, function.name != "a");
+        }
+        assert!(after.failed);
+    }
+    let baseline = Baseline::capture(&before);
+    let mut after = report(&[("a.ts", "a", 1, 30.0)]);
+    after.completeness_failed = true;
+    baseline.apply(&mut after, &[]).unwrap();
+    assert!(!after.functions[0].failed);
+    assert!(after.failed);
+}
+
+#[test]
+fn ambiguous_names_and_fingerprints_cannot_suppress_new_violations() {
+    for (old, current) in [
+        (
+            vec![("a.ts", "a", 1, 40.0); 2],
+            vec![("a.ts", "a", 1, 20.0)],
+        ),
+        (
+            vec![("a.ts", "a", 1, 40.0), ("b.ts", "b", 1, 40.0)],
+            vec![("c.ts", "c", 1, 20.0)],
+        ),
+        (
+            vec![("a.ts", "a", 1, 40.0)],
+            vec![("b.ts", "b", 1, 20.0), ("c.ts", "c", 1, 20.0)],
+        ),
+        (
+            vec![("a.ts", "a", 1, 40.0)],
+            vec![("a.ts", "a", 1, 20.0); 2],
+        ),
+    ] {
+        let mut after = report(&current);
+        Baseline::capture(&report(&old))
+            .apply(&mut after, &[])
+            .unwrap();
+        assert!(after.failed);
+        assert!(after.functions.iter().all(|function| function.failed));
+    }
+}
+
+#[test]
+fn invalid_threshold_or_rename_plan_fails_without_mutating_report() {
+    let before = report(&[("a.ts", "a", 1, 40.0)]);
+    let mut baseline = Baseline::capture(&before);
+    for renames in [
+        vec!["missing"],
+        vec!["=a"],
+        vec!["a="],
+        vec!["a=x", "a=y"],
+        vec!["a=x", "b=x"],
+    ] {
+        let mut after = report(&[("a.ts", "a", 1, 20.0)]);
+        let original = serde_json::to_string(&after).unwrap();
+        let renames: Vec<_> = renames.into_iter().map(str::to_owned).collect();
+        assert!(baseline.apply(&mut after, &renames).is_err());
+        assert_eq!(serde_json::to_string(&after).unwrap(), original);
+    }
+    baseline.threshold = 11.0;
+    let mut after = report(&[("a.ts", "a", 1, 20.0)]);
+    let original = serde_json::to_string(&after).unwrap();
+    assert!(baseline.apply(&mut after, &[]).is_err());
+    assert_eq!(serde_json::to_string(&after).unwrap(), original);
+}

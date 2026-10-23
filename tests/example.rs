@@ -1,20 +1,16 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-use std::{fs, path::Path, process::Command};
+mod common;
+use std::{fs, process::Command};
 
 #[test]
 fn shipped_shop_example_fails_uncovered_but_passes_with_real_full_coverage() {
-    let dir = tempfile::tempdir().unwrap();
-    fs::create_dir(dir.path().join("src")).unwrap();
-    fs::write(
-        dir.path().join("src/pricing.mts"),
-        include_str!("../examples/shop/src/pricing.mts"),
-    )
-    .unwrap();
-    fs::write(
-        dir.path().join("test.mjs"),
-        include_str!("../examples/shop/test.mjs"),
-    )
-    .unwrap();
+    let dir = common::project(&[
+        (
+            "src/pricing.mts",
+            include_str!("../examples/shop/src/pricing.mts"),
+        ),
+        ("test.mjs", include_str!("../examples/shop/test.mjs")),
+    ]);
     let report = dir.path().join("coverage.json");
     let run = |coverage: bool| {
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_ts-crap"));
@@ -32,8 +28,7 @@ fn shipped_shop_example_fails_uncovered_but_passes_with_real_full_coverage() {
         functions.iter().find(|f| f["name"] == "shipping").unwrap()["crap"],
         20.0
     );
-    let coverage = Command::new("node")
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/coverage.mjs"))
+    let coverage = common::node_script("coverage.mjs")
         .arg("--root")
         .arg(dir.path())
         .arg("--output")
@@ -73,13 +68,7 @@ fn shipped_shop_example_fails_uncovered_but_passes_with_real_full_coverage() {
 }
 
 fn exercise_example(name: &str, source: &str, tests: &str, expected: &[(&str, u32)]) {
-    let dir = tempfile::Builder::new()
-        .prefix("real TypeScript ü ")
-        .tempdir()
-        .unwrap();
-    fs::create_dir(dir.path().join("src")).unwrap();
-    fs::write(dir.path().join(format!("src/{name}.mts")), source).unwrap();
-    fs::write(dir.path().join("test.mjs"), tests).unwrap();
+    let dir = common::project(&[(&format!("src/{name}.mts"), source), ("test.mjs", tests)]);
     let coverage = dir.path().join("coverage.json");
     let scan = |covered: bool| {
         let mut command = Command::new(env!("CARGO_BIN_EXE_ts-crap"));
@@ -110,9 +99,8 @@ fn exercise_example(name: &str, source: &str, tests: &str, expected: &[(&str, u3
     }
     let mut partial_scores = None;
     for partial in [true, false] {
-        let mut collector = Command::new("node");
+        let mut collector = common::node_script("coverage.mjs");
         collector
-            .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/coverage.mjs"))
             .arg("--root")
             .arg(dir.path())
             .arg("--output")

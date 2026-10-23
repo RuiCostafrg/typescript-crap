@@ -8,7 +8,7 @@
  * Every non-whitespace segment on a line must be covered to mark it covered.
  */
 import { lineHits, mergeLineHits } from './coverage-lines.mjs';
-import { createHash } from 'node:crypto';
+import { snapshot } from './coverage-snapshot.mjs';
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import os from 'node:os';
@@ -16,7 +16,6 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const extensions = new Set(['.ts', '.tsx', '.mts', '.cts']);
-const excluded = new Set(['node_modules', '.git', 'target', 'dist', 'build', 'coverage']);
 
 async function validateOutput(output) {
   // Overwrite protection is independent of source selection and existence.
@@ -73,33 +72,16 @@ function argumentsFor(argv) {
   return { root: options['--root'], output: path.resolve(options['--output']), command };
 }
 
-async function snapshot(root) {
-  const files = new Map();
-  async function walk(directory) {
-    const entries = await fs.readdir(directory, { withFileTypes: true });
-    entries.sort((a, b) => a.name.localeCompare(b.name));
-    for (const entry of entries) {
-      const absolute = path.join(directory, entry.name);
-      if (entry.isDirectory() && !excluded.has(entry.name)) await walk(absolute);
-      else if (entry.isFile() && extensions.has(path.extname(entry.name))) {
-        const bytes = await fs.readFile(absolute);
-        // Fatal decoding avoids hashing bytes different from the text being mapped.
-        // ignoreBOM preserves the BOM as one UTF-16 code unit in V8 offsets.
-        const source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
-        files.set(absolute, { source, sha256: createHash('sha256').update(bytes).digest('hex'), lines: {} });
-      }
-    }
-  }
-  await walk(root);
-  return files;
-}
-
-
 async function main() {
   const args = argumentsFor(process.argv.slice(2));
   const root = await fs.realpath(args.root);
   await validateOutput(args.output);
-  const files = await snapshot(root); // Never read source again after execution.
+  // Native V8 collection includes declarations and retains pre-execution text;
+  // the loader hook enforces load-time hashes. Never reread source after execution.
+  const files = await snapshot(root, {
+    supported: name => extensions.has(path.extname(name)),
+    sourceText: true, lineCount: false, compareNames: (a, b) => a.localeCompare(b),
+  });
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'ts-crap-v8-'));
   try {
     const manifest = path.join(temporary, 'sources.json');

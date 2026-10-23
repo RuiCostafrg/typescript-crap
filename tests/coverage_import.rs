@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod common;
 use serde_json::json;
-use std::{fs, path::Path, process::Command};
+use std::{fs, path::Path};
 fn collect(root: &Path, format: &str, fixture: &str, extra: &str) -> std::process::Output {
     fs::write(
         root.join("runner.cjs"),
@@ -10,8 +11,7 @@ fn collect(root: &Path, format: &str, fixture: &str, extra: &str) -> std::proces
         ),
     )
     .unwrap();
-    Command::new("node")
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/import-coverage.mjs"))
+    common::node_script("import-coverage.mjs")
         .args([
             "--root",
             root.to_str().unwrap(),
@@ -29,13 +29,7 @@ fn collect(root: &Path, format: &str, fixture: &str, extra: &str) -> std::proces
         .unwrap()
 }
 fn fixture() -> tempfile::TempDir {
-    let dir = tempfile::tempdir().unwrap();
-    fs::write(
-        dir.path().join("a.ts"),
-        "export function f(){\nreturn 1;\n}\n",
-    )
-    .unwrap();
-    dir
+    common::project(&[("a.ts", "export function f(){\nreturn 1;\n}\n")])
 }
 #[test]
 fn istanbul_and_lcov_native_fixtures_roundtrip_and_detect_staleness() {

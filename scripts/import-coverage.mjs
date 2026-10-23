@@ -1,33 +1,12 @@
 #!/usr/bin/env node
 // Collect Istanbul (Jest/Vitest/nyc) or LCOV with a pre-execution source snapshot.
-import { createHash } from 'node:crypto';
+import { digest, snapshot } from './coverage-snapshot.mjs';
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const supported = name => /\.(?:tsx?|mts|cts)$/.test(name) && !/\.d\.(?:ts|mts|cts)$/.test(name);
-const excluded = new Set(['.git', 'node_modules', 'target', 'dist', 'build', 'coverage']);
-
-async function snapshot(root) {
-  const files = new Map();
-  async function walk(directory) {
-    const entries = await fs.readdir(directory, { withFileTypes: true });
-    entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-    for (const entry of entries) {
-      const absolute = path.join(directory, entry.name);
-      if (entry.isDirectory() && !excluded.has(entry.name)) await walk(absolute);
-      else if (entry.isFile() && supported(entry.name)) {
-        const bytes = await fs.readFile(absolute);
-        const source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
-        files.set(absolute, { sha256: digest(bytes), lines: {}, lineCount: source.split('\n').length });
-      }
-    }
-  }
-  await walk(root);
-  return files;
-}
 function integer(value, minimum = 0) {
   if (!Number.isSafeInteger(value) || value < minimum) throw new Error(`Invalid coverage integer: ${value}`);
   return value;
@@ -160,7 +139,11 @@ async function main() {
   const root = await fs.realpath(options['--root']);
   const input = path.resolve(options['--input']), output = path.resolve(options['--output']);
   if (input === output || supported(input) || supported(output)) throw new Error('Coverage inputs/outputs must differ and cannot be TypeScript');
-  const files = await snapshot(root);
+  // Import selection excludes declarations; post-command hashes below enforce
+  // unchanged source. Fresh input/output destinations remain importer-only policy.
+  const files = await snapshot(root, {
+    supported, sourceText: false, lineCount: true, compareNames: (a, b) => a < b ? -1 : a > b ? 1 : 0,
+  });
   // Do not accept a pre-existing report as fresh evidence or overwrite its aliases.
   for (const destination of [input, output]) {
     try { await fs.lstat(destination); throw new Error(`Coverage destination already exists: ${destination}; use a fresh path`); }

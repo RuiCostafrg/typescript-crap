@@ -1,4 +1,5 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod common;
 use std::{fs, path::Path, process::Command};
 
 #[test]
@@ -8,6 +9,7 @@ fn pure_node_conversion_and_report_filter_tests_pass() {
             "--test",
             "tests/coverage-lines.test.mjs",
             "tests/coverage-publication.test.mjs",
+            "tests/coverage-snapshot.test.mjs",
             "tests/report-filter.test.mjs",
         ])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
@@ -23,7 +25,7 @@ fn pure_node_conversion_and_report_filter_tests_pass() {
 
 #[test]
 fn separate_node_processes_merge_complementary_branch_evidence() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = common::project(&[]);
     let root = dir.path();
     fs::write(root.join("choose.mts"), "export function choose(flag: boolean) {\n  if (flag) {\n    return 1;\n  }\n  return 0;\n}\n").unwrap();
     fs::write(root.join("test.mjs"), r#"
@@ -64,8 +66,7 @@ for (const flag of [true, false]) {
 }
 
 fn runner(root: &Path, output: &Path, entry: &str) -> std::process::Output {
-    Command::new("node")
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/coverage.mjs"))
+    common::node_script("coverage.mjs")
         .args([
             "--root",
             root.to_str().unwrap(),
@@ -119,7 +120,7 @@ fn snapshot_hash_survives_source_mutation_and_uncovered_same_line_branch_is_zero
 
 #[test]
 fn modified_then_restored_source_cannot_receive_original_source_coverage() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = common::project(&[]);
     let root = dir.path();
     fs::write(
         root.join("a.mts"),
@@ -147,7 +148,7 @@ try {
 
 #[test]
 fn default_initializer_is_owned_coverage_not_just_complexity() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = common::project(&[]);
     let root = dir.path();
     fs::write(
         root.join("defaults.mts"),
@@ -189,7 +190,7 @@ fn default_initializer_is_owned_coverage_not_just_complexity() {
 
 #[test]
 fn commonjs_typescript_crlf_and_bom_sources_are_collected() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = common::project(&[]);
     let root = dir.path();
     fs::write(
         root.join("c.cts"),
@@ -231,7 +232,7 @@ fn commonjs_typescript_crlf_and_bom_sources_are_collected() {
 
 #[test]
 fn failing_runner_propagates_exit_code_without_publishing_a_report() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = common::project(&[]);
     let root = dir.path();
     fs::write(root.join("test.mjs"), "process.exit(7);\n").unwrap();
     let report = root.join("coverage.json");
@@ -245,7 +246,7 @@ fn failing_runner_propagates_exit_code_without_publishing_a_report() {
 
 #[test]
 fn real_typescript_coverage_is_accepted_by_cli_and_rejects_stale_source() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = common::project(&[]);
     let root = dir.path();
     fs::create_dir(root.join("src")).unwrap();
     let source = "export function choose(value: boolean): number {\n  const emoji = '😀';\n  if (value) {\n    return emoji.length;\n  }\n  return 0;\n}\n";

@@ -59,16 +59,10 @@ impl Coverage {
             );
         }
         for (path, file) in &report.files {
-            if path.is_empty()
-                || path.contains('\\')
-                || path.contains(':')
-                || path
-                    .split('/')
-                    .any(|part| part.is_empty() || part == "." || part == "..")
-            {
+            if !crate::validation::normalized_relative_path(path) {
                 bail!("coverage path must be a normalized relative path: {path:?}");
             }
-            if file.sha256.len() != 64 || !file.sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+            if !crate::validation::sha256_digest(&file.sha256) {
                 bail!("invalid SHA256 for {path}");
             }
         }
@@ -101,29 +95,34 @@ impl SourceCoverage<'_> {
     pub fn present(&self) -> bool {
         self.file.is_some()
     }
-    pub fn complete(&self, lines: &BTreeSet<usize>) -> bool {
-        self.file
-            .is_some_and(|file| lines.iter().all(|line| file.lines.contains_key(line)))
-    }
-    pub fn fraction(&self, owned_lines: &BTreeSet<usize>) -> Result<f64> {
-        if owned_lines
-            .iter()
-            .any(|&line| line == 0 || line > self.line_count)
-        {
-            bail!("owned statement line is outside source");
+    pub fn evidence(&self, owned_lines: &BTreeSet<usize>) -> Result<Evidence> {
+        let mut complete = self.present();
+        let mut covered = 0;
+        for &line in owned_lines {
+            if line == 0 || line > self.line_count {
+                bail!("owned statement line is outside source");
+            }
+            match self.file.and_then(|file| file.lines.get(&line)) {
+                Some(&hits) => covered += usize::from(hits > 0),
+                None => complete = false,
+            }
         }
-        let Some(file) = self.file else {
-            return Ok(0.0);
-        };
-        if owned_lines.is_empty() {
-            return Ok(0.0);
-        }
-        let covered = owned_lines
-            .iter()
-            .filter(|line| file.lines.get(line).copied().unwrap_or(0) > 0)
-            .count();
-        Ok(covered as f64 / owned_lines.len() as f64)
+        Ok(Evidence {
+            complete,
+            fraction: if owned_lines.is_empty() {
+                0.0
+            } else {
+                covered as f64 / owned_lines.len() as f64
+            },
+        })
     }
+}
+
+/// Missing reports/files are incomplete even when no statements are owned.
+#[derive(Debug, Default)]
+pub(crate) struct Evidence {
+    pub complete: bool,
+    pub fraction: f64,
 }
 
 #[cfg(test)]

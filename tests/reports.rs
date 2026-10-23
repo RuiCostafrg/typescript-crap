@@ -257,3 +257,214 @@ fn output_errors_are_not_quality_failures_and_inputs_are_not_overwritten() {
         assert_eq!(fs::read_to_string(&source).unwrap(), text);
     }
 }
+
+#[test]
+fn every_presentation_combination_preserves_report_gate_totals_and_machine_order() {
+    use ts_crap::{Format, RenderOptions, ScanOptions, Sort, render, render_with_options, scan};
+    let directory = tempfile::tempdir().unwrap();
+    fs::write(directory.path().join("a.ts"), "function pass(){return 1;} function fail(a:boolean,b:boolean){if(a)return 1;if(b)return 2;return 3;} function another(a:boolean,b:boolean){if(a)return 4;if(b)return 5;return 6;}").unwrap();
+    let mut report = scan(&ScanOptions {
+        root: directory.path().into(),
+        require_coverage: true,
+        ..Default::default()
+    })
+    .unwrap();
+    // Machine encoders retain caller order, even when it differs from presentation order.
+    report.functions.reverse();
+    let unchanged = serde_json::to_string(&report).unwrap();
+    let machine: Vec<_> = [Format::Json, Format::Xml, Format::Sarif]
+        .into_iter()
+        .map(|format| render(&report, format).unwrap())
+        .collect();
+    for format in [Format::Text, Format::Html] {
+        for only_failing in [false, true] {
+            for sort in [Sort::Path, Sort::Crap] {
+                for top in [None, Some(1), Some(10)] {
+                    let rendered = render_with_options(
+                        &report,
+                        format,
+                        &RenderOptions {
+                            only_failing,
+                            sort,
+                            top,
+                        },
+                    )
+                    .unwrap();
+                    let eligible = if only_failing { 2 } else { 3 };
+                    let expected_rows = top.map_or(eligible, |limit| eligible.min(limit));
+                    let row_marker = if matches!(format, Format::Html) {
+                        "<tr data-failed="
+                    } else {
+                        "a.ts:"
+                    };
+                    assert_eq!(rendered.matches(row_marker).count(), expected_rows);
+                    assert!(rendered.contains("FAIL"));
+                    assert!(rendered.contains("3 functions"));
+                    assert!(rendered.contains("Missing coverage: 1 files, 3 functions"));
+                    assert_eq!(serde_json::to_string(&report).unwrap(), unchanged);
+                }
+            }
+        }
+    }
+    for (index, format) in [Format::Json, Format::Xml, Format::Sarif]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(render(&report, format).unwrap(), machine[index]);
+        match format {
+            Format::Json => {
+                let value: serde_json::Value = serde_json::from_str(&machine[index]).unwrap();
+                let names: Vec<_> = value["functions"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|function| function["name"].as_str().unwrap())
+                    .collect();
+                assert_eq!(names, ["another", "fail", "pass"]);
+            }
+            Format::Xml => {
+                let positions: Vec<_> = ["another", "fail", "pass"]
+                    .into_iter()
+                    .map(|name| machine[index].find(&format!("name=\"{name}\"")).unwrap())
+                    .collect();
+                assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
+            }
+            Format::Sarif => {
+                let value: serde_json::Value = serde_json::from_str(&machine[index]).unwrap();
+                let results = value["runs"][0]["results"].as_array().unwrap();
+                assert_eq!(results.len(), 3); // two function failures and completeness
+                assert!(
+                    results[0]["message"]["text"]
+                        .as_str()
+                        .unwrap()
+                        .starts_with("another has CRAP")
+                );
+                assert!(
+                    results[1]["message"]["text"]
+                        .as_str()
+                        .unwrap()
+                        .starts_with("fail has CRAP")
+                );
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[test]
+fn destination_alias_conflicts_are_rejected_before_any_publication() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    fs::write(root.join("a.ts"), "function a(){return 1;}").unwrap();
+    let report = root.join("report.json");
+    let baseline = root.join("baseline.json");
+    let run = |report: &std::path::Path, baseline: &std::path::Path| {
+        Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+            .arg("--root")
+            .arg(root)
+            .arg("--output")
+            .arg(report)
+            .arg("--write-baseline")
+            .arg(baseline)
+            .output()
+            .unwrap()
+    };
+    for existing in [false, true] {
+        if existing {
+            fs::write(&report, "old report").unwrap();
+        }
+        let result = run(&report, &root.join("./report.json"));
+        assert_eq!(result.status.code(), Some(2));
+        assert!(String::from_utf8_lossy(&result.stderr).contains("destinations must differ"));
+        if existing {
+            assert_eq!(fs::read_to_string(&report).unwrap(), "old report");
+        } else {
+            assert!(!report.exists());
+        }
+    }
+    fs::hard_link(&report, &baseline).unwrap();
+    let result = run(&report, &baseline);
+    assert_eq!(result.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("destinations must differ"));
+    assert_eq!(fs::read_to_string(&report).unwrap(), "old report");
+    assert_eq!(fs::read_to_string(&baseline).unwrap(), "old report");
+    assert_eq!(fs::read_dir(root).unwrap().count(), 3);
+}
+
+#[cfg(unix)]
+#[test]
+fn missing_destinations_through_directory_symlinks_conflict_before_publication() {
+    use std::os::unix::fs::symlink;
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    fs::write(root.join("a.ts"), "function a(){return 1;}").unwrap();
+    fs::create_dir(root.join("real")).unwrap();
+    symlink(root.join("real"), root.join("alias")).unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+        .arg("--root")
+        .arg(root)
+        .arg("--output")
+        .arg(root.join("real/report.json"))
+        .arg("--write-baseline")
+        .arg(root.join("alias/report.json"))
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&result.stderr).contains("destinations must differ"));
+    assert_eq!(fs::read_dir(root.join("real")).unwrap().count(), 0);
+}
+
+#[test]
+fn both_destinations_protect_all_input_aliases_and_staging_failure_publishes_neither() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    fs::write(root.join("a.ts"), "function a(){return 1;}").unwrap();
+    let coverage = root.join("coverage.json");
+    let config = root.join("ts-crap.json");
+    let baseline = root.join("input-baseline.json");
+    fs::write(&coverage, r#"{"version":1,"files":{}}"#).unwrap();
+    fs::write(&config, r#"{"version":1}"#).unwrap();
+    fs::write(&baseline, "protected baseline").unwrap();
+    let alias = root.join("alias.json");
+    for input in [&coverage, &config, &baseline] {
+        for destination in ["--output", "--write-baseline"] {
+            if input == &baseline && destination == "--write-baseline" {
+                continue;
+            } // clap conflict is separately enforced.
+            fs::hard_link(input, &alias).unwrap();
+            let original = fs::read(input).unwrap();
+            let mut command = Command::new(env!("CARGO_BIN_EXE_ts-crap"));
+            command
+                .arg("--root")
+                .arg(root)
+                .arg("--coverage")
+                .arg(&coverage);
+            if input == &baseline {
+                command.arg("--baseline").arg(&baseline);
+            }
+            command.arg(destination).arg(&alias);
+            let result = command.output().unwrap();
+            assert_eq!(result.status.code(), Some(2));
+            assert!(
+                String::from_utf8_lossy(&result.stderr).contains("cannot overwrite coverage input")
+            );
+            assert_eq!(fs::read(input).unwrap(), original);
+            assert_eq!(fs::read(&alias).unwrap(), original);
+            fs::remove_file(&alias).unwrap();
+        }
+    }
+    let old = root.join("old-baseline.json");
+    fs::write(&old, "unchanged").unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+        .arg("--root")
+        .arg(root)
+        .arg("--write-baseline")
+        .arg(&old)
+        .arg("--output")
+        .arg(root.join("missing/report.json"))
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(2));
+    assert_eq!(fs::read_to_string(&old).unwrap(), "unchanged");
+    assert_eq!(fs::read_dir(root).unwrap().count(), 5);
+}

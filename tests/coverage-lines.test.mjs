@@ -54,3 +54,41 @@ test('independent processes add evidence without mutating inputs', () => {
     assert.throws(() => mergeLineHits({}, invalid), /Invalid coverage/);
   }
 });
+
+// Independent per-code-unit oracle: no sweep events or active-set state.
+function referenceHits(source, ranges) {
+  const hits = {};
+  let line = 1;
+  for (let offset = 0; offset < source.length; offset++) {
+    if (source[offset] === '\n') { line++; continue; }
+    if (!source[offset].trim()) continue;
+    const candidates = ranges.filter(range => range.startOffset <= offset
+      && offset < Math.min(range.endOffset, source.length));
+    if (!candidates.length) continue;
+    const length = range => Math.min(range.endOffset, source.length) - range.startOffset;
+    const smallest = Math.min(...candidates.map(length));
+    const count = Math.min(...candidates.filter(range => length(range) === smallest).map(range => range.count));
+    hits[line] = Math.min(hits[line] ?? Infinity, count);
+  }
+  return hits;
+}
+
+test('generated overlapping V8 ranges agree with an independent UTF-16 oracle', () => {
+  let seed = 0x51c0ffee;
+  const next = maximum => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed % maximum;
+  };
+  for (const source of ['aa😀 b\r\ncc\n d', '\uFEFFx\n\nüé\tZ', 'abcdefghi']) {
+    for (let trial = 0; trial < 100; trial++) {
+      const ranges = [range(0, source.length + 5, 3)];
+      for (let item = 0; item < 12; item++) {
+        const first = next(source.length + 5), last = next(source.length + 5);
+        ranges.push(range(Math.min(first, last), Math.max(first, last), next(4)));
+      }
+      const expected = referenceHits(source, ranges);
+      assert.deepEqual(hits(source, ...ranges), expected, `trial ${trial}: ${JSON.stringify(ranges)}`);
+      assert.deepEqual(hits(source, ...ranges.toReversed()), expected);
+    }
+  }
+});

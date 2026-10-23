@@ -4,7 +4,15 @@ Reviewed on 2026-10-22 at `030cb7634ce73d0d55c5e3190e0db4672a769900`.
 
 Scope: the repository on `main` at the commit above, including the Rust library and CLI, Node coverage collectors, tests, benchmarks, and CI/security workflows. This is a repository improvement backlog, not a pull-request review. Findings are evaluated against the current code regardless of when they were introduced. References below use paths and line numbers at the reviewed commit. The original review contained no implementation changes.
 
-Implementation status: this follow-up implements item 1 (the sole P1 item; no P0 items were identified), with publication regression tests and documented filesystem guarantees. Items 2–8 remain proposals. Node coverage collection retains regular-file replacement semantics; the importer retains its separate fresh-destination policy.
+Implementation status (2026-10-23): item 1 shipped separately in PR #11. This
+follow-up implements items 2–4 and 6–8, and completes the measurement investigation
+in item 5. The conditional complex optimizations in item 5 remain deferred because
+the noisy measurements do not justify them. Node coverage collection retains
+regular-file replacement semantics; the importer retains its separate
+fresh-destination policy. The real-browser smoke test in item 6 remains conditional
+on the next report UI change; this refactor does not change the generated UI.
+See [performance evidence and reproduction](PERFORMANCE.md#remaining-review-measurements)
+and [behavioral test evidence](REVIEW_VALIDATION.md).
 
 The strongest next steps are to fix Node coverage publication safety, remove unnecessary rendering work, and consolidate repeated validation and test setup. Keep the current single Rust package. Its existing modules are small enough that a workspace split, generic framework, or wholesale rewrite would add maintenance cost.
 
@@ -29,6 +37,9 @@ This is a file-clobbering weakness when another process can plant the staging en
 
 ## 2. Avoid sorting rows for machine formats — P2 / S
 
+**Delivered:** only text/HTML call `presentation_rows`; machine formats retain caller order. The benchmark separates rendering from scanning and records process peak RSS.
+
+
 **Evidence:** `src/report.rs:35–50` allocates and sorts presentation rows before format dispatch. JSON, XML, and SARIF subsequently use `report.functions`, so this work is discarded.
 
 **Proposal:** a private `presentation_rows` helper called only by text and HTML. Preserve machine-format ordering and full gate semantics. Do not add top-N heap selection until a benchmark shows it is worthwhile; ordinary sorting is simpler for human reports.
@@ -37,6 +48,9 @@ This is a file-clobbering weakness when another process can plant the staging en
 
 ## 3. Plan and batch output validation — P2 / M
 
+**Delivered:** one CLI-owned `DestinationPlan` holds both outputs and protected inputs. Each validation phase uses one unfiltered source walk; all outputs are staged before publication, then all policies are refreshed before each atomic file replacement. The group is not a transaction. Missing-path directory aliases and existing hardlink aliases are rejected before publication.
+
+
 **Evidence:** `src/output.rs:34–52` walks the entire project for each existing destination, deliberately including ignored sources. `src/cli.rs:100–147` validates output against coverage, config, and baseline through several calls; `write_report` repeats validation before and after staging. A run with existing report and baseline paths can traverse dependency-heavy trees repeatedly.
 
 **Proposal:** introduce a small CLI-owned destination plan containing report/baseline destinations and all protected inputs. Check all relevant destination handles in one walk per validation phase, then retain final checks and atomic publication. Resolve conflicting output aliases before the first write where possible. Avoid a global cache whose contents could become stale.
@@ -44,6 +58,9 @@ This is a file-clobbering weakness when another process can plant the staging en
 **Acceptance:** preserve ignored/unselected TypeScript, symlink, hardlink, coverage, config, and baseline protection tests. Add alias/conflict cases proving rejection precedes publication. Benchmark existing destinations with a large ignored directory. Do not gain speed by dropping protected inputs or final checks. Cost is currently inferred, not measured.
 
 ## 4. Consolidate identical validation rules — P2 / S
+
+**Delivered:** private, specifically named serialized-path and SHA256 checks are shared by coverage/baselines; CLI threshold parsing delegates to the existing public validator. Source selection and overwrite policies remain distinct.
+
 
 **Evidence:** normalized relative paths and 64-character hexadecimal digests are checked separately in `src/coverage.rs:62–72` and `src/baseline.rs:47–54`. CLI threshold checks in `src/cli.rs:70–77` repeat `src/lib.rs:89–95`.
 
@@ -55,6 +72,9 @@ This is a file-clobbering weakness when another process can plant the staging en
 
 ## 5. Measure adversarial input scaling — P2 / M investigation; L only if optimization is justified
 
+**Investigation complete:** `benches/review.rs` and `scripts/bench-coverage-lines.mjs` measure three input sizes, with one warmup, five samples and peak RSS. Stage-separated rendering/validation and scan-plus-publication measurements accompany adversarial scan/conversion fixtures. No conditional optimizer was added.
+
+
 **Evidence:** `src/analysis.rs:63–80` revisits ancestors for each qualified function name, and `:207–210` re-counts the UTF-16 prefix for each function on a line. `scripts/coverage-lines.mjs:32–40` scans every active range at each boundary. The existing benchmark emphasizes multiline functions and many files, not these shapes.
 
 **Proposal:** add benchmark fixtures for many functions on one Unicode line, deeply nested functions, and densely overlapping V8 ranges. Measure scan, conversion, rendering, and output validation separately as well as end to end. Use multiple sizes, a warmup, repeat samples, and record toolchain/platform, wall time, and peak memory. Keep correctness assertions outside timed sections where feasible.
@@ -64,6 +84,9 @@ If profiles justify it, use a per-line UTF-16 index or monotonic offset cursor, 
 **Acceptance:** identical names, identities, byte/UTF-16 columns, owned lines, scores, and conservative coverage conversion on reference fixtures. Report scaling evidence rather than a promised speedup. No unstable wall-clock assertions in ordinary CI. Defer parallel scanning and persistent caches until CPU and memory profiles justify their complexity.
 
 ## 6. Strengthen module tests with behavioral invariants — P2 / M
+
+**Delivered:** isolated analysis invariants, exhaustive three-line coverage states, deterministic generated V8/reference-oracle cases, baseline ambiguity/reordering/conflict cases, every presentation-option combination, and publication alias/staging cases. Deliberately broken implementations demonstrate assertion failures; details are in `REVIEW_VALIDATION.md`. The browser condition remains deferred until a UI change; the current environment cannot launch its browser because host shared libraries are missing.
+
 
 Keep private unit tests in `#[cfg(test)] mod tests` alongside their module, including external `src/<module>/tests.rs` files where needed. Keep `tests/` for public-library and CLI behavior. This matches [Rust's documented test organization](https://doc.rust-lang.org/book/ch11-03-test-organization.html); exposing private APIs just to test them is unnecessary.
 
@@ -81,6 +104,9 @@ Use table-driven tests first. Add property testing or fuzzing only for the parse
 
 ## 7. Share test fixtures and collector plumbing carefully — P2 / M
 
+**Delivered:** integration fixture and Node-command builders live under `tests/common/`; shared snapshot/hash/UTF-8 decoding lives in `scripts/coverage-snapshot.mjs`. Explicit caller options preserve native/importer declaration selection, source retention and line-count differences. Each collector retains its own freshness and publication contracts.
+
+
 **Evidence:** integration suites repeatedly create temporary TypeScript projects and spawn Node/CLI processes (`tests/coverage_e2e.rs`, `tests/coverage_import.rs`, `tests/example.rs`). The two Node collectors also duplicate source discovery, hashing, command execution, and output handling, but differ in declaration selection, freshness checks, and output replacement policy.
 
 **Proposal:** extract small `tests/common/mod.rs` builders for temporary projects and command assertions. Keep scenario setup and assertions readable at call sites. Extract only identical Node snapshot/decoding primitives into a helper, with explicit options for intentional policy differences. Share safe publication only after item 1 defines its contracts; do not silently change importer behavior.
@@ -88,6 +114,9 @@ Use table-driven tests first. Add property testing or fuzzing only for the parse
 **Acceptance:** fewer repeated fixture/command helpers, unchanged failure diagnostics and source-freshness guarantees, and all existing integration tests pass. Preserve per-test temporary directories; no process-wide working-directory or environment mutation. Keep dependencies explicit so parallel tests remain isolated. Cargo compiles integration targets separately, so shared support belongs under a subdirectory, not a new top-level `tests/common.rs` target; see the [Cargo test reference](https://doc.rust-lang.org/cargo/commands/cargo-test.html).
 
 ## 8. Combine coverage lookups — P3 / S
+
+**Delivered:** `SourceCoverage::evidence` validates and counts owned lines once, returning completeness and fraction together. Missing files/lines and explicit zero evidence retain their separate semantics.
+
 
 **Evidence:** `src/lib.rs:179–186` calls `complete` and `fraction`; `src/coverage.rs:104–125` separately traverses owned lines for completeness, bounds, and covered counts.
 

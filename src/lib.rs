@@ -7,6 +7,7 @@ mod coverage;
 mod report;
 pub use report::terminal as escape_terminal;
 mod selection;
+mod validation;
 
 use anyhow::{Context, Result, bail};
 use clap::ValueEnum;
@@ -185,14 +186,13 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
         let missing_file = source_coverage.as_ref().is_none_or(|c| !c.present());
         files_missing_coverage += usize::from(missing_file);
         for method in methods {
-            let missing = source_coverage
+            let evidence = source_coverage
                 .as_ref()
-                .is_none_or(|c| !c.complete(&method.lines));
-            functions_missing_coverage += usize::from(missing);
-            let cov = match &source_coverage {
-                Some(c) => c.fraction(&method.lines)?,
-                None => 0.0,
-            };
+                .map(|coverage| coverage.evidence(&method.lines))
+                .transpose()?
+                .unwrap_or_default();
+            functions_missing_coverage += usize::from(!evidence.complete);
+            let cov = evidence.fraction;
             let cc = f64::from(method.complexity);
             let crap = cc * cc * (1.0 - cov).powi(3) + cc;
             functions.push(FunctionScore {

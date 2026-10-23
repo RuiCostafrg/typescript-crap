@@ -15,9 +15,9 @@ pub struct Method {
     pub lines: BTreeSet<usize>,
 }
 
-fn is_function(node: Node<'_>) -> bool {
+fn is_function(kind: &str) -> bool {
     matches!(
-        node.kind(),
+        kind,
         "function_declaration"
             | "generator_function_declaration"
             | "function_expression"
@@ -60,27 +60,41 @@ fn local_name(node: Node<'_>, source: &str) -> String {
     )
 }
 
-// Ancestor walks repeat under deep nesting; qualified-name output also grows
-// with depth. Scope caching awaits profiles that separate those costs and show
-// a practical benefit. See docs/PERFORMANCE.md, "Adversarial scaling and decision".
-fn qualified_name(node: Node<'_>, source: &str) -> String {
-    let mut names = vec![local_name(node, source)];
-    let mut scope = node.parent();
-    while let Some(parent) = scope {
-        if is_function(parent) {
-            names.push(local_name(parent, source));
-        } else if matches!(
-            parent.kind(),
-            "class_declaration" | "abstract_class_declaration" | "class"
-        ) && let Some(class_name) = parent.child_by_field_name("name")
-        {
-            names.push(text(class_name, source).into());
-            break;
+#[derive(Debug)]
+enum ScopeName<'a> {
+    Class(&'a str),
+    // Reuse the emitted name rather than keeping another full prefix per scope.
+    Function(usize),
+}
+
+#[derive(Debug)]
+struct Scope<'a> {
+    end: usize,
+    name: ScopeName<'a>,
+}
+
+/// Preorder function starts are monotonic. Count each prefix segment once,
+/// resetting at a new line; storage is constant rather than a per-byte index.
+#[derive(Debug, Default)]
+struct Utf16Column {
+    line_start: usize,
+    byte: usize,
+    units: usize,
+}
+
+impl Utf16Column {
+    fn at(&mut self, node: Node<'_>, source: &str) -> usize {
+        let start = node.start_byte();
+        let line_start = start - node.start_position().column;
+        if self.line_start != line_start {
+            self.line_start = line_start;
+            self.byte = line_start;
+            self.units = 0;
         }
-        scope = parent.parent();
+        self.units += source[self.byte..start].encode_utf16().count();
+        self.byte = start;
+        self.units + 1
     }
-    names.reverse();
-    names.join("::")
 }
 
 // TreeCursor owns its traversal stack on the heap. Returning false prunes a
@@ -106,7 +120,7 @@ fn walk(node: Node<'_>, mut visit: impl FnMut(Node<'_>) -> bool) {
 // scored separately, never charged to their enclosing function.
 fn metrics(node: Node<'_>, source: &str, complexity: &mut u32, lines: &mut BTreeSet<usize>) {
     walk(node, |node| {
-        if is_function(node) {
+        if is_function(node.kind()) {
             return false;
         }
         // Type-only branches such as conditional types do not affect runtime flow.
@@ -171,10 +185,41 @@ fn metrics(node: Node<'_>, source: &str, complexity: &mut u32, lines: &mut BTree
 }
 
 fn collect(node: Node<'_>, source: &str, out: &mut Vec<Method>) {
+    let mut scopes: Vec<Scope<'_>> = Vec::new();
+    let mut utf16 = Utf16Column::default();
     walk(node, |node| {
-        if is_function(node)
-            && let Some(body) = node.child_by_field_name("body")
+        let kind = node.kind();
+        let class_name = if matches!(
+            kind,
+            "class_declaration" | "abstract_class_declaration" | "class"
+        ) {
+            node.child_by_field_name("name")
+        } else {
+            None
+        };
+        if !is_function(kind) && class_name.is_none() {
+            return true;
+        }
+        // Only scope events need to expire entries; intervening AST nodes do not
+        // use the stack. Named classes reset qualification; anonymous ones don't.
+        while scopes
+            .last()
+            .is_some_and(|scope| scope.end <= node.start_byte())
         {
+            scopes.pop();
+        }
+        if let Some(class_name) = class_name {
+            scopes.push(Scope {
+                end: node.end_byte(),
+                name: ScopeName::Class(text(class_name, source)),
+            });
+        } else if let Some(body) = node.child_by_field_name("body") {
+            let local = local_name(node, source);
+            let name = match scopes.last().map(|scope| &scope.name) {
+                Some(ScopeName::Class(class)) => format!("{class}::{local}"),
+                Some(ScopeName::Function(index)) => format!("{}::{local}", out[*index].name),
+                None => local,
+            };
             let mut complexity = 1;
             let mut lines = BTreeSet::new();
             metrics(body, source, &mut complexity, &mut lines);
@@ -191,7 +236,7 @@ fn collect(node: Node<'_>, source: &str, out: &mut Vec<Method>) {
             // deeply nested functions; line shifts do not change identity.
             let mut hash = Sha256::new();
             walk(node, |token| {
-                if token.kind() == "comment" || (token != node && is_function(token)) {
+                if token.kind() == "comment" || (token != node && is_function(token.kind())) {
                     return false;
                 }
                 if token.child_count() == 0 {
@@ -204,20 +249,17 @@ fn collect(node: Node<'_>, source: &str, out: &mut Vec<Method>) {
             });
             out.push(Method {
                 identity: format!("{:x}", hash.finalize()),
-                name: qualified_name(node, source),
+                name,
                 line: node.start_position().row + 1,
                 column: node.start_position().column + 1,
-                // Many functions on one line repeatedly scan its prefix. A UTF-16
-                // index may help, but adds storage and Unicode-sensitive state;
-                // profile this cost before adding one (see docs/PERFORMANCE.md).
-                column_utf16: source
-                    [node.start_byte() - node.start_position().column..node.start_byte()]
-                    .encode_utf16()
-                    .count()
-                    + 1,
+                column_utf16: utf16.at(node, source),
                 end_line: node.end_position().row + 1,
                 complexity,
                 lines,
+            });
+            scopes.push(Scope {
+                end: node.end_byte(),
+                name: ScopeName::Function(out.len() - 1),
             });
         }
         true

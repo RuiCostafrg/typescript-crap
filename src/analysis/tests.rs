@@ -168,3 +168,92 @@ fn owned_identity_and_metrics_survive_trivia_and_nested_edits() {
         },
     );
 }
+
+#[test]
+fn cached_names_and_columns_match_ancestor_and_prefix_reference() {
+    isolated(
+        "analysis::tests::cached_names_and_columns_match_ancestor_and_prefix_reference",
+        || {
+            for (path, source) in [
+                (
+                    "scopes.ts",
+                    r#"
+function outer(a = () => 1) {
+  const before = () => 2;
+  class Named extends (class Base { base() { return 0; } }) {
+    method(x = () => 3) { function nested() { return 4; } return nested; }
+    ['computed']() { return () => 5; }
+    get value() { return 6; }
+    field = () => class Reset { final() { return 7; } };
+  }
+  const Anonymous = class { method() { return () => 8; } };
+  { const block = () => 9; }
+  return () => 10;
+}
+const Assigned = class Inner { method() { return 11; } };
+object.member = function () { return () => 12; };
+[1].map(() => () => 13);
+function sibling() { return 14; }
+function left(){}function right(){}
+abstract class Abstract { abstract missing(): void; concrete() { return () => 15; } }
+"#,
+                ),
+                (
+                    "unicode.ts",
+                    "\u{feff}/* 😀é */ const α = () => 1; /* 🦀 */ const β = () => () => 2;\r\n/* é😀 */ function γ() { return () => 3; }\nfunction δ() { return 4; }",
+                ),
+                (
+                    "view.tsx",
+                    "const mark = '😀'; const View = () => <div>{[1].map(() => <b/>)}{(() => <i/>)()}</div>;\nconst Next = () => <span/>;",
+                ),
+            ] {
+                let mut parser = tree_sitter::Parser::new();
+                let language = if path.ends_with(".tsx") {
+                    tree_sitter_typescript::LANGUAGE_TSX
+                } else {
+                    tree_sitter_typescript::LANGUAGE_TYPESCRIPT
+                };
+                parser.set_language(&language.into()).unwrap();
+                let tree = parser.parse(source, None).unwrap();
+                assert!(!tree.root_node().has_error(), "{path}");
+                let mut expected = Vec::new();
+                super::walk(tree.root_node(), |node| {
+                    if super::is_function(node.kind()) && node.child_by_field_name("body").is_some()
+                    {
+                        // Deliberately use the original ancestor/prefix approach as
+                        // a reference, independent of the production caches.
+                        let mut names = vec![super::local_name(node, source)];
+                        let mut ancestor = node.parent();
+                        while let Some(parent) = ancestor {
+                            if super::is_function(parent.kind()) {
+                                names.push(super::local_name(parent, source));
+                            } else if matches!(
+                                parent.kind(),
+                                "class_declaration" | "abstract_class_declaration" | "class"
+                            ) && let Some(name) = parent.child_by_field_name("name")
+                            {
+                                names.push(super::text(name, source).into());
+                                break;
+                            }
+                            ancestor = parent.parent();
+                        }
+                        names.reverse();
+                        let start = node.start_byte();
+                        let utf16 = source[start - node.start_position().column..start]
+                            .encode_utf16()
+                            .count()
+                            + 1;
+                        expected.push((names.join("::"), utf16, node.start_position().column + 1));
+                    }
+                    true
+                });
+                let methods = super::Analyzer::default().analyze(path, source).unwrap();
+                let actual: Vec<_> = methods
+                    .iter()
+                    .map(|method| (method.name.clone(), method.column_utf16, method.column))
+                    .collect();
+                assert_eq!(actual, expected, "{path}");
+            }
+        },
+    );
+}

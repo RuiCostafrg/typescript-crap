@@ -6,8 +6,11 @@ Scope: the repository on `main` at the commit above, including the Rust library 
 
 Implementation status (2026-10-23): item 1 shipped separately in PR #11. This
 follow-up implements items 2–4 and 6–8, and completes the measurement investigation
-in item 5. The conditional complex optimizations in item 5 remain deferred because
-the noisy measurements do not justify them. Node coverage collection retains
+in item 5. A subsequent performance follow-up implements the three lookup changes:
+a monotonic UTF-16 cursor, cached qualification through a scope stack, and a
+priority heap for active V8 ranges. See the follow-up measurements in
+`PERFORMANCE.md`; the earlier noisy investigation is retained as historical evidence.
+Node coverage collection retains
 regular-file replacement semantics; the importer retains its separate
 fresh-destination policy. The real-browser smoke test in item 6 remains conditional
 on the next report UI change; this refactor does not change the generated UI.
@@ -72,7 +75,7 @@ This is a file-clobbering weakness when another process can plant the staging en
 
 ## 5. Measure adversarial input scaling — P2 / M investigation; L only if optimization is justified
 
-**Investigation complete:** `benches/review.rs` and `scripts/bench-coverage-lines.mjs` measure three input sizes, with one warmup, five samples and peak RSS. Stage-separated rendering/validation and scan-plus-publication measurements accompany adversarial scan/conversion fixtures. No conditional optimizer was added.
+**Investigation and follow-up implementation complete:** `benches/review.rs` and `scripts/bench-coverage-lines.mjs` measure multiple input sizes, with one warmup, five samples and peak RSS. Stage-separated rendering/validation and scan-plus-publication measurements accompany adversarial scan/conversion fixtures. The follow-up replaces repeated UTF-16 prefix scans with a constant-storage cursor, ancestor re-walks with a scope stack referencing emitted names, and active-range scans with a lazy-expiration priority heap. Reference tests retain the original name/column algorithms and an independent coverage oracle.
 
 
 **Evidence:** `src/analysis.rs:63–80` revisits ancestors for each qualified function name, and `:207–210` re-counts the UTF-16 prefix for each function on a line. `scripts/coverage-lines.mjs:32–40` scans every active range at each boundary. The existing benchmark emphasizes multiline functions and many files, not these shapes.

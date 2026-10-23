@@ -1,10 +1,44 @@
+// Min-heap ordered by the existing coverage rule, not by interval boundaries.
+// Expired entries are discarded lazily when they reach the root. Each range is
+// inserted once and removed at most once: O(R log R) heap work, O(R) storage.
+function precedes(a, b) {
+  const difference = (a.end - a.start) - (b.end - b.start);
+  return difference < 0 || (difference === 0 && a.count < b.count);
+}
+
+function insert(heap, range) {
+  let index = heap.length;
+  heap.push(range);
+  while (index > 0) {
+    const parent = Math.floor((index - 1) / 2);
+    if (!precedes(range, heap[parent])) break;
+    heap[index] = heap[parent];
+    index = parent;
+  }
+  heap[index] = range;
+}
+
+function removeFirst(heap) {
+  const last = heap.pop();
+  if (!heap.length) return;
+  let index = 0;
+  while (index * 2 + 1 < heap.length) {
+    let child = index * 2 + 1;
+    if (child + 1 < heap.length && precedes(heap[child + 1], heap[child])) child++;
+    if (!precedes(heap[child], last)) break;
+    heap[index] = heap[child];
+    index = child;
+  }
+  heap[index] = last;
+}
+
 /** Pure V8 UTF-16 range conversion; no process or filesystem access. */
 export function lineHits(script, source) {
   // Sweep range boundaries. The smallest enclosing range determines each segment;
   // ties favor zero, so uncovered branches on an otherwise covered line stay zero.
   const events = new Map();
   function event(offset) {
-    if (!events.has(offset)) events.set(offset, { add: [], remove: [] });
+    if (!events.has(offset)) events.set(offset, []);
     return events.get(offset);
   }
   for (const fn of script.functions) {
@@ -19,28 +53,21 @@ export function lineHits(script, source) {
       const clippedEnd = Math.min(end, source.length);
       if (start >= clippedEnd) continue;
       const item = { start, end: clippedEnd, count };
-      event(start).add.push(item);
-      event(clippedEnd).remove.push(item);
+      event(start).push(item);
+      event(clippedEnd); // End boundaries still split segments, even with no additions.
     }
   }
   const starts = [0];
   for (let i = 0; i < source.length; i++) if (source[i] === '\n') starts.push(i + 1);
-  const active = new Set();
+  const active = [];
   const hits = {};
   const offsets = [...events.keys()].sort((a, b) => a - b);
   let line = 0;
   for (let i = 0; i < offsets.length - 1; i++) {
     const start = offsets[i];
-    for (const item of events.get(start).remove) active.delete(item);
-    for (const item of events.get(start).add) active.add(item);
-    let inner;
-    // Dense overlaps repeat this active-range scan. An ordered structure needs
-    // profiling evidence of a useful gain; preserve smallest-range and zero-hit
-    // tie rules if replacing it. See docs/PERFORMANCE.md's scaling investigation.
-    for (const item of active) {
-      if (!inner || item.end - item.start < inner.end - inner.start
-          || (item.end - item.start === inner.end - inner.start && item.count < inner.count)) inner = item;
-    }
+    for (const item of events.get(start)) insert(active, item);
+    while (active.length && active[0].end <= start) removeFirst(active);
+    const inner = active[0];
     if (!inner) continue;
     while (line + 1 < starts.length && starts[line + 1] <= start) line++;
     for (let cursor = start; cursor < offsets[i + 1];) {

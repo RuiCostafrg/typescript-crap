@@ -92,3 +92,22 @@ test('generated overlapping V8 ranges agree with an independent UTF-16 oracle', 
     }
   }
 });
+
+test('expired priorities, gaps and repeated ties retain conservative line hits', () => {
+  const source = Array.from({ length: 80 }, (_, index) => `line${index} 😀`).join('\n');
+  const ranges = [range(0, source.length + 20, 9)];
+  // Expired short ranges can hide stale longer entries inside the heap. Later
+  // segments must discard both before selecting a live covering range.
+  for (let start = 0; start < source.length; start += 7) {
+    for (const width of [1, 2, 6, 19, 50]) {
+      ranges.push(range(start, Math.min(start + width, source.length), start % 5));
+    }
+    ranges.push(range(start, Math.min(start + 19, source.length), 0));
+  }
+  const expected = referenceHits(source, ranges);
+  assert.deepEqual(hits(source, ...ranges), expected);
+  assert.deepEqual(hits(source, ...ranges.toReversed()), expected);
+  const disconnected = [range(0, 3, 1), range(0, 2, 0), range(20, 24, 4), range(21, 24, 2)];
+  assert.deepEqual(hits(source, ...disconnected), referenceHits(source, disconnected));
+  assert.deepEqual(hits('aaa\nbbbbbb', range(0, 3, 0), range(3, 10, 2)), { 1: 0, 2: 2 });
+});

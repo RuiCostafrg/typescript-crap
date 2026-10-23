@@ -44,14 +44,8 @@ impl Baseline {
         validate_threshold(baseline.threshold)?;
         for f in &baseline.functions {
             validate_threshold(f.crap)?;
-            if f.path.is_empty()
-                || f.path.contains('\\')
-                || f.path.contains(':')
-                || f.path
-                    .split('/')
-                    .any(|p| p.is_empty() || p == "." || p == "..")
-                || f.identity.len() != 64
-                || !f.identity.bytes().all(|b| b.is_ascii_hexdigit())
+            if !crate::validation::normalized_relative_path(&f.path)
+                || !crate::validation::sha256_digest(&f.identity)
             {
                 bail!("invalid baseline function identity or path");
             }
@@ -128,3 +122,6 @@ impl Baseline {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

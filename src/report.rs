@@ -1,4 +1,4 @@
-use crate::{Format, RenderOptions, Report, Sort};
+use crate::{Format, FunctionScore, RenderOptions, Report, Sort};
 use anyhow::Result;
 use std::fmt::Write;
 
@@ -32,7 +32,7 @@ fn escape(s: &str) -> String {
     escaped
 }
 
-pub fn render(report: &Report, format: Format, options: &RenderOptions) -> Result<String> {
+fn presentation_rows<'a>(report: &'a Report, options: &RenderOptions) -> Vec<&'a FunctionScore> {
     let mut rows: Vec<_> = report
         .functions
         .iter()
@@ -48,6 +48,10 @@ pub fn render(report: &Report, format: Format, options: &RenderOptions) -> Resul
     if let Some(top) = options.top {
         rows.truncate(top);
     }
+    rows
+}
+
+pub fn render(report: &Report, format: Format, options: &RenderOptions) -> Result<String> {
     Ok(match format {
         Format::Sarif => {
             let results: Vec<_> = report.functions.iter().filter(|f| f.failed).map(|f| {
@@ -80,6 +84,7 @@ pub fn render(report: &Report, format: Format, options: &RenderOptions) -> Resul
         }
         Format::Json => format!("{}\n", serde_json::to_string_pretty(report)?),
         Format::Text => {
+            let rows = presentation_rows(report, options);
             let mut s = format!(
                 "CRAP gate: {} (threshold {}, {} files, {} functions)\nPATH:LINE:COLUMN  FUNCTION  CC  COVERAGE  CRAP  STATUS\n",
                 if report.failed { "FAIL" } else { "PASS" },
@@ -148,6 +153,7 @@ pub fn render(report: &Report, format: Format, options: &RenderOptions) -> Resul
             s
         }
         Format::Html => {
+            let rows = presentation_rows(report, options);
             let mut s = format!(
                 "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>TypeScript CRAP report</title><style>body{{font:16px system-ui;margin:2rem;color:#17243a;background:#f4f7fb}}table{{border-collapse:collapse;background:white;width:100%}}th,td{{padding:.7rem;text-align:left;border-bottom:1px solid #ccd3dd}}.fail{{color:#b42318}}.pass{{color:#067647}}code{{overflow-wrap:anywhere}}caption{{text-align:left;margin-bottom:1rem}}@media(max-width:700px){{body{{margin:.5rem}}td,th{{padding:.3rem}}}}</style></head><body><h1>TypeScript CRAP report</h1><p class=\"{}\"><strong>{}</strong> · Threshold {} · {} files · {} functions</p><p>CRAP = CC² × (1 − coverage)³ + CC. Missing coverage is 0%. A score strictly above the threshold fails.</p><label>Filter path or function <input id=\"filter\" type=\"search\"></label> <label><input id=\"only-failing\" type=\"checkbox\"> Only failing</label><p id=\"visible-count\" aria-live=\"polite\"></p><table><caption>Function quality gate results</caption><thead><tr><th>Relative path : line : column</th><th>Function</th><th>CC</th><th>Coverage</th><th>CRAP</th><th>Gate</th></tr></thead><tbody>",
                 if report.failed { "fail" } else { "pass" },

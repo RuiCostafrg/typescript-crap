@@ -71,9 +71,7 @@ fn threshold(raw: &str) -> Result<f64, String> {
     let value: f64 = raw
         .parse()
         .map_err(|_| "threshold must be a finite nonnegative number")?;
-    if !value.is_finite() || value < 0.0 {
-        return Err("threshold must be a finite nonnegative number".into());
-    }
+    ts_crap::validate_threshold(value).map_err(|error| error.to_string())?;
     Ok(value)
 }
 
@@ -97,18 +95,24 @@ pub fn execute() -> Result<bool> {
         top: args.top,
     };
     presentation.validate(args.format)?;
-    if let Some(path) = &args.output {
-        crate::output::validate(&args.root, path, args.coverage.as_deref())?;
-    }
     let config_path = args
         .config
         .clone()
         .unwrap_or_else(|| args.root.join("ts-crap.json"));
+    let destinations = [&args.write_baseline, &args.output]
+        .into_iter()
+        .flatten()
+        .map(PathBuf::as_path)
+        .collect();
+    let mut protected: Vec<_> = [&args.coverage, &args.baseline]
+        .into_iter()
+        .flatten()
+        .map(PathBuf::as_path)
+        .collect();
     if config_path.exists() {
-        for destination in [&args.output, &args.write_baseline].into_iter().flatten() {
-            crate::output::validate(&args.root, destination, Some(&config_path))?;
-        }
+        protected.push(config_path.as_path());
     }
+    let publication = crate::output::DestinationPlan::new(&args.root, destinations, protected)?;
     let mut report = ts_crap::scan(&ScanOptions {
         root: args.root.clone(),
         paths: args.paths,
@@ -123,32 +127,19 @@ pub fn execute() -> Result<bool> {
         fail_on_empty: args.fail_on_empty,
     })?;
     if let Some(path) = &args.baseline {
-        if let Some(output) = &args.output {
-            crate::output::validate(&args.root, output, Some(path))?;
-        }
         let snapshot = ts_crap::baseline::Baseline::load(&std::fs::read(path)?)?;
         snapshot.apply(&mut report, &args.baseline_rename)?;
     }
-    if let Some(path) = &args.write_baseline {
-        if let Some(output) = &args.output
-            && output == path
-        {
-            anyhow::bail!("baseline and report destinations must differ");
-        }
-        crate::output::write_report(
-            &args.root,
-            path,
-            args.coverage.as_deref(),
-            &ts_crap::baseline::Baseline::capture(&report).render()?,
-        )?;
-    }
-    if let (Some(path), Some(output)) = (&args.write_baseline, &args.output) {
-        crate::output::validate(&args.root, output, Some(path))?;
+    let mut contents = Vec::new();
+    if args.write_baseline.is_some() {
+        contents.push(ts_crap::baseline::Baseline::capture(&report).render()?);
     }
     let rendered = ts_crap::render_with_options(&report, args.format, &presentation)?;
-    if let Some(path) = args.output {
-        crate::output::write_report(&args.root, &path, args.coverage.as_deref(), &rendered)?;
+    if args.output.is_some() {
+        contents.push(rendered);
+        publication.publish(&contents)?;
     } else {
+        publication.publish(&contents)?;
         use std::io::Write;
         std::io::stdout().lock().write_all(rendered.as_bytes())?;
     }

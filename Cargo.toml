@@ -23,6 +23,7 @@ include = [
     "/scripts/*.sh",
     "/examples/**",
     "/tests/*.rs",
+    "/tests/common/**",
     "/tests/*.test.mjs",
     "/tests/fixtures/**",
     "/tests/test_coverage_summary.py",
@@ -47,6 +48,10 @@ quick-xml = "0.42"
 
 [[bench]]
 name = "scan"
+harness = false
+
+[[bench]]
+name = "review"
 harness = false
 
 [lints.rust]

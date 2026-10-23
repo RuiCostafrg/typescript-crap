@@ -221,6 +221,17 @@ A Node loader hook also checks the source returned by the loader against that
 snapshot, rejecting changes made before import—even if restored later. This is an
 integrity check for trusted test commands, not a sandbox against hostile tests.
 
+After a successful child command and coverage conversion, the helper writes through
+an exclusively created file handle in a private random directory beside the output,
+closes the file, and atomically renames it over an existing regular report. Failed
+collection leaves the previous report intact. TypeScript output names (including
+declarations and case variants) are rejected even outside the source snapshot;
+output symlinks, including dangling ones, and directories are also rejected. The
+destination policy is checked again immediately before publication. This protects
+ordinary local-filesystem publication; it does not sandbox a hostile same-user test
+command or prevent concurrent replacement of parent directories. The Istanbul/LCOV
+importer's separate requirement for a fresh destination remains unchanged.
+
 ```sh
 mkdir -p reports
 node scripts/coverage.mjs \

@@ -10,8 +10,9 @@ cyclomatic complexity, coverage, CRAP score, and gate result.
 ## Install
 
 Prebuilt releases require **no Rust toolchain, C compiler, or Node.js** to scan
-TypeScript. Available for macOS (Apple Silicon / Intel), Linux with glibc 2.35+
-(ARM64 / x86-64), and Windows (x86-64).
+TypeScript. Available for macOS (Apple Silicon / Intel), Linux (ARM64 / x86-64),
+and Windows (x86-64). See the archive compatibility notes below for Linux runtime
+requirements.
 
 ### macOS and Linux
 
@@ -44,7 +45,10 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/RuiCostafrg/typesc
 Download the archive for your OS and CPU from [GitHub Releases](https://github.com/RuiCostafrg/typescript-crap/releases/latest),
 verify its SHA-256 using the accompanying `.sha256` file, extract it, and place
 `ts-crap` (or `ts-crap.exe`) in a directory on your PATH. Unix archives use
-`.tar.xz`; Windows archives use `.zip`. Linux binaries target glibc distributions;
+`.tar.xz`; Windows archives use `.zip`. New release builds and archive smoke tests use
+Ubuntu 26.04 (ARM64 and x86-64) and macOS 26 (Apple Silicon and Intel).
+Linux binaries from these builds require Ubuntu 26.04 or a compatible glibc
+runtime; the v0.3.0 and earlier Linux archives retain their glibc 2.35+ baseline. Linux binaries target glibc distributions;
 Alpine/musl, Android/Termux, and Windows ARM64 do not have native release builds.
 
 Git is needed for diff mode, and authenticated `gh` for GitHub PR discovery.

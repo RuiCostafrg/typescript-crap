@@ -156,6 +156,12 @@ from a nonempty passing scan. Thresholds must be finite and nonnegative.
   uncommitted selected-file edits or missing changed files are errors. Unrelated
   untracked files are not part of a diff scan. Use ordinary file/project mode to
   scan work-in-progress code.
+  Git selection ignores `diff.relative`; committed object IDs pin the source
+  comparison independently of `assume-unchanged` and `skip-worktree` flags.
+  CRLF/LF differences are allowed; all other bytes must match the HEAD blob,
+  including when clean/smudge filters would hide a difference from `git diff`.
+  Parsing and coverage hashes use the actual worktree bytes. Verification does
+  not run filters or modify index flags, and uses one Git batch process per scan.
 - PR mode obtains base/head OIDs with `gh pr view`, verifies local HEAD is the
   PR head, then uses the same merge-base selection. Both objects must be locally
   available: fetch/checkout the PR yourself. The tool never fetches, changes

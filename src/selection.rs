@@ -1,10 +1,19 @@
 use anyhow::{Context, Result, bail};
 use ignore::WalkBuilder;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     process::Command,
 };
+
+mod committed;
+pub(crate) use committed::BlobReader;
+
+#[derive(Debug)]
+pub(crate) struct Selection {
+    pub paths: Vec<PathBuf>,
+    pub committed: BTreeMap<PathBuf, String>,
+}
 
 fn supported(path: &Path) -> bool {
     let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
@@ -67,32 +76,45 @@ fn oid(root: &Path, reference: &str) -> Result<String> {
     Ok(String::from_utf8(data)?.trim().to_string())
 }
 
-fn diff_files(root: &Path, reference: &str) -> Result<BTreeSet<PathBuf>> {
+fn diff_files(root: &Path, reference: &str) -> Result<BTreeMap<PathBuf, String>> {
     let reference = oid(root, reference)?;
-    let data = git(root, &["merge-base", "HEAD", &reference])?;
+    let head = oid(root, "HEAD")?;
+    let data = git(root, &["merge-base", &head, &reference])?;
     let base = String::from_utf8(data)?.trim().to_string();
     let bytes = git(
         root,
         &[
             "diff",
-            "--name-only",
+            "--raw",
+            "--no-abbrev",
+            "--no-renames",
+            "--no-relative",
             "-z",
             "--diff-filter=ACMRT",
             &base,
-            "HEAD",
+            &head,
             "--",
         ],
     )?;
     let top = String::from_utf8(git(root, &["rev-parse", "--show-toplevel"])?)?;
     let top = PathBuf::from(top.trim_end()).canonicalize()?;
-    let mut result = BTreeSet::new();
-    for name in bytes.split(|b| *b == 0).filter(|s| !s.is_empty()) {
+    let mut result = BTreeMap::new();
+    // With rename detection disabled, raw -z records are metadata/path pairs.
+    // Object IDs are safe batch requests even when filenames contain newlines.
+    let mut records = bytes.split(|b| *b == 0).filter(|s| !s.is_empty());
+    while let Some(metadata) = records.next() {
+        let name = records.next().context("Git diff omitted source path")?;
+        let blob = std::str::from_utf8(metadata)?
+            .split_whitespace()
+            .nth(3)
+            .context("Git diff omitted HEAD object ID")?;
         let path = top.join(std::str::from_utf8(name).context("Git source path is not UTF-8")?);
         if path.starts_with(root) && supported(&path) && !excluded(&path, root) {
             // A committed file absent from the worktree is stale, not a passing empty scan.
             result.insert(
                 checked(&path, root)
                     .with_context(|| format!("changed source unavailable: {}", path.display()))?,
+                blob.to_owned(),
             );
         }
     }
@@ -137,7 +159,7 @@ pub fn files(
     requested: &[PathBuf],
     diff: Option<&str>,
     pr: Option<&str>,
-) -> Result<Vec<PathBuf>> {
+) -> Result<Selection> {
     // Git's tracked change set is authoritative in diff mode. A directory walk
     // would silently omit tracked ignored/hidden files and could hide gate failures.
     let changed = if let Some(pr) = pr {
@@ -171,7 +193,7 @@ pub fn files(
             if let Some(changed) = &changed {
                 all.extend(
                     changed
-                        .iter()
+                        .keys()
                         .filter(|file| file.starts_with(&path))
                         .cloned(),
                 );
@@ -195,20 +217,15 @@ pub fn files(
             bail!("not a regular source or directory: {}", path.display());
         }
     }
-    if let Some(changed) = changed {
-        all.retain(|path| changed.contains(path));
-        let dirty = git(root, &["diff", "--name-only", "-z", "HEAD", "--"])?;
-        let top = String::from_utf8(git(root, &["rev-parse", "--show-toplevel"])?)?;
-        let top = PathBuf::from(top.trim_end()).canonicalize()?;
-        for name in dirty.split(|b| *b == 0).filter(|s| !s.is_empty()) {
-            let path = top.join(std::str::from_utf8(name).context("Git path is not UTF-8")?);
-            if all.contains(&path) {
-                bail!(
-                    "uncommitted changes in selected source {}; commit or restore it before a diff/PR scan",
-                    path.display()
-                );
-            }
-        }
-    }
-    Ok(all.into_iter().collect())
+    let committed = if let Some(mut changed) = changed {
+        all.retain(|path| changed.contains_key(path));
+        changed.retain(|path, _| all.contains(path));
+        changed
+    } else {
+        BTreeMap::new()
+    };
+    Ok(Selection {
+        paths: all.into_iter().collect(),
+        committed,
+    })
 }

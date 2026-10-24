@@ -38,7 +38,7 @@ fn duplicate_coverage_is_an_input_error_and_preserves_the_previous_report() {
     let dir = project(&[("a.ts", source)]);
     let coverage = dir.path().join("coverage.json");
     let output = dir.path().join("report.json");
-    let hash = format!("{:x}", Sha256::digest(source.as_bytes()));
+    let hash = hex::encode(Sha256::digest(source.as_bytes()));
     let file = |lines: &str| format!(r#"{{"sha256":"{hash}","lines":{lines}}}"#);
     let run = || {
         at(

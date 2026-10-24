@@ -68,7 +68,7 @@ fn main() {
         entries.insert(
             name,
             serde_json::json!({
-            "sha256":format!("{:x}",Sha256::digest(source.as_bytes())),"lines":lines
+            "sha256":hex::encode(Sha256::digest(source.as_bytes())),"lines":lines
             }),
         );
     }

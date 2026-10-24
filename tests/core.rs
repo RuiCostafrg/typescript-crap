@@ -26,7 +26,7 @@ fn analyze(source: &str) -> Report {
 fn cover(root: &Path, lines: serde_json::Value) -> PathBuf {
     let bytes = fs::read(root.join("source.ts")).unwrap();
     let report = serde_json::json!({"version":1,"files":{"source.ts":{
-        "sha256":format!("{:x}",Sha256::digest(&bytes)),"lines":lines
+        "sha256":hex::encode(Sha256::digest(&bytes)),"lines":lines
     }}});
     let path = root.join("coverage.json");
     fs::write(&path, serde_json::to_vec(&report).unwrap()).unwrap();
@@ -198,10 +198,9 @@ fn coverage_schema_validation_and_missing_files_are_conservative() {
     let mut opts = options(root.path());
     let path = root.path().join("coverage.json");
     opts.coverage = Some(path.clone());
-    let hash = format!(
-        "{:x}",
-        Sha256::digest(fs::read(root.path().join("source.ts")).unwrap())
-    );
+    let hash = hex::encode(Sha256::digest(
+        fs::read(root.path().join("source.ts")).unwrap(),
+    ));
     for name in [
         "",
         "/a.ts",

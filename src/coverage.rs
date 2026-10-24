@@ -135,7 +135,7 @@ impl Coverage {
         let file = self.files.get(relative_path);
         let line_count = source.lines().count();
         if let Some(file) = file {
-            let actual_hash = format!("{:x}", Sha256::digest(source.as_bytes()));
+            let actual_hash = hex::encode(Sha256::digest(source.as_bytes()));
             if !actual_hash.eq_ignore_ascii_case(&file.sha256) {
                 bail!(
                     "coverage SHA256 mismatch for {relative_path}: source changed since coverage was collected"

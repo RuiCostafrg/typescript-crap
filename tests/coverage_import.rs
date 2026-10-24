@@ -102,6 +102,105 @@ fn importer_rejects_mutation_failing_commands_and_preexisting_reports() {
 }
 
 #[test]
+fn publication_failures_publish_no_partial_report_or_staging_files() {
+    for (failure, code) in [("write", "ENOSPC"), ("sync", "EIO"), ("link", "ENOTSUP")] {
+        let dir = fixture();
+        fs::write(
+            dir.path().join("runner.cjs"),
+            "const fs=require('node:fs'); fs.writeFileSync('raw', 'SF:a.ts\\nDA:2,1\\nend_of_record\\n');",
+        )
+        .unwrap();
+        let preload = dir.path().join("fault.cjs");
+        let fault = r#"
+            const fs = require('node:fs/promises');
+            const failure = '__FAILURE__';
+            const fail = () => { throw Object.assign(new Error('injected ' + failure + ' failure'), { code: '__CODE__' }); };
+            const original = fs.open;
+            fs.open = async (...args) => {
+              const handle = await original(...args);
+              const write = handle.writeFile.bind(handle);
+              if (failure === 'write') handle.writeFile = async () => { await write('{"version":1'); fail(); };
+              if (failure === 'sync') handle.sync = async () => fail();
+              return handle;
+            };
+            if (failure === 'link') fs.link = async () => fail();
+            require('node:module').syncBuiltinESMExports();
+        "#;
+        fs::write(
+            &preload,
+            fault
+                .replace("__FAILURE__", failure)
+                .replace("__CODE__", code),
+        )
+        .unwrap();
+        let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/import-coverage.mjs");
+        let output = dir.path().join("native.json");
+        let result = std::process::Command::new("node")
+            .arg("--require")
+            .arg(&preload)
+            .arg(script)
+            .args([
+                "--root",
+                dir.path().to_str().unwrap(),
+                "--format",
+                "lcov",
+                "--input",
+                dir.path().join("raw").to_str().unwrap(),
+                "--output",
+                output.to_str().unwrap(),
+                "--",
+                "node",
+                "runner.cjs",
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(2), "{failure}: {result:?}");
+        assert!(
+            String::from_utf8_lossy(&result.stderr)
+                .contains(&format!("injected {failure} failure"))
+        );
+        assert!(!output.exists());
+        assert_no_staging(dir.path());
+    }
+}
+
+fn assert_no_staging(root: &Path) {
+    let leftovers: Vec<_> = fs::read_dir(root)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with(".ts-crap-coverage-"))
+        .collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+}
+
+#[test]
+fn importer_never_replaces_a_destination_created_during_the_child_command() {
+    for directory in [false, true] {
+        let dir = fixture();
+        let extra = if directory {
+            "fs.mkdirSync('native.json'); fs.writeFileSync('native.json/sentinel', 'concurrent');"
+        } else {
+            "fs.writeFileSync('native.json', 'concurrent');"
+        };
+        let result = collect(
+            dir.path(),
+            "lcov",
+            "SF:a.ts\nDA:2,1\nend_of_record\n",
+            extra,
+        );
+        assert_eq!(result.status.code(), Some(2), "{result:?}");
+        let output = dir.path().join("native.json");
+        let sentinel = if directory {
+            output.join("sentinel")
+        } else {
+            output
+        };
+        assert_eq!(fs::read_to_string(sentinel).unwrap(), "concurrent");
+        assert_no_staging(dir.path());
+    }
+}
+
+#[test]
 fn lcov_external_and_inline_source_maps_preserve_zero_hit_segments() {
     for inline in [false, true] {
         let dir = fixture();

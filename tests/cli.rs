@@ -30,6 +30,70 @@ fn project(files: &[(&str, &str)]) -> TempDir {
     }
     dir
 }
+
+#[test]
+fn duplicate_coverage_is_an_input_error_and_preserves_the_previous_report() {
+    use sha2::{Digest, Sha256};
+    let source = "export function f(a:boolean,b:boolean){if(a)return 1;if(b)return 2;return 0;}\n";
+    let dir = project(&[("a.ts", source)]);
+    let coverage = dir.path().join("coverage.json");
+    let output = dir.path().join("report.json");
+    let hash = format!("{:x}", Sha256::digest(source.as_bytes()));
+    let file = |lines: &str| format!(r#"{{"sha256":"{hash}","lines":{lines}}}"#);
+    let run = || {
+        at(
+            dir.path(),
+            &[
+                "--coverage",
+                coverage.to_str().unwrap(),
+                "--require-coverage",
+                "--format",
+                "json",
+                "--output",
+                output.to_str().unwrap(),
+            ],
+        )
+    };
+    // Controls prove the same selected function passes with hits and fails
+    // without them; malformed duplicate evidence must use the input-error exit.
+    for (lines, exit) in [(r#"{"1":1}"#, 0), (r#"{"1":0}"#, 1)] {
+        let file = file(lines);
+        fs::write(
+            &coverage,
+            format!(r#"{{"version":1,"files":{{"a.ts":{file}}}}}"#),
+        )
+        .unwrap();
+        let result = run();
+        assert_eq!(result.status.code(), Some(exit), "{result:?}");
+        let report: serde_json::Value =
+            serde_json::from_slice(&fs::read(&output).unwrap()).unwrap();
+        assert_eq!(report["failed"], exit == 1);
+    }
+    let zero = file(r#"{"1":0}"#);
+    let hit = file(r#"{"1":1}"#);
+    for entries in [
+        format!(r#""a.ts":{}"#, file(r#"{"1":0,"1":1}"#)),
+        format!(r#""a.ts":{}"#, file(r#"{"1":1,"1":0}"#)),
+        format!(r#""a.ts":{zero},"a.ts":{hit}"#),
+        format!(r#""a.ts":{hit},"a.ts":{zero}"#),
+    ] {
+        fs::write(
+            &coverage,
+            format!(r#"{{"version":1,"files":{{{entries}}}}}"#),
+        )
+        .unwrap();
+        fs::write(&output, "previous complete report").unwrap();
+        let result = run();
+        assert_eq!(result.status.code(), Some(2), "{result:?}");
+        assert!(String::from_utf8_lossy(&result.stderr).contains("duplicate coverage"));
+        assert!(result.stdout.is_empty());
+        assert_eq!(
+            fs::read_to_string(&output).unwrap(),
+            "previous complete report"
+        );
+    }
+}
+
 fn fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/project")
 }

@@ -37,18 +37,19 @@ impl Baseline {
         }
     }
     pub fn load(bytes: &[u8]) -> Result<Self> {
-        let baseline: Self = serde_json::from_slice(bytes)?;
+        let mut baseline: Self = serde_json::from_slice(bytes)?;
         if baseline.version != 1 {
             bail!("unsupported baseline version");
         }
         validate_threshold(baseline.threshold)?;
-        for f in &baseline.functions {
+        for f in &mut baseline.functions {
             validate_threshold(f.crap)?;
             if !crate::validation::normalized_relative_path(&f.path)
                 || !crate::validation::sha256_digest(&f.identity)
             {
                 bail!("invalid baseline function identity or path");
             }
+            f.identity.make_ascii_lowercase();
         }
         Ok(baseline)
     }

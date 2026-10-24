@@ -11,8 +11,14 @@ a monotonic UTF-16 cursor, cached qualification through a scope stack, and a
 priority heap for active V8 ranges. See the follow-up measurements in
 `PERFORMANCE.md`; the earlier noisy investigation is retained as historical evidence.
 Node coverage collection retains
-regular-file replacement semantics; the importer retains its separate
-fresh-destination policy. The real-browser smoke test in item 6 remains conditional
+regular-file replacement semantics; the importer now stages a complete report and
+atomically links it into a fresh destination, preserving its no-overwrite policy.
+Coverage loading additionally rejects duplicate line and file entries instead of
+silently keeping the last one, so contradictory evidence can never promote a
+failing gate to a pass.
+Valid baseline SHA-256 identities are normalized to lowercase on load so unchanged
+functions still match across file moves when a baseline uses uppercase hex.
+The real-browser smoke test in item 6 remains conditional
 on the next report UI change; this refactor does not change the generated UI.
 See [performance evidence and reproduction](PERFORMANCE.md#remaining-review-measurements)
 and [behavioral test evidence](REVIEW_VALIDATION.md).

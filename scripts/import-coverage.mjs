@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Collect Istanbul (Jest/Vitest/nyc) or LCOV with a pre-execution source snapshot.
+import { publishReport } from './coverage-publish.mjs';
 import { digest, snapshot } from './coverage-snapshot.mjs';
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
@@ -165,6 +166,7 @@ async function main() {
     // Missing records remain missing evidence, never invented zero-hit coverage.
     if (Object.keys(file.lines).length) result.files[path.relative(root, absolute).split(path.sep).join('/')] = { sha256: file.sha256, lines: file.lines };
   }
-  await fs.writeFile(output, `${JSON.stringify(result, null, 2)}\n`, { flag: 'wx' });
+  // A fresh destination is required, so never replace an existing entry.
+  await publishReport(output, `${JSON.stringify(result, null, 2)}\n`);
 }
 main().catch(error => { console.error(JSON.stringify(error.message)); process.exitCode = 2; });

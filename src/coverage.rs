@@ -1,9 +1,14 @@
 //! Native source-bound statement coverage; validate once per file, not per method.
 use anyhow::{Context, Result, bail};
-use serde::{Deserialize, Deserializer, de::Error};
+use serde::{
+    Deserialize, Deserializer,
+    de::{Error, MapAccess, Visitor},
+};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, btree_map::Entry},
+    fmt,
+    marker::PhantomData,
     path::Path,
 };
 
@@ -11,6 +16,7 @@ use std::{
 #[serde(deny_unknown_fields)]
 pub struct Coverage {
     version: u32,
+    #[serde(deserialize_with = "deserialize_files")]
     files: BTreeMap<String, FileCoverage>,
 }
 
@@ -22,21 +28,77 @@ struct FileCoverage {
     lines: BTreeMap<usize, u64>,
 }
 
+// Serde map targets keep only the last entry of a JSON object, so contradictory
+// duplicates such as {"1":0,"1":1} must be rejected while entries are streamed.
+struct UniqueMap<K, V> {
+    label: &'static str,
+    key: fn(String) -> Result<K, String>,
+    value: PhantomData<fn() -> V>,
+}
+
+impl<'de, K: Ord + fmt::Display, V: Deserialize<'de>> Visitor<'de> for UniqueMap<K, V> {
+    type Value = BTreeMap<K, V>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "a coverage {} map with unique keys", self.label)
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, mut access: A) -> Result<Self::Value, A::Error> {
+        let mut map = BTreeMap::new();
+        while let Some(raw) = access.next_key::<String>()? {
+            let key = (self.key)(raw).map_err(A::Error::custom)?;
+            match map.entry(key) {
+                Entry::Vacant(entry) => {
+                    entry.insert(access.next_value()?);
+                }
+                Entry::Occupied(entry) => {
+                    // Stop before deserializing a duplicate's potentially large
+                    // value; never replace evidence already read from the map.
+                    return Err(A::Error::custom(format_args!(
+                        "duplicate coverage {}: {}",
+                        self.label,
+                        entry.key()
+                    )));
+                }
+            }
+        }
+        Ok(map)
+    }
+}
+
+fn deserialize_unique<'de, D, K, V>(
+    deserializer: D,
+    label: &'static str,
+    key: fn(String) -> Result<K, String>,
+) -> Result<BTreeMap<K, V>, D::Error>
+where
+    D: Deserializer<'de>,
+    K: Ord + fmt::Display,
+    V: Deserialize<'de>,
+{
+    deserializer.deserialize_map(UniqueMap {
+        label,
+        key,
+        value: PhantomData,
+    })
+}
+
 fn deserialize_lines<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<BTreeMap<usize, u64>, D::Error> {
-    let raw = BTreeMap::<String, u64>::deserialize(deserializer)?;
-    raw.into_iter()
-        .map(|(line, hits)| {
-            let number = line.parse::<usize>().map_err(D::Error::custom)?;
-            if number == 0 || number.to_string() != line {
-                return Err(D::Error::custom(
-                    "coverage line must be a positive canonical integer",
-                ));
-            }
-            Ok((number, hits))
-        })
-        .collect()
+    deserialize_unique(deserializer, "line", |line| {
+        let number = line.parse::<usize>().map_err(|error| error.to_string())?;
+        if number == 0 || number.to_string() != line {
+            return Err("coverage line must be a positive canonical integer".into());
+        }
+        Ok(number)
+    })
+}
+
+fn deserialize_files<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<String, FileCoverage>, D::Error> {
+    deserialize_unique(deserializer, "file path", Ok)
 }
 
 /// A view bound to one validated source snapshot. Cannot outlive the loaded report.

@@ -8,6 +8,7 @@
  * Every non-whitespace segment on a line must be covered to mark it covered.
  */
 import { lineHits, mergeLineHits } from './coverage-lines.mjs';
+import { publishReport } from './coverage-publish.mjs';
 import { snapshot } from './coverage-snapshot.mjs';
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
@@ -28,30 +29,6 @@ async function validateOutput(output) {
   });
   if (entry && !entry.isFile()) {
     throw new Error('Coverage output must be a regular file, not a symlink or directory');
-  }
-}
-
-async function publish(output, result) {
-  await fs.mkdir(path.dirname(output), { recursive: true });
-  // A random private sibling directory keeps staging on the destination filesystem.
-  const directory = await fs.mkdtemp(path.join(path.dirname(output), '.ts-crap-coverage-'));
-  const staging = path.join(directory, 'report.json');
-  let ownsFile = false;
-  try {
-    const handle = await fs.open(staging, 'wx', 0o600);
-    ownsFile = true;
-    try {
-      await handle.writeFile(JSON.stringify(result, null, 2) + '\n');
-    } finally {
-      await handle.close();
-    }
-    await validateOutput(output);
-    await fs.rename(staging, output);
-    ownsFile = false;
-  } finally {
-    if (ownsFile) await fs.rm(staging, { force: true });
-    // Never recursively remove entries we did not create.
-    await fs.rmdir(directory);
   }
 }
 
@@ -122,7 +99,11 @@ async function main() {
       path.relative(root, absolute).split(path.sep).join('/'), { sha256: file.sha256, lines: file.lines },
     ])) };
     // Publish only after a successful child and complete conversion.
-    await publish(args.output, result);
+    await publishReport(args.output, JSON.stringify(result, null, 2) + '\n', {
+      replace: true,
+      createParent: true,
+      validate: () => validateOutput(args.output),
+    });
   } finally {
     await fs.rm(temporary, { recursive: true, force: true });
   }

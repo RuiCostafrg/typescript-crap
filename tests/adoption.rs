@@ -275,10 +275,7 @@ fn completeness_distinguishes_zero_hits_from_absent_lines_and_files() {
     use sha2::{Digest, Sha256};
     let dir = project("function f(){\nreturn 1;\n}\n");
     let options = opts(&dir);
-    let hash = format!(
-        "{:x}",
-        Sha256::digest(fs::read(dir.path().join("a.ts")).unwrap())
-    );
+    let hash = hex::encode(Sha256::digest(fs::read(dir.path().join("a.ts")).unwrap()));
     let mut options = ScanOptions {
         coverage: Some(dir.path().join("cov.json")),
         require_coverage: true,

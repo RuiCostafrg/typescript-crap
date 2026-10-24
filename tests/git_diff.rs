@@ -275,7 +275,7 @@ fn clean_crlf_checkout_uses_worktree_bytes_for_coverage() {
     fs::write(
         &coverage,
         serde_json::json!({"version":1,"files":{"changed.ts":{
-            "sha256":format!("{:x}",Sha256::digest(&crlf)),"lines":{"2":1,"3":1}
+            "sha256":hex::encode(Sha256::digest(&crlf)),"lines":{"2":1,"3":1}
         }}})
         .to_string(),
     )

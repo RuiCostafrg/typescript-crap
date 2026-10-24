@@ -1,6 +1,6 @@
 [package]
 name = "ts-crap"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.90"
 description = "Source-aware CRAP scores for TypeScript functions"
@@ -14,6 +14,7 @@ include = [
     "/Cargo.toml",
     "/Cargo.lock",
     "/README.md",
+    "/CHANGELOG.md",
     "/CONTRIBUTING.md",
     "/SECURITY.md",
     "/LICENSE*",

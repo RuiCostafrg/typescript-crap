@@ -150,7 +150,8 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
         bail!("project root is not a directory");
     }
     let rules = config::Rules::load(&root, args.config.as_ref(), &args.include, &args.exclude)?;
-    let mut files = selection::files(&root, &args.paths, args.diff.as_deref(), args.pr.as_deref())?;
+    let selection = selection::files(&root, &args.paths, args.diff.as_deref(), args.pr.as_deref())?;
+    let mut files = selection.paths;
     files.retain(|path| {
         rules.matches(
             &path
@@ -169,6 +170,11 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
     let mut files_missing_coverage = 0;
     let mut functions_missing_coverage = 0;
     let mut analyzer = analysis::Analyzer::default();
+    let mut committed = if files.is_empty() || selection.committed.is_empty() {
+        None
+    } else {
+        Some(selection::BlobReader::new(&root)?)
+    };
     for path in &files {
         let relative = path
             .strip_prefix(&root)?
@@ -177,6 +183,13 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
             .replace('\\', "/");
         let source =
             std::fs::read_to_string(path).with_context(|| format!("cannot read {relative}"))?;
+        if let Some(reader) = &mut committed {
+            let oid = selection
+                .committed
+                .get(path)
+                .context("selected source has no committed identity")?;
+            reader.verify(oid, path, &source)?;
+        }
         let methods = analyzer.analyze(&relative, &source)?;
         // Validate coverage even for selected files with no implemented functions.
         let source_coverage = coverage
@@ -209,6 +222,9 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
                 failed: crap > args.threshold,
             });
         }
+    }
+    if let Some(reader) = &mut committed {
+        reader.finish()?;
     }
     functions
         .sort_unstable_by(|a, b| (&a.path, a.line, a.column).cmp(&(&b.path, b.line, b.column)));

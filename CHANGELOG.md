@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Keep Git diff selection repository-relative regardless of `diff.relative`.
+- Verify the actual analyzed source against pinned HEAD blobs in diff/PR scans,
+  rejecting edits hidden by index hints or clean filters. CRLF/LF checkout
+  differences remain supported; parsing and coverage hashes retain worktree bytes.
+
 ## 0.3.0 — 2026-10-24
 
 ### Added

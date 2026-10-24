@@ -152,6 +152,216 @@ fn diff_from_a_project_subdirectory_returns_paths_relative_to_that_root() {
     assert_eq!(value["functions"][0]["path"], "a.ts");
 }
 
+#[test]
+fn relative_diff_config_cannot_hide_nested_sources_or_dirty_edits() {
+    let dir = repo();
+    let root = dir.path();
+    fs::create_dir(root.join("pkg")).unwrap();
+    fs::write(
+        root.join("pkg/a.ts"),
+        "export function changed(a:boolean,b:boolean){if(a && b)return 1;return 0;}\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "nested violation"]);
+    let nested = root.join("pkg");
+    for relative in ["false", "true"] {
+        git(root, &["config", "diff.relative", relative]);
+        let out = run(&nested, &["--diff", "base"]);
+        assert_eq!(out.status.code(), Some(1), "{relative}: {out:?}");
+        let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(report["files_scanned"], 1);
+        assert_eq!(report["functions"][0]["path"], "a.ts");
+        assert_eq!(report["functions"][0]["crap"], 12.0);
+        fs::write(nested.join("a.ts"), "export const local = () => 0;\n").unwrap();
+        let out = run(&nested, &["--diff", "base"]);
+        assert_eq!(out.status.code(), Some(2), "{relative}: {out:?}");
+        assert!(String::from_utf8_lossy(&out.stderr).contains("uncommitted"));
+        assert!(out.stdout.is_empty());
+        git(root, &["restore", "pkg/a.ts"]);
+    }
+}
+
+#[test]
+fn index_hints_cannot_replace_committed_violations_with_local_passing_sources() {
+    for flag in ["--assume-unchanged", "--skip-worktree"] {
+        let dir = repo();
+        let root = dir.path();
+        fs::write(
+            root.join("changed.ts"),
+            "export function changed(a:boolean,b:boolean){if(a && b)return 1;return 0;}\n",
+        )
+        .unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-m", "committed violation"]);
+        git(root, &["update-index", flag, "changed.ts"]);
+        let before = git(root, &["ls-files", "-v"]);
+        assert_eq!(run(root, &["--diff", "base"]).status.code(), Some(1));
+        fs::write(root.join("changed.ts"), "export const passing = () => 0;\n").unwrap();
+        assert!(git(root, &["diff", "--name-only", "HEAD"]).is_empty());
+        // The ordinary project scan still supports work in progress.
+        assert_eq!(run(root, &[]).status.code(), Some(0));
+        fs::write(root.join("report.json"), "previous report").unwrap();
+        fs::write(root.join("baseline.json"), "previous baseline").unwrap();
+        let out = Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+            .current_dir(root)
+            .args([
+                "--root",
+                root.to_str().unwrap(),
+                "--diff",
+                "base",
+                "--output",
+                "report.json",
+                "--write-baseline",
+                "baseline.json",
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2), "{flag}: {out:?}");
+        assert!(String::from_utf8_lossy(&out.stderr).contains("uncommitted"));
+        assert!(out.stdout.is_empty());
+        assert_eq!(
+            fs::read_to_string(root.join("report.json")).unwrap(),
+            "previous report"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("baseline.json")).unwrap(),
+            "previous baseline"
+        );
+        assert_eq!(git(root, &["ls-files", "-v"]), before);
+    }
+}
+
+#[test]
+fn staged_and_unstaged_selected_edits_are_input_errors() {
+    for staged in [false, true] {
+        let dir = repo();
+        let root = dir.path();
+        fs::write(
+            root.join("changed.ts"),
+            "export const committed = () => 2;\n",
+        )
+        .unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-m", "selected source"]);
+        fs::write(root.join("changed.ts"), "export const local = () => 1;\n").unwrap();
+        if staged {
+            git(root, &["add", "changed.ts"]);
+        }
+        let out = run(root, &["--diff", "base"]);
+        assert_eq!(out.status.code(), Some(2), "{staged}: {out:?}");
+        assert!(String::from_utf8_lossy(&out.stderr).contains("uncommitted"));
+        assert!(out.stdout.is_empty());
+    }
+}
+
+#[test]
+fn clean_crlf_checkout_uses_worktree_bytes_for_coverage() {
+    use sha2::{Digest, Sha256};
+    let dir = repo();
+    let root = dir.path();
+    git(root, &["config", "core.autocrlf", "false"]);
+    fs::write(root.join(".gitattributes"), "*.ts text eol=crlf\n").unwrap();
+    let lf = "export function changed(a:boolean,b:boolean){\nif(a && b)return 1;\nreturn 0;\n}\n";
+    fs::write(root.join("changed.ts"), lf).unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "CRLF checkout attributes"]);
+    fs::remove_file(root.join("changed.ts")).unwrap();
+    git(root, &["checkout", "--", "changed.ts"]);
+    let crlf = fs::read(root.join("changed.ts")).unwrap();
+    assert_eq!(crlf, lf.replace('\n', "\r\n").as_bytes());
+    assert_eq!(run(root, &["--diff", "base"]).status.code(), Some(1));
+    let coverage = root.join("coverage.json");
+    fs::write(
+        &coverage,
+        serde_json::json!({"version":1,"files":{"changed.ts":{
+            "sha256":format!("{:x}",Sha256::digest(&crlf)),"lines":{"2":1,"3":1}
+        }}})
+        .to_string(),
+    )
+    .unwrap();
+    let out = run(
+        root,
+        &["--diff", "base", "--coverage", coverage.to_str().unwrap()],
+    );
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(report["functions"][0]["coverage"], 1.0);
+    assert_eq!(report["functions"][0]["crap"], 3.0);
+}
+
+#[test]
+fn batch_blob_verification_handles_multiple_files_and_ignores_filtered_out_sources() {
+    let dir = repo();
+    let root = dir.path();
+    for name in ["space ü.ts", "second.ts"] {
+        fs::write(root.join(name), "export const same = () => 1;\n").unwrap();
+    }
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "two source blobs"]);
+    let out = run(root, &["--diff", "base"]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&out.stdout).unwrap()["files_scanned"],
+        2
+    );
+    git(root, &["update-index", "--assume-unchanged", "second.ts"]);
+    fs::write(root.join("second.ts"), "export const local = () => 0;\n").unwrap();
+    let out = run(root, &["--diff", "base", "--include", "space*"]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let out = run(root, &["--diff", "base", "--include", "absent/**"]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&out.stdout).unwrap()["files_scanned"],
+        0
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn newline_source_names_do_not_become_batch_commands() {
+    let dir = repo();
+    let root = dir.path();
+    fs::write(
+        root.join("line\nHEAD.ts"),
+        "export const newline = () => 1;\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "newline name"]);
+    let out = run(root, &["--diff", "base"]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&out.stdout).unwrap()["functions"][0]["path"],
+        "line\nHEAD.ts"
+    );
+}
+
+#[test]
+fn clean_filters_cannot_hide_content_changes_from_head_verification() {
+    let dir = repo();
+    let root = dir.path();
+    let source = "export function changed(a:boolean,b:boolean){if(a && b)return 1;return 0;}\n";
+    fs::write(root.join(".gitattributes"), "changed.ts filter=constant\n").unwrap();
+    // Git's filter sees stdin but always emits the committed source. This fixture
+    // demonstrates why a clean git diff is insufficient even without index hints.
+    let script = format!(
+        "node -e 'process.stdin.resume();process.stdin.on(\"end\",()=>process.stdout.write({}));'",
+        serde_json::to_string(source).unwrap()
+    );
+    git(root, &["config", "filter.constant.clean", &script]);
+    fs::write(root.join("changed.ts"), source).unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "clean filter fixture"]);
+    assert_eq!(run(root, &["--diff", "base"]).status.code(), Some(1));
+    fs::write(root.join("changed.ts"), "export const local = () => 0;\n").unwrap();
+    assert!(git(root, &["diff", "--name-only", "HEAD"]).is_empty());
+    let out = run(root, &["--diff", "base"]);
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("uncommitted"));
+    assert!(out.stdout.is_empty());
+}
+
 #[cfg(unix)]
 #[test]
 fn github_pr_lookup_uses_gh_and_refuses_a_mismatching_checkout() {

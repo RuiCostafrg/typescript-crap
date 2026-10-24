@@ -66,7 +66,7 @@ fn duplicate_line_and_file_entries_are_rejected_in_both_orders() {
 #[test]
 fn owned_line_bounds_reject_zero_and_past_eof_with_or_without_hits() {
     let source = "one();\n";
-    let hash = format!("{:x}", Sha256::digest(source.as_bytes()));
+    let hash = hex::encode(Sha256::digest(source.as_bytes()));
     let coverage = load(serde_json::json!({"version":1,"files":{"a.ts":{
         "sha256":hash,"lines":{"1":1}
     }}}))
@@ -119,7 +119,7 @@ fn malformed_reports_are_rejected() {
 #[test]
 fn out_of_source_lines_are_rejected_even_without_owned_statements() {
     let source = "one();\n";
-    let hash = format!("{:x}", Sha256::digest(source.as_bytes()));
+    let hash = hex::encode(Sha256::digest(source.as_bytes()));
     let coverage = load(serde_json::json!({"version":1,"files":{"a.ts":{
         "sha256":hash,"lines":{"2":0}
     }}}))
@@ -130,7 +130,7 @@ fn out_of_source_lines_are_rejected_even_without_owned_statements() {
 #[test]
 fn fractions_count_owned_statement_starts_not_all_reported_lines() {
     let source = "first();\nsecond();\nthird();\n";
-    let hash = format!("{:x}", Sha256::digest(source.as_bytes()));
+    let hash = hex::encode(Sha256::digest(source.as_bytes()));
     let coverage = load(serde_json::json!({"version":1,"files":{"src/a.ts":{
         "sha256":hash,"lines":{"1":8,"2":0}
     }}}))
@@ -169,7 +169,7 @@ fn fractions_count_owned_statement_starts_not_all_reported_lines() {
 fn coverage_evidence_is_bounded_monotonic_and_distinguishes_absent_from_zero() {
     // Exhaustively vary absent/zero/covered evidence for three owned statements.
     let source = "a();\nb();\nc();\n";
-    let hash = format!("{:x}", Sha256::digest(source.as_bytes()));
+    let hash = hex::encode(Sha256::digest(source.as_bytes()));
     let owned = BTreeSet::from([1, 2, 3]);
     for mut state in 0..27 {
         let mut lines = serde_json::Map::new();

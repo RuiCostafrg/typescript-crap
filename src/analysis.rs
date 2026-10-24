@@ -248,7 +248,7 @@ fn collect(node: Node<'_>, source: &str, out: &mut Vec<Method>) {
                 true
             });
             out.push(Method {
-                identity: format!("{:x}", hash.finalize()),
+                identity: hex::encode(hash.finalize()),
                 name,
                 line: node.start_position().row + 1,
                 column: node.start_position().column + 1,

@@ -108,7 +108,7 @@ fn snapshot_hash_survives_source_mutation_and_uncovered_same_line_branch_is_zero
     let native: serde_json::Value = serde_json::from_slice(&fs::read(report).unwrap()).unwrap();
     assert_eq!(
         native["files"]["branch ü.mts"]["sha256"],
-        format!("{:x}", Sha256::digest(source.as_bytes()))
+        hex::encode(Sha256::digest(source.as_bytes()))
     );
     assert_eq!(native["files"]["branch ü.mts"]["lines"]["1"], 0);
     assert_eq!(

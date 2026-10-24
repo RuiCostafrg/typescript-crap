@@ -51,7 +51,7 @@ impl BlobReader {
             .read_to_end(&mut committed)?;
         let mut terminator = [0];
         self.output.read_exact(&mut terminator)?;
-        ensure!(terminator == [b'\n'], "invalid Git blob response");
+        ensure!(terminator == *b"\n", "invalid Git blob response");
         ensure!(
             without_crlf(&committed).eq(without_crlf(source.as_bytes())),
             "uncommitted changes in selected source {}; commit or restore it before a diff/PR scan (only CRLF/LF differences are allowed)",

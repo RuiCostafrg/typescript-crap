@@ -94,6 +94,26 @@ fn ambiguous_names_and_fingerprints_cannot_suppress_new_violations() {
 }
 
 #[test]
+fn load_normalizes_digest_case_so_renamed_functions_still_match() {
+    let before = report(&[("a.ts", "same", 0xab, 40.0)]);
+    let mut baseline = Baseline::capture(&before);
+    baseline.functions[0].identity.make_ascii_uppercase();
+    assert_ne!(baseline.functions[0].identity, before.functions[0].identity);
+    let baseline = Baseline::load(baseline.render().unwrap().as_bytes()).unwrap();
+    assert_eq!(baseline.functions[0].identity, before.functions[0].identity);
+    // No rename mapping: the changed path must match through its fingerprint.
+    let mut after = report(&[("b.ts", "same", 0xab, 20.0)]);
+    baseline.apply(&mut after, &[]).unwrap();
+    assert!(!after.functions[0].failed);
+    assert!(!after.failed);
+
+    let mut changed = report(&[("b.ts", "same", 0xcd, 20.0)]);
+    baseline.apply(&mut changed, &[]).unwrap();
+    assert!(changed.functions[0].failed);
+    assert!(changed.failed);
+}
+
+#[test]
 fn invalid_threshold_or_rename_plan_fails_without_mutating_report() {
     let before = report(&[("a.ts", "a", 1, 40.0)]);
     let mut baseline = Baseline::capture(&before);

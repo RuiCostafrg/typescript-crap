@@ -168,7 +168,7 @@ test('failed child preserves existing report and creates no staging directory', 
 
 // Patch built-in exports only in this collector subprocess. No production fault hooks
 // or inherited child preloads are needed. Record owned directories to check cleanup.
-for (const failure of ['open', 'write', 'close', 'rename']) {
+for (const failure of ['open', 'write', 'sync', 'close', 'rename']) {
   test(`${failure} failure preserves existing output, closes handles and cleans owned directories`, async t => {
     const root = await fixture(t);
     const output = path.join(root, 'coverage.json');
@@ -194,6 +194,7 @@ for (const failure of ['open', 'write', 'close', 'rename']) {
         handle.writeFile = async (...values) => {
           ${failure === 'write' ? "await originalWrite('partial report'); fail();" : 'return originalWrite(...values);'}
         };
+        ${failure === 'sync' ? 'handle.sync = async () => fail();' : ''}
         const originalClose = handle.close.bind(handle);
         handle.close = async () => {
           await originalClose();

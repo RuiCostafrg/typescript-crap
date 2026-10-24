@@ -9,6 +9,60 @@ fn load(value: serde_json::Value) -> anyhow::Result<Coverage> {
     Coverage::load(file.path())
 }
 
+fn load_raw(contents: &str) -> anyhow::Result<Coverage> {
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), contents).unwrap();
+    Coverage::load(file.path())
+}
+
+fn contains_message(error: &anyhow::Error, needle: &str) -> bool {
+    error
+        .chain()
+        .any(|cause| cause.to_string().contains(needle))
+}
+
+#[test]
+fn duplicate_line_and_file_entries_are_rejected_in_both_orders() {
+    let hash = "0".repeat(64);
+    let file = |lines: &str| format!(r#"{{"sha256":"{hash}","lines":{lines}}}"#);
+    for lines in [
+        r#"{"1":0,"1":1}"#,
+        r#"{"1":1,"1":0}"#,
+        r#"{"1":0,"1":0}"#,
+        r#"{"1":0,"\u0031":1}"#,
+        // The duplicate key is rejected before attempting to decode its value.
+        r#"{"1":1,"1":null}"#,
+    ] {
+        let file = file(lines);
+        let contents = format!(r#"{{"version":1,"files":{{"a.ts":{file}}}}}"#);
+        let error = load_raw(&contents).unwrap_err();
+        assert!(
+            contains_message(&error, "duplicate coverage line: 1"),
+            "{contents}: {error:#}"
+        );
+    }
+    let zero = file(r#"{"1":0}"#);
+    let hit = file(r#"{"1":1}"#);
+    for entries in [
+        format!(r#""a.ts":{zero},"a.ts":{hit}"#),
+        format!(r#""a.ts":{hit},"a.ts":{zero}"#),
+        format!(r#""a.ts":{hit},"a\u002ets":{hit}"#),
+        format!(r#""a.ts":{zero},"a.ts":null"#),
+    ] {
+        let contents = format!(r#"{{"version":1,"files":{{{entries}}}}}"#);
+        let error = load_raw(&contents).unwrap_err();
+        assert!(
+            contains_message(&error, "duplicate coverage file path: a.ts"),
+            "{contents}: {error:#}"
+        );
+    }
+    let empty = file("{}");
+    let valid = format!(r#"{{"version":1,"files":{{"a.ts":{empty},"b.ts":{hit}}}}}"#);
+    let loaded = load_raw(&valid).unwrap();
+    assert_eq!(loaded.files.len(), 2);
+    assert_eq!(loaded.files["b.ts"].lines[&1], 1);
+}
+
 #[test]
 fn owned_line_bounds_reject_zero_and_past_eof_with_or_without_hits() {
     let source = "one();\n";
@@ -40,13 +94,18 @@ fn malformed_reports_are_rejected() {
     for value in [
         serde_json::json!({"version":2,"files":{}}),
         serde_json::json!({"version":1,"files":{},"unexpected":true}),
+        serde_json::json!({"version":1,"files":[]}),
+        serde_json::json!({"version":1,"files":null}),
         serde_json::json!({"version":1,"files":{"a.ts":{"sha256":"not a hash","lines":{}}}}),
         serde_json::json!({"version":1,"files":{"a.ts":{"sha256":hash,"lines":{"0":1}}}}),
         serde_json::json!({"version":1,"files":{"a.ts":{"sha256":hash,"lines":{"01":1}}}}),
+        serde_json::json!({"version":1,"files":{"a.ts":{"sha256":hash,"lines":{"+1":1}}}}),
         serde_json::json!({"version":1,"files":{"a.ts":{"sha256":hash,"lines":{"-1":1}}}}),
         serde_json::json!({"version":1,"files":{"a.ts":{"sha256":hash,"lines":{"1":-1}}}}),
         serde_json::json!({"version":1,"files":{"a.ts":{"sha256":hash,"lines":{"1":1.5}}}}),
         serde_json::json!({"version":1,"files":{"a.ts":{"sha256":hash,"lines":{"1":true}}}}),
+        serde_json::json!({"version":1,"files":{"a.ts":{"sha256":hash,"lines":[]}}}),
+        serde_json::json!({"version":1,"files":{"a.ts":{"sha256":hash,"lines":null}}}),
         serde_json::json!({"version":1,"files":{"a.ts":{"sha256":hash,"lines":{},"extra":0}}}),
         serde_json::json!({"version":1,"files":{"../a.ts":{"sha256":hash,"lines":{}}}}),
     ] {

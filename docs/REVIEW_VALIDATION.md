@@ -126,3 +126,37 @@ Inspect the browser console for errors. Repeat with CLI `--top 1` and
 `--only-failing` presentation options; the report's full gate must not change.
 Stop the server and remove the disposable fixture afterwards. Attach the actual
 browser result when making a UI change; this recipe alone is not evidence it ran.
+
+## Coverage and baseline follow-up review (2026-10-24)
+
+Reviewed the pending baseline-normalization, duplicate-coverage-key, and importer
+publication changes against `29660a8`, including an independent read-only review.
+The review fixed a regression test whose numeric-only digest never changed when
+uppercased, and replaced a buffered map decoder with one shared streaming visitor.
+The visitor inserts directly into the final `BTreeMap` and rejects duplicate keys
+before decoding their values, without allocating a second collection of entries.
+
+Regression checks cover alphabetic uppercase hashes matching unchanged functions
+across file moves while changed fingerprints remain failures; duplicate file/line
+keys in both orders and equivalent JSON escapes; and a CLI input-error exit that
+preserves an existing report instead of publishing an ambiguous gate result.
+Invalid map types and noncanonical line keys remain errors.
+
+The shared Node publisher stages, syncs, and closes the complete report before
+publication. Native collection uses replacement by rename; import uses an exclusive
+hard link, preserving a file or directory created at the destination during the
+child command. Injected partial-write, sync, and unsupported-link failures verify
+that no partial destination or owned staging directory remains. The native suite
+also checks open, close, rename, alias, and final-validation failures. This provides
+atomic visibility on supported local filesystems, not a power-loss durability or
+hostile parent-directory substitution guarantee. Unsupported hard links fail
+without a direct-write fallback.
+
+On Rust 1.96.0 and Node 26.3.1 (Linux/aarch64), all 94 Rust debug tests passed,
+including the Node suites and real subprocess integrations. Formatting, strict
+all-target Clippy, rustdoc with warnings denied, all 12 Python tests, syntax checks
+for the publisher and both callers, and package listing checks passed. The package
+includes the new helper and regression tests without generated/private artifacts.
+The supported-platform/MSRV matrix, release tests, 95% production line-coverage
+floor, 90% mutation floor, audit, and workflow checks remain required hosted CI
+validation; none of their thresholds or exclusions changed.

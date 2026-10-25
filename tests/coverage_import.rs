@@ -233,3 +233,29 @@ fn lcov_external_and_inline_source_maps_preserve_zero_hit_segments() {
         assert_eq!(native["files"]["a.ts"]["lines"]["2"], 0);
     }
 }
+
+#[test]
+fn duplicate_istanbul_evidence_is_rejected_before_publication() {
+    let good = r#"{"a.ts":{"path":"a.ts","statementMap":{"0":{"start":{"line":2,"column":0}}},"s":{"0":1}}}"#;
+    for raw in [
+        good.replace(r#""s":{"0":1}"#, r#""s":{"0":0,"0":1}"#),
+        good.replace(r#""s":{"0":1}"#, r#""s":{"0":1,"\u0030":0}"#),
+        good.replace(r#""path":"a.ts""#, r#""path":"ignored.ts","path":"a.ts""#),
+        good.replace(
+            r#""statementMap":{"0":{"start":{"line":2,"column":0}}}"#,
+            r#""statementMap":{"0":{},"0":{"start":{"line":2,"column":0}}}"#,
+        ),
+        format!(
+            "{{{},{} }}",
+            &good[1..good.len() - 1],
+            &good[1..good.len() - 1]
+        ),
+    ] {
+        let dir = fixture();
+        let out = collect(dir.path(), "istanbul", &raw, "");
+        assert_eq!(out.status.code(), Some(2));
+        assert!(String::from_utf8_lossy(&out.stderr).contains("Duplicate JSON key"));
+        assert!(!dir.path().join("native.json").exists());
+        assert_no_staging(dir.path());
+    }
+}

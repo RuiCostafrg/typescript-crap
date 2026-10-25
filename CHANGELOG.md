@@ -2,8 +2,33 @@
 
 ## Unreleased
 
+## 0.4.0 — 2026-10-25
+
+### Added
+
+- Writer-based `render_to`, `render_to_with_options`, and baseline `render_to`
+  APIs, retaining the existing string-returning interfaces.
+
+### Improved
+
+- Stream CLI file reports and baselines through buffered sibling temporary files;
+  stage every output before publication and retain final destination revalidation.
+- Serialize SARIF with borrowed typed records and one finding at a time.
+- Build release binaries on Ubuntu 26.04 and macOS 26; Linux releases require
+  a compatible Ubuntu 26.04 glibc runtime.
+
 ### Fixed
 
+- Reject source paths that schema v1 cannot represent, including literal Unix
+  backslashes and colons, in the scanner and both Node collectors.
+- Treat renamed inferred function names as new baseline identities while retaining
+  unchanged file moves and anonymous callbacks shifted by trivia.
+- Recompute absolute failures on each baseline comparison so library callers can
+  safely compare the same report against different baselines.
+- Encode XML attributes separately from HTML, replacing forbidden XML characters
+  and preserving tabs, newlines and carriage returns through character references.
+- Reject duplicate decoded Istanbul/source-map JSON keys before evidence can be
+  overwritten, including escaped-equivalent keys.
 - Keep Git diff selection repository-relative regardless of `diff.relative`.
 - Verify the actual analyzed source against pinned HEAD blobs in diff/PR scans,
   rejecting edits hidden by index hints or clean filters. CRLF/LF checkout

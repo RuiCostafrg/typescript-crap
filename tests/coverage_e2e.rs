@@ -11,6 +11,7 @@ fn pure_node_conversion_and_report_filter_tests_pass() {
             "tests/coverage-publication.test.mjs",
             "tests/coverage-snapshot.test.mjs",
             "tests/report-filter.test.mjs",
+            "tests/strict-json.test.mjs",
         ])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()

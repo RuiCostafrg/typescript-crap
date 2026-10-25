@@ -489,3 +489,160 @@ fn report_is_staged_on_the_destination_filesystem() {
     assert_eq!(json["functions"][0]["name"], "f");
     assert_eq!(fs::read_dir(destination.path()).unwrap().count(), 1);
 }
+
+#[cfg(unix)]
+#[test]
+fn unrepresentable_source_paths_cannot_borrow_coverage_or_selection_identity() {
+    let dir = project(BAD);
+    fs::create_dir(dir.path().join("src")).unwrap();
+    fs::write(dir.path().join("src/a.ts"), BAD).unwrap();
+    for name in ["src\\a.ts", "a:b.ts"] {
+        fs::write(dir.path().join(name), BAD).unwrap();
+        for include in [vec![], vec!["src/**".into()]] {
+            let mut options = opts(&dir);
+            options.include = include;
+            let error = scan(&options).unwrap_err().to_string();
+            assert!(error.contains("cannot be represented"), "{error}");
+        }
+        fs::remove_file(dir.path().join(name)).unwrap();
+    }
+    fs::write(dir.path().join("src/日本語.ts"), BAD).unwrap();
+    assert_eq!(scan(&opts(&dir)).unwrap().files_scanned, 3);
+}
+
+#[test]
+fn inferred_renames_are_new_but_unchanged_moves_and_anonymous_shifts_match() {
+    let body = "(a:boolean,b:boolean)=>{if(a && b)return 1;return 0;}";
+    for template in [
+        "const OLD = BODY;",
+        "let OLD; OLD = BODY;",
+        "const obj = {OLD: BODY};",
+        "class C { OLD = BODY; }",
+    ] {
+        let old = template.replace("OLD", "oldName").replace("BODY", body);
+        let dir = project(&old);
+        let options = opts(&dir);
+        let baseline = Baseline::capture(&scan(&options).unwrap());
+        fs::rename(dir.path().join("a.ts"), dir.path().join("moved.ts")).unwrap();
+        let mut moved = scan(&options).unwrap();
+        baseline.apply(&mut moved, &[]).unwrap();
+        assert!(!moved.failed, "{template}");
+        fs::write(
+            dir.path().join("moved.ts"),
+            old.replace("oldName", "newName"),
+        )
+        .unwrap();
+        let mut renamed = scan(&options).unwrap();
+        baseline.apply(&mut renamed, &[]).unwrap();
+        assert!(renamed.failed, "{template}");
+    }
+    let source = format!("consume({body});");
+    let dir = project(&source);
+    let baseline = Baseline::capture(&scan(&opts(&dir)).unwrap());
+    fs::remove_file(dir.path().join("a.ts")).unwrap();
+    fs::write(
+        dir.path().join("moved.ts"),
+        format!("\n// trivia\n{source}"),
+    )
+    .unwrap();
+    let mut shifted = scan(&opts(&dir)).unwrap();
+    baseline.apply(&mut shifted, &[]).unwrap();
+    assert!(!shifted.failed);
+}
+
+#[test]
+fn streaming_formats_match_wrappers_and_propagate_writer_errors() {
+    use std::io::{self, Write};
+    struct FailAfter(usize);
+    impl Write for FailAfter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if self.0 == 0 {
+                return Err(io::Error::other("injected writer failure"));
+            }
+            let count = self.0.min(bytes.len());
+            self.0 -= count;
+            Ok(count)
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let dir = project(BAD);
+    let mut report = scan(&opts(&dir)).unwrap();
+    report.completeness_failed = true;
+    report.functions[0].name = "name<&\"'\t\n\r😀\u{fffe}\u{ffff}\u{1}".into();
+    for format in [
+        Format::Text,
+        Format::Html,
+        Format::Json,
+        Format::Xml,
+        Format::Sarif,
+    ] {
+        let reference = render(&report, format).unwrap();
+        let mut bytes = Vec::new();
+        ts_crap::render_to(&report, format, &mut bytes).unwrap();
+        assert_eq!(bytes, reference.as_bytes());
+        for limit in [0, reference.len() / 2, reference.len() - 1] {
+            assert!(ts_crap::render_to(&report, format, FailAfter(limit)).is_err());
+        }
+    }
+    let xml = render(&report, Format::Xml).unwrap();
+    // Parse XML bytes so the declaration controls decoding on every platform.
+    // Force ASCII text I/O to catch accidental dependence on Python's locale.
+    let mut child = Command::new("python3").args(["-c", "import sys,xml.etree.ElementTree as E; r=E.fromstring(sys.stdin.buffer.read()); assert r[0].attrib['name']==\"name<&\\\"'\\t\\n\\r😀\\ufffd\\ufffd\\ufffd\""])
+        .env("PYTHONIOENCODING", "ascii")
+        .stdin(std::process::Stdio::piped()).spawn().unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(xml.as_bytes())
+        .unwrap();
+    assert!(child.wait().unwrap().success());
+    let snapshot = Baseline::capture(&report);
+    assert!(snapshot.render_to(FailAfter(1)).is_err());
+}
+
+#[test]
+fn sarif_stream_preserves_order_fingerprints_locations_and_completeness() {
+    let dir = project(BAD);
+    let mut report = scan(&opts(&dir)).unwrap();
+    let mut second = scan(&opts(&dir)).unwrap().functions.remove(0);
+    second.name = "second".into();
+    second.path = "z #/é.ts".into();
+    second.column_utf16 = 7;
+    second.line = 4;
+    second.end_line = 9;
+    report.functions.insert(0, second);
+    report.completeness_failed = true;
+    let sarif: serde_json::Value =
+        serde_json::from_str(&render(&report, Format::Sarif).unwrap()).unwrap();
+    let results = &sarif["runs"][0]["results"];
+    assert_eq!(results.as_array().unwrap().len(), 3);
+    for (index, function) in report.functions.iter().enumerate() {
+        assert_eq!(results[index]["ruleId"], "TSCRAP001");
+        assert_eq!(
+            results[index]["partialFingerprints"]["function/v1"],
+            function.identity
+        );
+        assert_eq!(
+            results[index]["message"]["text"],
+            format!(
+                "{} has CRAP {:.3} (threshold {})",
+                function.name, function.crap, report.threshold
+            )
+        );
+        assert_eq!(
+            results[index]["locations"][0]["physicalLocation"]["region"],
+            serde_json::json!({"startLine":function.line,"startColumn":function.column_utf16,"endLine":function.end_line})
+        );
+    }
+    assert_eq!(
+        results[0]["locations"][0]["physicalLocation"]["artifactLocation"],
+        serde_json::json!({"uri":"z%20%23/%C3%A9.ts","uriBaseId":"%SRCROOT%"})
+    );
+    assert_eq!(
+        results[2],
+        serde_json::json!({"ruleId":"TSCRAP002","level":"error","message":{"text":format!("Incomplete selection: {} files and {} functions missing coverage; 2 functions selected", report.files_missing_coverage, report.functions_missing_coverage)}})
+    );
+}

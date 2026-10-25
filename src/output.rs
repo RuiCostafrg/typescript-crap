@@ -136,20 +136,28 @@ impl<'a> DestinationPlan<'a> {
         Ok(())
     }
 
-    pub(crate) fn publish(&self, rendered: &[String]) -> Result<()> {
+    pub(crate) fn publish_with(
+        &self,
+        count: usize,
+        mut render: impl FnMut(usize, &mut dyn Write) -> Result<()>,
+    ) -> Result<()> {
         ensure!(
-            rendered.len() == self.destinations.len(),
+            count == self.destinations.len(),
             "missing rendered destination"
         );
         let mut staged = Vec::new();
-        for (&path, rendered) in self.destinations.iter().zip(rendered) {
-            let stage = || -> Result<_> {
+        for (index, &path) in self.destinations.iter().enumerate() {
+            let mut stage = || -> Result<_> {
                 let parent = path
                     .parent()
                     .filter(|p| !p.as_os_str().is_empty())
                     .unwrap_or(Path::new("."));
                 let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
-                temporary.write_all(rendered.as_bytes())?;
+                {
+                    let mut writer = std::io::BufWriter::new(temporary.as_file_mut());
+                    render(index, &mut writer)?;
+                    writer.flush()?;
+                }
                 temporary.as_file().sync_all()?;
                 Ok(temporary)
             };

@@ -130,16 +130,31 @@ pub fn execute() -> Result<bool> {
         let snapshot = ts_crap::baseline::Baseline::load(&std::fs::read(path)?)?;
         snapshot.apply(&mut report, &args.baseline_rename)?;
     }
-    let mut contents = Vec::new();
-    if args.write_baseline.is_some() {
-        contents.push(ts_crap::baseline::Baseline::capture(&report).render()?);
-    }
-    let rendered = ts_crap::render_with_options(&report, args.format, &presentation)?;
-    if args.output.is_some() {
-        contents.push(rendered);
-        publication.publish(&contents)?;
+    let baseline = args
+        .write_baseline
+        .is_some()
+        .then(|| ts_crap::baseline::Baseline::capture(&report));
+    // Buffer stdout before publishing any baseline, preserving all-or-error rendering.
+    let stdout_report = if args.output.is_none() {
+        Some(ts_crap::render_with_options(
+            &report,
+            args.format,
+            &presentation,
+        )?)
     } else {
-        publication.publish(&contents)?;
+        None
+    };
+    let count = usize::from(baseline.is_some()) + usize::from(args.output.is_some());
+    publication.publish_with(count, |index, writer| {
+        if index == 0
+            && let Some(baseline) = &baseline
+        {
+            baseline.render_to(writer)
+        } else {
+            ts_crap::render_to_with_options(&report, args.format, &presentation, writer)
+        }
+    })?;
+    if let Some(rendered) = stdout_report {
         use std::io::Write;
         std::io::stdout().lock().write_all(rendered.as_bytes())?;
     }

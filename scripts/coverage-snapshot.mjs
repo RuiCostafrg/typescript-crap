@@ -21,6 +21,10 @@ export async function snapshot(root, { supported, sourceText, lineCount, compare
       const absolute = path.join(directory, entry.name);
       if (entry.isDirectory() && !excluded.has(entry.name)) await walk(absolute);
       else if (entry.isFile() && supported(entry.name)) {
+        const relative = path.relative(root, absolute).split(path.sep).join('/');
+        if (relative.includes('\\') || relative.includes(':')) {
+          throw new Error(`Source path cannot be represented in schema v1: ${JSON.stringify(relative)}`);
+        }
         const bytes = await fs.readFile(absolute);
         const source = decodeSource(bytes);
         files.set(absolute, {

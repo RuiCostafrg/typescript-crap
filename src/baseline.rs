@@ -54,8 +54,17 @@ impl Baseline {
         Ok(baseline)
     }
     pub fn render(&self) -> Result<String> {
-        Ok(format!("{}\n", serde_json::to_string_pretty(self)?))
+        let mut bytes = Vec::new();
+        self.render_to(&mut bytes)?;
+        Ok(String::from_utf8(bytes)?)
     }
+    /// Stream a snapshot; use a staged writer when partial output is unacceptable.
+    pub fn render_to(&self, mut writer: impl std::io::Write) -> Result<()> {
+        serde_json::to_writer_pretty(&mut writer, self)?;
+        writer.write_all(b"\n")?;
+        Ok(())
+    }
+    /// Compare absolute scores anew; earlier comparisons do not compose.
     pub fn apply(&self, report: &mut Report, renames: &[String]) -> Result<()> {
         if self.threshold != report.threshold {
             bail!("baseline threshold differs from scan threshold");
@@ -97,21 +106,24 @@ impl Baseline {
         let mut used = BTreeSet::new();
         let mut failures = Vec::with_capacity(report.functions.len());
         for f in &report.functions {
-            let mut failed = f.failed;
+            let absolute_failed = f.crap > report.threshold;
+            let mut failed = absolute_failed;
             let by_name = named
                 .get(&(f.path.as_str(), f.name.as_str()))
                 .filter(|entries| {
                     entries.len() == 1 && current_names[&(f.path.as_str(), f.name.as_str())] == 1
                 });
             let candidates = by_name.or_else(|| {
-                fingerprints
-                    .get(f.identity.as_str())
-                    .filter(|entries| entries.len() == 1 && current_ids[f.identity.as_str()] == 1)
+                fingerprints.get(f.identity.as_str()).filter(|entries| {
+                    entries.len() == 1
+                        && current_ids[f.identity.as_str()] == 1
+                        && stable_name(&self.functions[entries[0]].name) == stable_name(&f.name)
+                })
             });
             if let Some(entries) = candidates {
                 let index = entries[0];
                 if used.insert(index) {
-                    failed = f.failed && f.crap > self.functions[index].crap;
+                    failed = absolute_failed && f.crap > self.functions[index].crap;
                 }
             }
             failures.push(failed);
@@ -126,3 +138,29 @@ impl Baseline {
 
 #[cfg(test)]
 mod tests;
+
+// Anonymous locations are presentation labels, including inside qualified scopes.
+// Keep named scope components so renaming a containing function stays conservative.
+fn stable_name(name: &str) -> String {
+    // Quoted/computed/assignment names can contain text resembling our labels.
+    // Preserve them verbatim rather than normalize source spelling as metadata.
+    if name.contains(['\"', '\'', '`', '[', ']']) {
+        return name.to_owned();
+    }
+    name.split("::")
+        .map(|part| {
+            let anonymous = part
+                .strip_prefix("<anonymous@")
+                .and_then(|label| label.strip_suffix('>'))
+                .and_then(|position| position.split_once(':'))
+                .is_some_and(|(line, column)| {
+                    !line.is_empty()
+                        && !column.is_empty()
+                        && line.bytes().all(|b| b.is_ascii_digit())
+                        && column.bytes().all(|b| b.is_ascii_digit())
+                });
+            if anonymous { "<anonymous>" } else { part }
+        })
+        .collect::<Vec<_>>()
+        .join("::")
+}

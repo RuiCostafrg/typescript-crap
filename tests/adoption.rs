@@ -587,8 +587,10 @@ fn streaming_formats_match_wrappers_and_propagate_writer_errors() {
         }
     }
     let xml = render(&report, Format::Xml).unwrap();
-    // A standards-compliant parser also verifies attribute normalization.
-    let mut child = Command::new("python3").args(["-c", "import sys,xml.etree.ElementTree as E; r=E.fromstring(sys.stdin.read()); assert r[0].attrib['name']==\"name<&\\\"'\\t\\n\\r😀\\ufffd\\ufffd\\ufffd\""])
+    // Parse XML bytes so the declaration controls decoding on every platform.
+    // Force ASCII text I/O to catch accidental dependence on Python's locale.
+    let mut child = Command::new("python3").args(["-c", "import sys,xml.etree.ElementTree as E; r=E.fromstring(sys.stdin.buffer.read()); assert r[0].attrib['name']==\"name<&\\\"'\\t\\n\\r😀\\ufffd\\ufffd\\ufffd\""])
+        .env("PYTHONIOENCODING", "ascii")
         .stdin(std::process::Stdio::piped()).spawn().unwrap();
     child
         .stdin

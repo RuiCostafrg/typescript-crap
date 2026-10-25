@@ -19,6 +19,7 @@ include = [
     "/SECURITY.md",
     "/LICENSE*",
     "/assets/icon.svg",
+    "/docs/COVERAGE_HELPERS.md",
     "/scripts/*.py",
     "/scripts/*.mjs",
     "/scripts/*.sh",
@@ -27,7 +28,7 @@ include = [
     "/tests/common/**",
     "/tests/*.test.mjs",
     "/tests/fixtures/**",
-    "/tests/test_coverage_summary.py",
+    "/tests/test_*.py",
     "/benches/*.rs",
 ]
 

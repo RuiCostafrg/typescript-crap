@@ -52,8 +52,11 @@ runtime; the v0.3.0 and earlier Linux archives retain their glibc 2.35+ baseline
 Alpine/musl, Android/Termux, and Windows ARM64 do not have native release builds.
 
 Git is needed for diff mode, and authenticated `gh` for GitHub PR discovery.
-The optional coverage collector lives in this repository under `scripts/` and
-requires Node 24+; the prebuilt CLI itself does not.
+Starting with the next release after v0.4.0, the optional coverage collectors are
+also available as `ts-crap-coverage-helpers.zip` in GitHub Releases, with a SHA-256
+checksum. Download the bundle from the same release as your CLI, verify and extract
+it, and keep its directory intact. The helpers require Node 24+; the prebuilt CLI
+itself does not. See the [standalone helper installation and usage guide](docs/COVERAGE_HELPERS.md).
 
 ## Build from source
 
@@ -223,6 +226,13 @@ multiple statements/functions on one line share line evidence, so prefer normal
 multiline formatting. It is not branch or function-invocation coverage.
 
 ## Real coverage from TypeScript tests
+
+Installed users can run `node "/tools/ts-crap-coverage-helpers/coverage.mjs"`
+or `node "/tools/ts-crap-coverage-helpers/import-coverage.mjs"` with the same options
+shown below; replace `/tools/ts-crap-coverage-helpers` with the extracted bundle
+directory. The examples using `scripts/` are for a source checkout. Always use
+helpers from the exact same release as the scanner; `version.json` in the bundle
+records compatibility metadata. No npm dependencies are needed by the helpers.
 
 The optional Node helper runs your actual tests with V8 coverage and emits the
 source-hashed JSON consumed by the Rust binary. It snapshots source **before**

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Standalone `ts-crap-coverage-helpers.zip` release asset with SHA-256 checksum,
+  all native V8 and Istanbul/LCOV collector modules, matching-version metadata,
+  and installation instructions. Requires Node 24+ and no repository checkout.
+- Installed-bundle smoke tests on Linux, macOS, and Windows, including actual
+  native collection, Istanbul/LCOV conversion, and source-integrity rejection.
+
 ## 0.4.0 — 2026-10-25
 
 ### Added

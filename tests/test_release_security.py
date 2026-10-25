@@ -62,8 +62,9 @@ class ReleaseSecurityTests(unittest.TestCase):
             self.assertEqual(list((root / 'bin').iterdir()), [executable])
 
     def fixture(self, source):
-        for target in release.TARGETS:
-            name = f"ts-crap-{target}.{'zip' if 'windows' in target else 'tar.xz'}"
+        names = [f"ts-crap-{target}.{'zip' if 'windows' in target else 'tar.xz'}"
+                 for target in release.TARGETS] + ['ts-crap-coverage-helpers.zip']
+        for name in names:
             (source / name).write_bytes(b'archive fixture')
             digest = hashlib.sha256(b'archive fixture').hexdigest()
             (source / (name + '.sha256')).write_text(f'{digest} *{name}\n')
@@ -71,11 +72,14 @@ class ReleaseSecurityTests(unittest.TestCase):
             (source / name).write_text('fixture')
 
     def test_corrupted_archive_and_misbound_checksum_cannot_publish(self):
-        for attack in ['corruption', 'filename']:
-            with self.subTest(attack=attack), tempfile.TemporaryDirectory() as temporary:
+        for attack, name in [(attack, name)
+                             for attack in ['corruption', 'filename']
+                             for name in ['ts-crap-aarch64-apple-darwin.tar.xz',
+                                          'ts-crap-coverage-helpers.zip']]:
+            with self.subTest(attack=attack, name=name), tempfile.TemporaryDirectory() as temporary:
                 source = Path(temporary)
                 self.fixture(source)
-                archive = source / 'ts-crap-aarch64-apple-darwin.tar.xz'
+                archive = source / name
                 if attack == 'corruption':
                     archive.write_bytes(b'tampered')
                 else:
@@ -102,7 +106,7 @@ class ReleaseSecurityTests(unittest.TestCase):
             (source / 'unrelated-private-file').write_text('must stay local')
             output = source / 'out'
             release.prepare(source, output)
-            self.assertEqual(len(list(output.iterdir())), 15)
+            self.assertEqual(len(list(output.iterdir())), 17)
             self.assertFalse((output / 'unrelated-private-file').exists())
 
 if __name__ == '__main__':

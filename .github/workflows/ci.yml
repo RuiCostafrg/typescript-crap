@@ -43,6 +43,10 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: Debug tests
         run: cargo test --locked
+      - name: Installed coverage helper bundle (Node 24)
+        run: |
+          python3 scripts/bundle-coverage.py target/helper-bundle
+          python3 scripts/verify-coverage-bundle.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap
       - name: Release tests
         run: cargo test --locked --release
       - name: Rust documentation
@@ -70,6 +74,13 @@ jobs:
           node-version: 24
       - name: Paths, Git selection, reports and real Node coverage
         run: cargo test --locked --test cli --test git_diff --test reports --test coverage_e2e --test adoption --test coverage_import --test example
+      - name: Installed coverage helper bundle (Node 24)
+        shell: bash
+        run: |
+          python3 scripts/bundle-coverage.py target/helper-bundle
+          scanner=target/debug/ts-crap
+          if [[ "$RUNNER_OS" == Windows ]]; then scanner="$scanner.exe"; fi
+          python3 scripts/verify-coverage-bundle.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner "$scanner"
   audit:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     timeout-minutes: 15

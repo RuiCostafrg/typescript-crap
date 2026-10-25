@@ -13,6 +13,7 @@ TARGETS = install_dist.ARCHIVES
 
 def prepare(source, destination):
     archives = [f"ts-crap-{t}.{'zip' if 'windows' in t else 'tar.xz'}" for t in TARGETS]
+    archives.append('ts-crap-coverage-helpers.zip')
     names = archives + [a + ".sha256" for a in archives] + [
         "ts-crap-installer.sh", "ts-crap-installer.ps1", "ts-crap.rb", "sha256.sum", "dist-manifest.json"]
     for name in names:

@@ -112,7 +112,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   verify:
-    needs: [plan, build]
+    needs: [plan, build, assemble]
     uses: ./.github/workflows/verify-release.yml
     with:
       plan: ${{ needs.plan.outputs.manifest }}
@@ -139,6 +139,7 @@ jobs:
           CARGO_NET_OFFLINE=true dist build --tag "$TAG" --artifacts=global --output-format=json > assembled-manifest.json
           git diff --exit-code -- Cargo.lock
           cp assembled-manifest.json target/distrib/dist-manifest.json
+          python3 scripts/bundle-coverage.py target/distrib
           python3 scripts/prepare-release.py target/distrib release-assets
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

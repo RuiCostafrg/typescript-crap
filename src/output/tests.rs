@@ -43,8 +43,13 @@ fn final_validation_refreshes_protected_inputs_and_destinations() {
             }
         }
         assert!(
-            plan.publish(&["replacement one".into(), "replacement two".into()])
-                .is_err()
+            plan.publish_with(2, |index, writer| {
+                writer.write_all(
+                    [b"replacement one".as_slice(), b"replacement two".as_slice()][index],
+                )?;
+                Ok(())
+            })
+            .is_err()
         );
         assert_eq!(std::fs::read_to_string(&first).unwrap(), "first");
         assert!(
@@ -57,4 +62,27 @@ fn final_validation_refreshes_protected_inputs_and_destinations() {
             if change == "source" { 4 } else { 3 }
         );
     }
+}
+
+#[test]
+fn streaming_failure_leaves_every_previous_output_and_cleans_staging() {
+    let root = tempfile::tempdir().unwrap();
+    let first = root.path().join("first.json");
+    let second = root.path().join("second.json");
+    std::fs::write(&first, "first").unwrap();
+    std::fs::write(&second, "second").unwrap();
+    let plan = super::DestinationPlan::new(root.path(), vec![&first, &second], vec![]).unwrap();
+    assert!(
+        plan.publish_with(2, |index, writer| {
+            writer.write_all(b"partial")?;
+            if index == 1 {
+                anyhow::bail!("injected rendering failure");
+            }
+            Ok(())
+        })
+        .is_err()
+    );
+    assert_eq!(std::fs::read_to_string(first).unwrap(), "first");
+    assert_eq!(std::fs::read_to_string(second).unwrap(), "second");
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 2);
 }

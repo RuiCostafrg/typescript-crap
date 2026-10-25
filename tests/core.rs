@@ -302,7 +302,12 @@ fn reports_replace_forbidden_controls_and_preserve_legal_whitespace() {
     report.functions[0].name = "a\0b\u{1}c\u{7}d\n\r\t".into();
     for format in [Format::Xml, Format::Html] {
         let rendered = render(&report, format).unwrap();
-        assert!(rendered.contains("a\u{fffd}b\u{fffd}c\u{fffd}d\n\r\t"));
+        let whitespace = if matches!(format, Format::Xml) {
+            "&#xA;&#xD;&#x9;"
+        } else {
+            "\n\r\t"
+        };
+        assert!(rendered.contains(&format!("a\u{fffd}b\u{fffd}c\u{fffd}d{whitespace}")));
         assert!(!rendered.contains('\0'));
         assert!(!rendered.contains('\u{1}'));
         assert!(!rendered.contains('\u{7}'));

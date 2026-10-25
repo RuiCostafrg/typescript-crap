@@ -136,3 +136,44 @@ fn invalid_threshold_or_rename_plan_fails_without_mutating_report() {
     assert!(baseline.apply(&mut after, &[]).is_err());
     assert_eq!(serde_json::to_string(&after).unwrap(), original);
 }
+
+#[test]
+fn baseline_application_is_independent_of_prior_decisions() {
+    for completeness in [false, true] {
+        let baselines =
+            [40.0, 2.0, 12.0].map(|score| Baseline::capture(&report(&[("a.ts", "a", 1, score)])));
+        let mut reused = report(&[("a.ts", "a", 1, 12.0)]);
+        reused.completeness_failed = completeness;
+        for index in [0, 1, 2, 1, 0, 0, 1] {
+            let mut fresh = report(&[("a.ts", "a", 1, 12.0)]);
+            fresh.completeness_failed = completeness;
+            baselines[index].apply(&mut reused, &[]).unwrap();
+            baselines[index].apply(&mut fresh, &[]).unwrap();
+            assert_eq!(
+                serde_json::to_value(&reused).unwrap(),
+                serde_json::to_value(&fresh).unwrap()
+            );
+        }
+    }
+}
+
+#[test]
+fn anonymous_labels_normalize_only_generated_positions() {
+    for name in [
+        "<anonymous@2:3>",
+        "scope::<anonymous@2:3>",
+        "<anonymous@1:2>::<anonymous@3:4>",
+    ] {
+        assert_ne!(super::stable_name(name), name);
+    }
+    for name in [
+        "'<anonymous@2:3>'",
+        "[key]::<anonymous@2:3>",
+        "<anonymous@x:y>",
+        "<anonymous@2:>",
+        "<anonymous@2:3",
+        "prefix<anonymous@2:3>",
+    ] {
+        assert_eq!(super::stable_name(name), name);
+    }
+}

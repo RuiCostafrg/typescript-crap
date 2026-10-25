@@ -1,6 +1,7 @@
 use crate::{Format, FunctionScore, RenderOptions, Report, Sort};
 use anyhow::Result;
-use std::fmt::Write;
+use std::io::Write;
+mod sarif;
 
 pub fn terminal(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -51,47 +52,30 @@ fn presentation_rows<'a>(report: &'a Report, options: &RenderOptions) -> Vec<&'a
     rows
 }
 
-pub fn render(report: &Report, format: Format, options: &RenderOptions) -> Result<String> {
-    Ok(match format {
+pub fn render_to<W: Write>(
+    report: &Report,
+    format: Format,
+    options: &RenderOptions,
+    mut s: W,
+) -> Result<()> {
+    match format {
         Format::Sarif => {
-            let results: Vec<_> = report.functions.iter().filter(|f| f.failed).map(|f| {
-                // URI encode UTF-8 bytes, including percent, fragments and path controls.
-                let mut uri = String::new();
-                for byte in f.path.bytes() {
-                    if byte.is_ascii_alphanumeric() || b"-._~/".contains(&byte) { uri.push(char::from(byte)); }
-                    else { write!(uri, "%{byte:02X}")?; }
-                }
-                Ok(serde_json::json!({"ruleId":"TSCRAP001", "level":"error",
-                    "message":{"text":format!("{} has CRAP {:.3} (threshold {})", f.name, f.crap, report.threshold)},
-                    "partialFingerprints":{"function/v1":f.identity},
-                    "locations":[{"physicalLocation":{"artifactLocation":{"uri":uri,"uriBaseId":"%SRCROOT%"},
-                        "region":{"startLine":f.line,"startColumn":f.column_utf16,"endLine":f.end_line}}}]}))
-            }).collect::<Result<Vec<_>>>()?;
-            let mut results = results;
-            if report.completeness_failed {
-                results.push(serde_json::json!({"ruleId":"TSCRAP002","level":"error",
-                "message":{"text":format!("Incomplete selection: {} files and {} functions missing coverage; {} functions selected", report.files_missing_coverage, report.functions_missing_coverage, report.functions.len())}}));
-            }
-            format!(
-                "{}\n",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "$schema":"https://json.schemastore.org/sarif-2.1.0.json", "version":"2.1.0",
-                    "runs":[{"columnKind":"utf16CodeUnits","tool":{"driver":{"name":"ts-crap","rules":[
-                        {"id":"TSCRAP001","shortDescription":{"text":"CRAP threshold exceeded"}},
-                        {"id":"TSCRAP002","shortDescription":{"text":"Missing quality evidence"}}]}}, "results":results}]
-                }))?
-            )
+            sarif::write(report, &mut s)?;
         }
-        Format::Json => format!("{}\n", serde_json::to_string_pretty(report)?),
+        Format::Json => {
+            serde_json::to_writer_pretty(&mut s, report)?;
+            s.write_all(b"\n")?;
+        }
         Format::Text => {
             let rows = presentation_rows(report, options);
-            let mut s = format!(
+            write!(
+                s,
                 "CRAP gate: {} (threshold {}, {} files, {} functions)\nPATH:LINE:COLUMN  FUNCTION  CC  COVERAGE  CRAP  STATUS\n",
                 if report.failed { "FAIL" } else { "PASS" },
                 report.threshold,
                 report.files_scanned,
                 report.functions.len()
-            );
+            )?;
             for f in &rows {
                 writeln!(
                     s,
@@ -112,7 +96,7 @@ pub fn render(report: &Report, format: Format, options: &RenderOptions) -> Resul
                 report.files_missing_coverage, report.functions_missing_coverage
             )?;
             if report.functions.is_empty() {
-                s.push_str("No implemented TypeScript functions found in the selection.\n");
+                s.write_all(b"No implemented TypeScript functions found in the selection.\n")?;
             }
             if rows.len() != report.functions.len() {
                 writeln!(
@@ -122,10 +106,10 @@ pub fn render(report: &Report, format: Format, options: &RenderOptions) -> Resul
                     report.functions.len()
                 )?;
             }
-            s
         }
         Format::Xml => {
-            let mut s = format!(
+            write!(
+                s,
                 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<crap-report version=\"1\" threshold=\"{}\" files-scanned=\"{}\" failed=\"{}\" files-missing-coverage=\"{}\" functions-missing-coverage=\"{}\" completeness-failed=\"{}\">\n",
                 report.threshold,
                 report.files_scanned,
@@ -133,13 +117,13 @@ pub fn render(report: &Report, format: Format, options: &RenderOptions) -> Resul
                 report.files_missing_coverage,
                 report.functions_missing_coverage,
                 report.completeness_failed
-            );
+            )?;
             for f in &report.functions {
                 writeln!(
                     s,
                     "  <function path=\"{}\" name=\"{}\" line=\"{}\" column=\"{}\" end-line=\"{}\" complexity=\"{}\" coverage=\"{}\" crap=\"{}\" failed=\"{}\"/>",
-                    escape(&f.path),
-                    escape(&f.name),
+                    xml_attribute(&f.path),
+                    xml_attribute(&f.name),
                     f.line,
                     f.column,
                     f.end_line,
@@ -149,19 +133,19 @@ pub fn render(report: &Report, format: Format, options: &RenderOptions) -> Resul
                     f.failed
                 )?;
             }
-            s.push_str("</crap-report>\n");
-            s
+            s.write_all(b"</crap-report>\n")?;
         }
         Format::Html => {
             let rows = presentation_rows(report, options);
-            let mut s = format!(
+            write!(
+                s,
                 "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>TypeScript CRAP report</title><style>body{{font:16px system-ui;margin:2rem;color:#17243a;background:#f4f7fb}}table{{border-collapse:collapse;background:white;width:100%}}th,td{{padding:.7rem;text-align:left;border-bottom:1px solid #ccd3dd}}.fail{{color:#b42318}}.pass{{color:#067647}}code{{overflow-wrap:anywhere}}caption{{text-align:left;margin-bottom:1rem}}@media(max-width:700px){{body{{margin:.5rem}}td,th{{padding:.3rem}}}}</style></head><body><h1>TypeScript CRAP report</h1><p class=\"{}\"><strong>{}</strong> · Threshold {} · {} files · {} functions</p><p>CRAP = CC² × (1 − coverage)³ + CC. Missing coverage is 0%. A score strictly above the threshold fails.</p><label>Filter path or function <input id=\"filter\" type=\"search\"></label> <label><input id=\"only-failing\" type=\"checkbox\"> Only failing</label><p id=\"visible-count\" aria-live=\"polite\"></p><table><caption>Function quality gate results</caption><thead><tr><th>Relative path : line : column</th><th>Function</th><th>CC</th><th>Coverage</th><th>CRAP</th><th>Gate</th></tr></thead><tbody>",
                 if report.failed { "fail" } else { "pass" },
                 if report.failed { "FAIL" } else { "PASS" },
                 report.threshold,
                 report.files_scanned,
                 report.functions.len()
-            );
+            )?;
             for f in &rows {
                 write!(
                     s,
@@ -186,9 +170,30 @@ pub fn render(report: &Report, format: Format, options: &RenderOptions) -> Resul
                 report.files_missing_coverage,
                 report.functions_missing_coverage
             )?;
-            s.push_str(include_str!("report-filter.html"));
-            s.push_str("</body></html>\n");
-            s
+            s.write_all(include_bytes!("report-filter.html"))?;
+            s.write_all(b"</body></html>\n")?;
         }
-    })
+    }
+    Ok(())
+}
+
+fn xml_attribute(text: &str) -> String {
+    let mut out = String::new();
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            '\t' => out.push_str("&#x9;"),
+            '\n' => out.push_str("&#xA;"),
+            '\r' => out.push_str("&#xD;"),
+            '\u{20}'..='\u{d7ff}' | '\u{e000}'..='\u{fffd}' | '\u{10000}'..='\u{10ffff}' => {
+                out.push(c)
+            }
+            _ => out.push('\u{fffd}'),
+        }
+    }
+    out
 }

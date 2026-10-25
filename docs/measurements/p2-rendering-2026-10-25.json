@@ -1,0 +1,135 @@
+{
+  "platform": "Android-12-aarch64-64bit",
+  "rust": "rustc 1.96.0 (ac68faa20 2026-05-25) (built from a source tarball)",
+  "method": "Release benchmark, fresh process per case, one warmup and five samples. Peak RSS includes fixture construction and scan. stream modes serialize to io::sink and retain no output String; no disk I/O. No baseline speedup claim.",
+  "results": [
+    {
+      "median_ms": 1.30026,
+      "mode": "render-json",
+      "name_bytes": 8890,
+      "output_bytes": 642879,
+      "peak_rss_kib": 15964,
+      "samples_ms": [
+        1.289532,
+        1.295886,
+        1.30026,
+        1.3208339999999998,
+        1.3747919999999998
+      ],
+      "size": 2000,
+      "source_bytes": 122913
+    },
+    {
+      "median_ms": 0.914688,
+      "mode": "stream-json",
+      "name_bytes": 8890,
+      "output_bytes": 642879,
+      "peak_rss_kib": 14380,
+      "samples_ms": [
+        0.913802,
+        0.914479,
+        0.914688,
+        0.9163030000000001,
+        0.9369270000000001
+      ],
+      "size": 2000,
+      "source_bytes": 122913
+    },
+    {
+      "median_ms": 3.543907,
+      "mode": "render-sarif",
+      "name_bytes": 8890,
+      "output_bytes": 1447302,
+      "peak_rss_kib": 18128,
+      "samples_ms": [
+        3.519167,
+        3.541771,
+        3.543907,
+        3.583958,
+        3.6142190000000003
+      ],
+      "size": 2000,
+      "source_bytes": 122913
+    },
+    {
+      "median_ms": 1.3375,
+      "mode": "stream-sarif",
+      "name_bytes": 8890,
+      "output_bytes": 1447302,
+      "peak_rss_kib": 14556,
+      "samples_ms": [
+        1.329895,
+        1.33599,
+        1.3375,
+        1.35599,
+        1.4091150000000001
+      ],
+      "size": 2000,
+      "source_bytes": 122913
+    },
+    {
+      "median_ms": 8.486303000000001,
+      "mode": "render-json",
+      "name_bytes": 48890,
+      "output_bytes": 3226882,
+      "peak_rss_kib": 51756,
+      "samples_ms": [
+        8.408281,
+        8.467343,
+        8.486303000000001,
+        8.515,
+        8.543177
+      ],
+      "size": 10000,
+      "source_bytes": 618913
+    },
+    {
+      "median_ms": 1.082396,
+      "mode": "stream-json",
+      "name_bytes": 48890,
+      "output_bytes": 3226882,
+      "peak_rss_kib": 49612,
+      "samples_ms": [
+        1.076146,
+        1.076355,
+        1.082396,
+        1.090833,
+        1.115625
+      ],
+      "size": 10000,
+      "source_bytes": 618913
+    },
+    {
+      "median_ms": 20.032917,
+      "mode": "render-sarif",
+      "name_bytes": 48890,
+      "output_bytes": 7247304,
+      "peak_rss_kib": 59372,
+      "samples_ms": [
+        19.711092999999998,
+        19.755364,
+        20.032917,
+        20.039687999999998,
+        20.097605
+      ],
+      "size": 10000,
+      "source_bytes": 618913
+    },
+    {
+      "median_ms": 6.659791,
+      "mode": "stream-sarif",
+      "name_bytes": 48890,
+      "output_bytes": 7247304,
+      "peak_rss_kib": 49584,
+      "samples_ms": [
+        6.654114,
+        6.6577090000000005,
+        6.659791,
+        6.6601040000000005,
+        6.693854
+      ],
+      "size": 10000,
+      "source_bytes": 618913
+    }
+  ]
+}

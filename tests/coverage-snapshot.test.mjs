@@ -45,3 +45,13 @@ test('snapshot policies preserve BOM/hash bytes, declaration selection and exclu
     await assert.rejects(snapshot(root, policy), TypeError);
   }
 });
+
+test('snapshot rejects schema-incompatible Unix filenames', { skip: process.platform === 'win32' }, async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'ts-crap-paths-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  for (const name of ['src\\a.ts', 'a:b.ts']) {
+    await fs.writeFile(path.join(root, name), 'const f = () => 1;');
+    await assert.rejects(snapshot(root, { supported: () => true, compareNames: () => 0 }), /cannot be represented/);
+    await fs.unlink(path.join(root, name));
+  }
+});

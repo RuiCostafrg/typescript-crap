@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Collect Istanbul (Jest/Vitest/nyc) or LCOV with a pre-execution source snapshot.
+import { parseUniqueJson } from './strict-json.mjs';
 import { publishReport } from './coverage-publish.mjs';
 import { digest, snapshot } from './coverage-snapshot.mjs';
 import { spawn } from 'node:child_process';
@@ -58,10 +59,10 @@ async function sourceMap(filename, inline) {
   if (!matches.length) throw new Error(`No source map for generated input: ${filename}`);
   const url = matches.at(-1)[1];
   if (/^data:application\/json(?:;charset=[^;,]+)?;base64,/i.test(url)) {
-    return { map: JSON.parse(Buffer.from(url.split(',')[1], 'base64').toString('utf8')), base: path.dirname(filename) };
+    return { map: parseUniqueJson(Buffer.from(url.split(',')[1], 'base64').toString('utf8')), base: path.dirname(filename) };
   }
   const mapPath = resolveSource(path.dirname(filename), decodeURIComponent(url));
-  return { map: JSON.parse(await fs.readFile(mapPath, 'utf8')), base: path.dirname(mapPath) };
+  return { map: parseUniqueJson(await fs.readFile(mapPath, 'utf8')), base: path.dirname(mapPath) };
 }
 async function convert(root, files, records) {
   let unmapped = 0;
@@ -157,7 +158,7 @@ async function main() {
   });
   if (status !== 0) throw new Error(`Coverage command failed: ${status}`);
   const raw = await fs.readFile(input, 'utf8');
-  const records = options['--format'] === 'istanbul' ? istanbul(JSON.parse(raw)) : lcov(raw);
+  const records = options['--format'] === 'istanbul' ? istanbul(parseUniqueJson(raw)) : lcov(raw);
   if (!records.some(record => record.hits.length)) throw new Error('Empty imported coverage');
   await convert(root, files, records);
   const result = { version: 1, files: {} };

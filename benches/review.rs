@@ -86,7 +86,10 @@ fn main() {
         .map(|function| function.name.len())
         .sum();
     let mut output_bytes = 0;
-    let samples = if let Some(format) = mode.strip_prefix("render-") {
+    let samples = if let Some(format) = mode
+        .strip_prefix("stream-")
+        .or_else(|| mode.strip_prefix("render-"))
+    {
         let format = match format {
             "json" => Format::Json,
             "xml" => Format::Xml,
@@ -96,11 +99,31 @@ fn main() {
             _ => panic!("unknown format"),
         };
         report.functions.reverse(); // machine order must remain caller order
-        let reference = render(&report, format).unwrap();
-        output_bytes = reference.len();
-        measured(|| {
-            black_box(render(black_box(&report), format).unwrap());
-        })
+        if mode.starts_with("stream-") {
+            // Count output without retaining a complete rendered string.
+            struct Counter(usize);
+            impl std::io::Write for Counter {
+                fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                    self.0 += bytes.len();
+                    Ok(bytes.len())
+                }
+                fn flush(&mut self) -> std::io::Result<()> {
+                    Ok(())
+                }
+            }
+            let mut counter = Counter(0);
+            ts_crap::render_to(&report, format, &mut counter).unwrap();
+            output_bytes = counter.0;
+            measured(|| {
+                ts_crap::render_to(black_box(&report), format, std::io::sink()).unwrap();
+            })
+        } else {
+            let reference = render(&report, format).unwrap();
+            output_bytes = reference.len();
+            measured(|| {
+                black_box(render(black_box(&report), format).unwrap());
+            })
+        }
     } else if mode == "validation" || mode == "end-to-end" {
         fs::create_dir(root.join("node_modules")).unwrap();
         fs::create_dir(root.join("node_modules/dependency")).unwrap();
@@ -138,11 +161,15 @@ fn main() {
                 )
                 .unwrap();
                 let report = scan(black_box(&options)).unwrap();
-                let contents = vec![
-                    Baseline::capture(&report).render().unwrap(),
-                    render(&report, Format::Json).unwrap(),
-                ];
-                plan.publish(&contents).unwrap();
+                let baseline = Baseline::capture(&report);
+                plan.publish_with(2, |index, writer| {
+                    if index == 0 {
+                        baseline.render_to(writer)
+                    } else {
+                        ts_crap::render_to(&report, Format::Json, writer)
+                    }
+                })
+                .unwrap();
             })
         }
     } else {

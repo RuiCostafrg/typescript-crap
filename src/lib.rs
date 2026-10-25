@@ -152,15 +152,18 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
     let rules = config::Rules::load(&root, args.config.as_ref(), &args.include, &args.exclude)?;
     let selection = selection::files(&root, &args.paths, args.diff.as_deref(), args.pr.as_deref())?;
     let mut files = selection.paths;
-    files.retain(|path| {
-        rules.matches(
-            &path
-                .strip_prefix(&root)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .replace('\\', "/"),
-        )
-    });
+    let mut identities = std::collections::BTreeSet::new();
+    let mut selected = Vec::new();
+    for path in files {
+        let relative = validation::source_path(path.strip_prefix(&root)?)?;
+        if rules.matches(&relative) {
+            if !identities.insert(relative) {
+                bail!("duplicate source path identity");
+            }
+            selected.push(path);
+        }
+    }
+    files = selected;
     let coverage = args
         .coverage
         .as_deref()
@@ -176,11 +179,7 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
         Some(selection::BlobReader::new(&root)?)
     };
     for path in &files {
-        let relative = path
-            .strip_prefix(&root)?
-            .to_str()
-            .context("source path is not UTF-8")?
-            .replace('\\', "/");
+        let relative = validation::source_path(path.strip_prefix(&root)?)?;
         let source =
             std::fs::read_to_string(path).with_context(|| format!("cannot read {relative}"))?;
         if let Some(reader) = &mut committed {
@@ -256,6 +255,24 @@ pub fn render_with_options(
     format: Format,
     options: &RenderOptions,
 ) -> Result<String> {
+    let mut bytes = Vec::new();
+    render_to_with_options(report, format, options, &mut bytes)?;
+    Ok(String::from_utf8(bytes)?)
+}
+
+/// Stream a report. Writer failures may leave partial bytes in the supplied writer.
+/// Analysis completes before rendering; use a staging file for atomic publication.
+pub fn render_to<W: std::io::Write>(report: &Report, format: Format, writer: W) -> Result<()> {
+    render_to_with_options(report, format, &RenderOptions::default(), writer)
+}
+
+/// Stream with presentation options, preserving the full report's gate and totals.
+pub fn render_to_with_options<W: std::io::Write>(
+    report: &Report,
+    format: Format,
+    options: &RenderOptions,
+    writer: W,
+) -> Result<()> {
     options.validate(format)?;
-    report::render(report, format, options)
+    report::render_to(report, format, options, writer)
 }

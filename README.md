@@ -456,6 +456,11 @@ Uncovered overlapping statements/segments keep a line uncovered. This conservati
 line approximation does not claim branch coverage. Existing native V8 collection
 remains available for Node's direct TypeScript execution.
 
+The [real Jest/Vitest integration suite](docs/FRAMEWORK_COVERAGE.md) exercises
+both JSON and LCOV reporters, Vitest's Istanbul and V8 providers, complex TSX,
+and shared workspace imports. It records the
+pinned framework versions, repeat-run checks, and source-map limitations.
+
 ### Review output
 
 `--format sarif --output crap.sarif` emits SARIF 2.1.0 with stable `TSCRAP001`

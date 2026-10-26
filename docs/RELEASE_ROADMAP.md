@@ -32,15 +32,29 @@ download remain release-time evidence, not claims made by the local smoke test.
 
 ### 2. Exercise real Jest and Vitest projects
 
-The [importer regression tests](../tests/coverage_import.rs) exercise constructed
-Istanbul/LCOV fixtures and source maps. Add small projects that actually run Jest
-and Vitest to validate the advertised integration paths.
+The [real framework suite](../scripts/test-framework-coverage.mjs) runs pinned
+Jest and Vitest projects (including Vitest's Istanbul and V8 providers) through
+JSON and LCOV reporters, the importer, and CLI gates. The
+[framework coverage guide](FRAMEWORK_COVERAGE.md) records versions,
+reproduction commands, assertions, and source-map limits. CI includes a separate
+Linux/macOS/Windows matrix with Node 24.
 
-- [ ] Collect and scan actual Jest and Vitest coverage end to end.
-- [ ] Include TSX and a workspace layout across the fixtures.
-- [ ] Assert passing coverage, uncovered code, stale-source rejection, and safe
+- [x] Collect and scan actual Jest and Vitest coverage end to end.
+- [x] Include TSX and a workspace layout across the fixtures.
+- [x] Assert passing coverage, uncovered code, stale-source rejection, and safe
   repeated execution with fresh input/output paths.
-- [ ] Record tested framework/reporter versions and unsupported source-map cases.
+- [x] Record tested framework/reporter versions and unsupported source-map cases.
+
+Local validation on 2026-10-26 passed all six framework/provider/reporter
+combinations,
+including 13 Vitest behavioral cases covering complex TSX, async errors, nested
+handlers, lazy imports, and Unicode paths. Reporter gaps for default-argument
+lines are checked separately and documented; missing evidence still fails the
+completeness gate. Framework validation used Node 26.3.1 on Linux aarch64
+(Termux/proot). All 132 Rust tests, all 14 Python tests, formatting, Node script
+syntax, and actionlint 1.7.12 passed during item 2 implementation; the seven
+importer regression tests were also rerun after expanding the fixtures. Hosted Node 24 and
+macOS/Windows runs remain CI evidence to obtain for the release commit.
 
 ### 3. Persist project gate policy
 

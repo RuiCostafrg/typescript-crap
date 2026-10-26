@@ -10,7 +10,10 @@ import { fileURLToPath } from 'node:url';
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const scanner = path.resolve(process.argv[2] ?? 'target/debug/ts-crap');
 await fs.access(scanner);
-const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'ts-crap frameworks '));
+// Windows os.tmpdir() can contain an 8.3 alias such as RUNNER~1. Jest must see
+// the same canonical paths for workspace imports and collectCoverageFrom;
+// otherwise it can emit a second, zero-hit record for the same source file.
+const temporary = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'ts-crap frameworks ')));
 const root = path.join(temporary, 'workspace');
 
 function run(command, args, expected = 0, env = {}) {
@@ -90,7 +93,14 @@ try {
       await fs.mkdir(path.join(root, 'coverage'), { recursive: true });
 
       const full = await collect('full');
-      const fullReport = JSON.parse(scan(full.output).stdout);
+      let fullReport;
+      try {
+        fullReport = JSON.parse(scan(full.output).stdout);
+      } catch (error) {
+        console.error(`${label}: framework output\n${full.result.stdout}\n${full.result.stderr}`);
+        console.error(`${label}: raw reporter evidence\n${await fs.readFile(full.input, 'utf8')}`);
+        throw error;
+      }
       assert.deepEqual([...new Set(fullReport.functions.map(f => f.path))].sort(), expectedPaths, label);
       assert.equal(fullReport.files_scanned, expectedPaths.length, label);
       assert.equal(fullReport.files_missing_coverage, 0, label);

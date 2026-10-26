@@ -14,7 +14,8 @@ node scripts/test-framework-coverage.mjs target/debug/ts-crap
 ```
 
 The suite copies the fixtures into a temporary directory whose name contains
-spaces, installs the committed lockfile with `npm ci --ignore-scripts`, and
+spaces, canonicalizes its path (including Windows 8.3 temporary-path aliases),
+installs the committed lockfile with `npm ci --ignore-scripts`, and
 removes its temporary files after execution. It needs npm registry access and is
 separate from the offline Cargo tests. The `framework-coverage` CI job runs it
 with Node 24 on Linux, macOS, and Windows; hosted results must be checked for the

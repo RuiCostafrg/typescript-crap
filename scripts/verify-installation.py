@@ -177,18 +177,15 @@ def verify_homebrew(args, root, served, base, current_hash, previous_hash):
     if not brew:
         raise ValueError('Homebrew must be installed before running formula verification')
     env = {**os.environ, 'HOMEBREW_NO_AUTO_UPDATE': '1', 'HOMEBREW_NO_ANALYTICS': '1',
-           'HOMEBREW_NO_INSTALL_CLEANUP': '1', 'HOMEBREW_NO_ENV_HINTS': '1',
-           # tap-new commits its template; clean runners need a local test identity.
-           'GIT_AUTHOR_NAME': 'ts-crap installation verification',
-           'GIT_AUTHOR_EMAIL': 'ts-crap-installation@example.invalid',
-           'GIT_COMMITTER_NAME': 'ts-crap installation verification',
-           'GIT_COMMITTER_EMAIL': 'ts-crap-installation@example.invalid'}
+           'HOMEBREW_NO_INSTALL_CLEANUP': '1', 'HOMEBREW_NO_ENV_HINTS': '1'}
     existing = run([brew, 'list', '--formula', '--versions'], env=env)
     if any(line.split()[0] == 'ts-crap' for line in existing.splitlines() if line.strip()):
         raise ValueError('Refusing to replace an existing Homebrew ts-crap installation')
     tap = f'ts-crap-test/run-{os.getpid()}'
     formula = f'{tap}/ts-crap'
-    run([brew, 'tap-new', tap], env=env)
+    # The disposable formula directory needs no repository or template commit.
+    # Homebrew sanitizes Git identity environment variables in its subprocesses.
+    run([brew, 'tap-new', '--no-git', tap], env=env)
     tap_root = Path(run([brew, '--repository', tap], env=env).strip())
     try:
         def install(release, version, digest, operation):

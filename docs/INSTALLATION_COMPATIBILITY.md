@@ -41,8 +41,8 @@ Each run verifies a fresh install, reinstall, and upgrade between two actual
 versions. It compares installed executable bytes with the checksum-verified
 archive and checks installer receipts. Homebrew uses a temporary tap, refuses to
 replace an existing ts-crap installation, and removes its test installation and
-tap afterward. The temporary tap uses a subprocess-scoped Git identity; global Git settings
-are not changed. Other installers use temporary prefixes/configuration directories,
+tap afterward. The temporary tap uses `tap-new --no-git`, so it creates no Git
+commits and does not require an author identity. Other installers use temporary prefixes/configuration directories,
 including spaces and Unicode, with profile/PATH modification disabled. Default
 user profile and persistent registry PATH changes are not exercised.
 

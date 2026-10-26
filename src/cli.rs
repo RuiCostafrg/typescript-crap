@@ -14,9 +14,9 @@ struct Args {
     /// Project root (all report paths are relative to this)
     #[arg(long, default_value = ".")]
     root: PathBuf,
-    /// Fail when any score is strictly greater than this value
-    #[arg(long, default_value = "10", value_parser = threshold)]
-    threshold: f64,
+    /// Fail when any score is strictly greater than this value (config or 10)
+    #[arg(long, value_parser = threshold)]
+    threshold: Option<f64>,
     /// Source-hashed line coverage JSON; missing coverage is 0%
     #[arg(long)]
     coverage: Option<PathBuf>,
@@ -35,12 +35,12 @@ struct Args {
     /// Root-relative exclude globs; repeated flags replace configured excludes
     #[arg(long)]
     exclude: Vec<String>,
-    /// Fail if selected files or function statements lack coverage evidence
-    #[arg(long)]
-    require_coverage: bool,
-    /// Fail if the selection contains no implemented functions
-    #[arg(long)]
-    fail_on_empty: bool,
+    /// Require coverage evidence; use =false to override project policy
+    #[arg(long, num_args = 0..=1, default_missing_value = "true", require_equals = true, action = clap::ArgAction::Set)]
+    require_coverage: Option<bool>,
+    /// Fail on an empty selection; use =false to override project policy
+    #[arg(long, num_args = 0..=1, default_missing_value = "true", require_equals = true, action = clap::ArgAction::Set)]
+    fail_on_empty: Option<bool>,
     /// Fail only for new or worsened violations relative to this snapshot
     #[arg(long, conflicts_with = "write_baseline")]
     baseline: Option<PathBuf>,

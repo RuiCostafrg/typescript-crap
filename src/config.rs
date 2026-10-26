@@ -11,12 +11,25 @@ struct Config {
     include: Vec<String>,
     #[serde(default)]
     exclude: Vec<String>,
+    #[serde(default = "default_threshold")]
+    threshold: f64,
+    #[serde(default)]
+    require_coverage: bool,
+    #[serde(default)]
+    fail_on_empty: bool,
+}
+
+fn default_threshold() -> f64 {
+    10.0
 }
 
 #[derive(Debug)]
 pub struct Rules {
     include: GlobSet,
     exclude: GlobSet,
+    pub threshold: f64,
+    pub require_coverage: bool,
+    pub fail_on_empty: bool,
 }
 fn compile(patterns: &[String]) -> Result<GlobSet> {
     let mut builder = GlobSetBuilder::new();
@@ -49,6 +62,9 @@ impl Rules {
                     version: 1,
                     include: vec![],
                     exclude: vec![],
+                    threshold: default_threshold(),
+                    require_coverage: false,
+                    fail_on_empty: false,
                 }
             }
             Err(error) => return Err(error).context("cannot read project configuration"),
@@ -56,6 +72,7 @@ impl Rules {
         if settings.version != 1 {
             bail!("unsupported project configuration version");
         }
+        crate::validate_threshold(settings.threshold).context("invalid project configuration")?;
         // A nonempty CLI list replaces that configuration list; exclusions always win.
         if !include.is_empty() {
             settings.include = include.to_vec();
@@ -66,6 +83,9 @@ impl Rules {
         Ok(Self {
             include: compile(&settings.include)?,
             exclude: compile(&settings.exclude)?,
+            threshold: settings.threshold,
+            require_coverage: settings.require_coverage,
+            fail_on_empty: settings.fail_on_empty,
         })
     }
     pub fn matches(&self, path: &str) -> bool {

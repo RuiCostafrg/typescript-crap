@@ -81,11 +81,11 @@ fn selection_config_precedence_and_completeness() {
     assert_eq!(scan(&options).unwrap().functions[0].name, "b");
     options.exclude = vec!["b.ts".into()];
     assert!(!scan(&options).unwrap().failed);
-    options.fail_on_empty = true;
+    options.fail_on_empty = Some(true);
     assert!(scan(&options).unwrap().failed);
     options.exclude.clear();
-    options.fail_on_empty = false;
-    options.require_coverage = true;
+    options.fail_on_empty = Some(false);
+    options.require_coverage = Some(true);
     let report = scan(&options).unwrap();
     assert!(report.failed && report.completeness_failed);
     assert!(!report.functions[0].failed);
@@ -196,7 +196,7 @@ fn bare_relative_report_destination_uses_current_directory() {
 fn sarif_uses_utf16_columns_after_unicode_source() {
     let dir = project("const ü='😀'; const f=()=>1;");
     let mut options = opts(&dir);
-    options.threshold = 0.0;
+    options.threshold = Some(0.0);
     let report = scan(&options).unwrap();
     let f = &report.functions[0];
     assert_eq!(f.column, "const ü='😀'; const f=".len() + 1);
@@ -278,7 +278,7 @@ fn completeness_distinguishes_zero_hits_from_absent_lines_and_files() {
     let hash = hex::encode(Sha256::digest(fs::read(dir.path().join("a.ts")).unwrap()));
     let mut options = ScanOptions {
         coverage: Some(dir.path().join("cov.json")),
-        require_coverage: true,
+        require_coverage: Some(true),
         ..options
     };
     for (lines, expected_missing) in [
@@ -300,7 +300,7 @@ fn completeness_distinguishes_zero_hits_from_absent_lines_and_files() {
     let report = scan(&options).unwrap();
     assert_eq!(report.files_missing_coverage, 1);
     assert!(report.failed);
-    options.require_coverage = false;
+    options.require_coverage = Some(false);
     assert!(!scan(&options).unwrap().failed);
 }
 
@@ -425,13 +425,13 @@ fn nested_function_edits_change_only_their_owned_fingerprints() {
 fn coverage_gate_requires_evidence_for_type_only_files_without_functions() {
     let dir = project("export type T = string;");
     let mut options = opts(&dir);
-    options.require_coverage = true;
+    options.require_coverage = Some(true);
     let report = scan(&options).unwrap();
     assert!(report.functions.is_empty());
     assert_eq!(report.files_missing_coverage, 1);
     assert_eq!(report.functions_missing_coverage, 0);
     assert!(report.completeness_failed && report.failed);
-    options.require_coverage = false;
+    options.require_coverage = Some(false);
     assert!(!scan(&options).unwrap().failed);
 }
 

@@ -58,13 +58,24 @@ macOS/Windows runs remain CI evidence to obtain for the release commit.
 
 ### 3. Persist project gate policy
 
-The [project config](../src/config.rs) currently stores version, includes, and
-excludes. Allow teams to commit their gate policy alongside selection rules.
+The [project config](../src/config.rs) stores gate policy alongside selection
+rules. Explicit CLI values override configured values independently; omitted
+settings keep the existing defaults. Boolean flags accept `=true` and `=false`,
+and bare flags still enable their gates. The [README](../README.md#adoption-gates-v02)
+contains a complete config example and Rust API migration notes.
 
-- [ ] Add threshold, require-coverage, and fail-on-empty settings.
-- [ ] Define and test CLI precedence, including explicit boolean overrides.
-- [ ] Preserve existing configuration behavior and reject invalid settings.
-- [ ] Document a complete config example. An `init` command is optional polish.
+- [x] Add threshold, require-coverage, and fail-on-empty settings.
+- [x] Define and test CLI precedence, including explicit boolean overrides.
+- [x] Preserve existing configuration behavior and reject invalid settings.
+- [x] Document a complete config example. An `init` command is optional polish.
+
+The [project policy suite](../tests/project_policy.rs) covers defaults, CLI and
+library overrides, invalid policy rejection before publication, caller-relative
+explicit configs, selection precedence, coverage evidence, and baseline policy.
+CI includes it in both the full Rust suite and the macOS/Windows behavior job.
+Local validation on 2026-10-26 passed all 141 Rust tests, all 14 Python tests,
+strict Clippy, rustdoc with warnings denied, formatting, and actionlint 1.7.12.
+Hosted checks for this implementation remain release-time evidence to obtain.
 
 ### 4. Verify installation and platform compatibility
 

@@ -73,7 +73,7 @@ jobs:
         with:
           node-version: 24
       - name: Paths, Git selection, reports and real Node coverage
-        run: cargo test --locked --test cli --test git_diff --test reports --test coverage_e2e --test adoption --test coverage_import --test example
+        run: cargo test --locked --test cli --test git_diff --test reports --test coverage_e2e --test adoption --test coverage_import --test project_policy --test example
       - name: Installed coverage helper bundle (Node 24)
         shell: bash
         run: |

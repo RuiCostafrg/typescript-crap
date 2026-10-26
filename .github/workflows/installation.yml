@@ -89,3 +89,44 @@ jobs:
             --mount "type=bind,src=$GITHUB_WORKSPACE/examples/shop,dst=/project,readonly" \
             ubuntu:26.04 /bin/sh -ec \
             'getconf GNU_LIBC_VERSION; ts-crap --version; ts-crap --help >/dev/null; ts-crap --root /project --threshold 20'
+  live-homebrew:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            target: x86_64-unknown-linux-gnu
+          - runner: macos-26
+            target: aarch64-apple-darwin
+          - runner: macos-26-intel
+            target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify the current published tap without rewriting formula URLs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          fi
+          gh api repos/RuiCostafrg/homebrew-tap/contents/Formula/ts-crap.rb \
+            --jq .content | base64 --decode > "$RUNNER_TEMP/live-formula.rb"
+          version=$(python3 -c 'import re,sys; print(re.search(r"^  version \"([^\"]+)\"",open(sys.argv[1]).read(),re.M)[1])' "$RUNNER_TEMP/live-formula.rb")
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          for release in 0.3.0 "$version"; do
+            gh release download "v$release" --repo "$GITHUB_REPOSITORY" \
+              --pattern "ts-crap-$TARGET.*" --pattern ts-crap.rb --dir "live-assets/$release"
+          done
+          cmp "$RUNNER_TEMP/live-formula.rb" "live-assets/$version/ts-crap.rb"
+          gh attestation verify "live-assets/$version/ts-crap.rb" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-ref "refs/tags/v$version" --deny-self-hosted-runners
+          python3 scripts/verify-live-homebrew.py --assets "live-assets/$version" --version "$version" \
+            --previous-assets live-assets/0.3.0 --previous-version 0.3.0 --target "$TARGET"

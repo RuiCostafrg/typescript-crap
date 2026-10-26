@@ -23,10 +23,20 @@ TARGETS = {
 }
 
 
-def run(command, *, env=None, expected=0):
-    result = subprocess.run([str(item) for item in command], env=env,
-                            capture_output=True, text=True, encoding='utf-8',
-                            errors='replace', timeout=180)
+def run(command, *, env=None, expected=0, timeout=180):
+    try:
+        result = subprocess.run([str(item) for item in command], env=env,
+                                capture_output=True, text=True, encoding='utf-8',
+                                errors='replace', timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        # TimeoutExpired may contain bytes even when text=True. Retain bounded
+        # partial logs so a slow network/tool refresh can be diagnosed in CI.
+        def tail(output):
+            if isinstance(output, bytes):
+                output = output.decode('utf-8', errors='replace')
+            return (output or '')[-16000:]
+        raise RuntimeError(f'{command!r}: timed out after {timeout} seconds\n'
+                           f'{tail(error.stdout)}\n{tail(error.stderr)}') from error
     if result.returncode != expected:
         raise RuntimeError(f'{command!r}: expected {expected}, got {result.returncode}\n'
                            f'{result.stdout}\n{result.stderr}')

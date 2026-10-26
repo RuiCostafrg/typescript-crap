@@ -101,3 +101,9 @@ upgrade fixture. Leave guide verification enabled for releases containing helper
 For the legacy v0.4.0 tap check only, disable guide verification and select v0.3.0
 as the previous version. A green candidate run remains distinct from a green
 published-path run; publication evidence must be recorded after it occurs.
+
+The live-tap verifier allows up to ten minutes for an explicit `brew update`,
+which refreshes Homebrew and all preinstalled taps on a cold hosted runner. Other
+installer commands retain their three-minute deadline; the job retains its
+20-minute limit. Timeout failures include bounded partial stdout/stderr. These
+are verification-runner limits, not product subprocess guarantees.

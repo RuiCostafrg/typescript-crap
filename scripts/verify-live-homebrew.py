@@ -20,8 +20,8 @@ def verify(args):
         raise ValueError('Homebrew is required')
     env = {**os.environ, 'HOMEBREW_NO_AUTO_UPDATE':'1', 'HOMEBREW_NO_ANALYTICS':'1',
            'HOMEBREW_NO_INSTALL_CLEANUP':'1', 'HOMEBREW_NO_ENV_HINTS':'1'}
-    def run(command):
-        return installation.run(command, env=env)
+    def run(command, *, timeout=180):
+        return installation.run(command, env=env, timeout=timeout)
     if any(line.split()[0] == 'ts-crap' for line in run([brew, 'list', '--formula', '--versions']).splitlines() if line.strip()):
         raise ValueError('Use a clean runner without ts-crap installed')
     tap = 'ruicostafrg/tap'
@@ -60,7 +60,9 @@ def verify(args):
             run(['git', '-C', repository, 'checkout', 'main'])
             if run(['git', '-C', repository, 'rev-parse', 'HEAD']).strip() != head:
                 raise ValueError('Unexpected live tap branch')
-            run([brew, 'update'])
+            # A cold Intel macOS runner may spend several minutes refreshing
+            # Homebrew and its preinstalled taps. Keep the other command limits.
+            run([brew, 'update'], timeout=600)
             if (repository/'Formula/ts-crap.rb').read_bytes() != (args.assets/'ts-crap.rb').read_bytes():
                 raise ValueError('Live tap changed during verification')
             run([brew, 'upgrade', 'RuiCostafrg/tap/ts-crap'])

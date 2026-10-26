@@ -83,12 +83,28 @@ The [archive smoke workflow](../.github/workflows/verify-release.yml) verifies
 checksums and runs unpacked binaries. Extend verification to the advertised
 installation and upgrade paths.
 
+Implementation in progress: the [installation matrix](../.github/workflows/installation.yml)
+tests a pinned published v0.3.0/v0.4.0 pair through real shell, PowerShell, and
+Homebrew installers. Candidate release verification uses the same runner against
+assembled assets before publication. Linux verification also runs both archive
+architectures in stock Ubuntu 26.04 containers without network access or build
+tools. See [installation compatibility](INSTALLATION_COMPATIBILITY.md) for exact
+coverage and remaining publication evidence.
+
 - [ ] Test shell and PowerShell installation and upgrades in clean environments.
 - [ ] Verify Homebrew formula publication, installation, and upgrades.
 - [ ] Decide the supported Linux runtime baseline: current builds require Ubuntu
   26.04 or compatible glibc. Broaden compatibility or prominently document that
   minimum, and test the chosen minimum runtime explicitly.
 - [ ] Confirm the documented commands work on each advertised platform.
+
+Local validation on 2026-10-26 passed the real ARM64 Linux shell install,
+reinstall, and upgrade checks, including TS/TSX and coverage-gate smoke commands,
+and all 19 Python regression tests. Hosted PowerShell, Homebrew, and clean Docker
+runtime results remain pending. The live Homebrew tap's v0.4.0 sync still requires
+its protected deployment approval and reviewed formula update; generated-formula
+checks do not establish live tap publication. These items stay unchecked until
+their evidence is available.
 
 ## During beta, before v1.0.0
 

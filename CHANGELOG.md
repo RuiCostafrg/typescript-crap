@@ -4,6 +4,11 @@
 
 ### Added
 
+- Installation compatibility checks using real shell, PowerShell, and Homebrew
+  installers: fresh install, reinstall, upgrade, and installed TS/TSX/coverage
+  smoke tests. Release verification checks candidate assets and the clean Ubuntu
+  26.04 Linux runtime before publication.
+
 - Project gate policy in `ts-crap.json`: `threshold`, `require_coverage`, and
   `fail_on_empty`, with per-setting CLI overrides, including explicit `=false`.
 - Standalone `ts-crap-coverage-helpers.zip` release asset with SHA-256 checksum,

@@ -1,0 +1,91 @@
+name: Installation compatibility
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: installation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  installers:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    timeout-minutes: 15
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            target: x86_64-unknown-linux-gnu
+            installer: shell
+          - runner: ubuntu-26.04-arm
+            target: aarch64-unknown-linux-gnu
+            installer: shell
+          - runner: macos-26
+            target: aarch64-apple-darwin
+            installer: shell
+          - runner: macos-26-intel
+            target: x86_64-apple-darwin
+            installer: shell
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+            installer: powershell
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+            installer: powershell
+            powershell: pwsh
+          - runner: ubuntu-26.04
+            target: x86_64-unknown-linux-gnu
+            installer: homebrew
+          - runner: macos-26
+            target: aarch64-apple-darwin
+            installer: homebrew
+          - runner: macos-26-intel
+            target: x86_64-apple-darwin
+            installer: homebrew
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the pinned published upgrade pair
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          for version in 0.3.0 0.4.0; do
+            gh release download "v$version" --repo "$GITHUB_REPOSITORY" \
+              --pattern "ts-crap-$TARGET.*" --pattern ts-crap-installer.sh \
+              --pattern ts-crap-installer.ps1 --pattern ts-crap.rb --dir "assets/$version"
+          done
+      - name: Install, reinstall, upgrade, and exercise documented CLI behavior
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          INSTALLER: ${{ matrix.installer }}
+          POWERSHELL: ${{ matrix.powershell || 'powershell' }}
+        run: |
+          if [[ "$INSTALLER" == homebrew && "$RUNNER_OS" == Linux ]]; then
+            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          fi
+          python3 scripts/verify-installation.py --assets assets/0.4.0 --version 0.4.0 \
+            --previous-assets assets/0.3.0 --previous-version 0.3.0 \
+            --target "$TARGET" --installer "$INSTALLER" --powershell "$POWERSHELL"
+      - name: Run Linux release in the minimum clean runtime
+        if: runner.os == 'Linux' && matrix.installer == 'shell'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir unpacked
+          tar -xf "assets/0.4.0/ts-crap-$TARGET.tar.xz" -C unpacked
+          executable=$(find "$PWD/unpacked" -type f -name ts-crap)
+          test -n "$executable"
+          docker run --rm --network none \
+            --mount "type=bind,src=$executable,dst=/usr/local/bin/ts-crap,readonly" \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/examples/shop,dst=/project,readonly" \
+            ubuntu:26.04 /bin/sh -ec \
+            'getconf GNU_LIBC_VERSION; ts-crap --version; ts-crap --help >/dev/null; ts-crap --root /project --threshold 20'

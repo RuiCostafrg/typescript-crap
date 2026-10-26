@@ -72,6 +72,12 @@ cancelled. They require no publishing credentials or external coverage-service t
 - **`.github/workflows/mutation.yml`**: all PRs, main pushes and manual runs;
   full production mutation analysis, including Node/Git tests; uploads
   `mutation-results` with diffs and logs even on failure.
+- **`.github/workflows/installation.yml`**: installs and upgrades the pinned
+  published v0.3.0/v0.4.0 pair with real shell, PowerShell, and Homebrew installers.
+  It uses temporary prefixes/taps and tests Linux binaries in a stock Ubuntu 26.04
+  container. Release verification repeats these checks with the candidate assets
+  before publication; tagged releases require successful main installation CI.
+  See [installation verification](docs/INSTALLATION_COMPATIBILITY.md) for limits.
 
 Coverage and mutation artifacts are retained for 14 days. Coverage enforces the production-source line floor documented in
 `docs/QUALITY_BASELINE.md`. Mutation score must be at least 90%; only assertion-killed

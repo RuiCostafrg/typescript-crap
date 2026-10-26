@@ -14,6 +14,11 @@ TypeScript. Available for macOS (Apple Silicon / Intel), Linux (ARM64 / x86-64),
 and Windows (x86-64). See the archive compatibility notes below for Linux runtime
 requirements.
 
+**Linux minimum: Ubuntu 26.04 or a compatible glibc runtime for v0.4.0 and newer
+prebuilt releases.** The new release verification workflow checks both Linux
+architectures in a clean Ubuntu 26.04 container before publication. Earlier releases have different requirements; see
+the archive notes below. Build from source for other environments.
+
 ### macOS and Linux
 
 ```sh
@@ -34,6 +39,9 @@ brew install RuiCostafrg/tap/ts-crap
 brew update && brew upgrade ts-crap
 ```
 
+Homebrew verification covers macOS Apple Silicon/Intel and Linux x86-64.
+Linux ARM64 is covered by the shell installer and manual archives.
+
 ### Windows PowerShell
 
 ```powershell
@@ -50,6 +58,9 @@ Ubuntu 26.04 (ARM64 and x86-64) and macOS 26 (Apple Silicon and Intel).
 Linux binaries from these builds require Ubuntu 26.04 or a compatible glibc
 runtime; the v0.3.0 and earlier Linux archives retain their glibc 2.35+ baseline. Linux binaries target glibc distributions;
 Alpine/musl, Android/Termux, and Windows ARM64 do not have native release builds.
+
+See [installation verification](docs/INSTALLATION_COMPATIBILITY.md) for tested
+install/upgrade paths, runtime boundaries, and outstanding release-time evidence.
 
 Git is needed for diff mode, and authenticated `gh` for GitHub PR discovery.
 Starting with the next release after v0.4.0, the optional coverage collectors are

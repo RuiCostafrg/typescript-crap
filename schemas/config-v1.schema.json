@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/RuiCostafrg/typescript-crap/main/schemas/config-v1.schema.json",
+  "title": "ts-crap project configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": {
+          "pattern": "(^/|\\\\|(^|/)\\.\\.(/|(?![\\s\\S])))"
+        },
+        "description": "Root-relative glob, compiled and additionally validated by globset at runtime."
+      },
+      "default": []
+    },
+    "exclude": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": {
+          "pattern": "(^/|\\\\|(^|/)\\.\\.(/|(?![\\s\\S])))"
+        },
+        "description": "Root-relative glob, compiled and additionally validated by globset at runtime."
+      },
+      "default": []
+    },
+    "threshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1.7976931348623157e+308,
+      "default": 10
+    },
+    "require_coverage": {
+      "type": "boolean",
+      "default": false
+    },
+    "fail_on_empty": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

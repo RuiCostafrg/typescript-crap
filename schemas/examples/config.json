@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ],
+  "threshold": 10,
+  "require_coverage": true,
+  "fail_on_empty": true
+}

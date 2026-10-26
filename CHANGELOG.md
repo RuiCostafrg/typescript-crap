@@ -4,6 +4,15 @@
 
 ### Added
 
+- A 1.x compatibility contract and versioned JSON Schemas for configuration,
+  native coverage, baselines, and reports, with executable contract checks.
+- Reproducible adoption tests against pinned Hono, TanStack Table, and Vite React
+  TypeScript sources, recording real Vitest coverage, runtime, and peak memory.
+- A complete CI adoption guide and copyable workflow with reviewed policy and
+  baselines, fresh coverage, PR selection, and JSON/SARIF upload on gate failure.
+- Installed-guide verification in CI and candidate releases, plus a manual
+  published-release verification workflow for the same path and live Homebrew.
+
 - Installation compatibility checks using real shell, PowerShell, and Homebrew
   installers: fresh install, reinstall, upgrade, and installed TS/TSX/coverage
   smoke tests. Release verification checks candidate assets and the clean Ubuntu
@@ -22,6 +31,15 @@
 - Rust `ScanOptions` gate fields are now `Option` values. Use `None` to inherit
   project policy, or wrap explicit values in `Some`, including `Some(false)`.
   Resolved defaults remain threshold 10 and both completeness gates disabled.
+
+### Fixed
+
+- Parse valid semicolon-free generic overloads in interface/object types and
+  TypeScript 5 type-only wildcard exports without changing runtime locations.
+  Remaining syntax errors still reject the whole scan.
+- Import direct Istanbul default-argument counters so JSON reports can supply
+  declaration-line evidence for default initializers. LCOV's missing evidence
+  remains a completeness failure.
 
 ## 0.4.0 — 2026-10-25
 

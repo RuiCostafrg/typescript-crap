@@ -125,11 +125,12 @@ try {
       assert(Object.values(native.files).some(file => Object.values(file.lines).includes(0)), label);
 
       if (framework === 'vitest') {
-        // Reporters may omit default-argument declaration lines from statement
-        // evidence. Executing the default is not enough to invent a covered line.
+        // JSON carries direct default-argument counters; LCOV line records may
+        // omit their declaration lines. Never invent evidence for that omission.
+        const missingDefault = format === 'lcov';
         const gapReport = run(scanner, ['--root', root, 'packages/ui/coverage-gaps',
-          '--coverage', full.output, '--require-coverage', '--threshold', '4', '--format', 'json'], 1);
-        assert.equal(JSON.parse(gapReport.stdout).functions_missing_coverage, 1, label);
+          '--coverage', full.output, '--require-coverage', '--threshold', '4', '--format', 'json'], missingDefault ? 1 : 0);
+        assert.equal(JSON.parse(gapReport.stdout).functions_missing_coverage, Number(missingDefault), label);
         const complex = fullReport.functions.filter(f => f.path.includes('/panels/'));
         assert(complex.length >= 9, `${label}: nested callbacks must be scored separately`);
         for (const name of ['quantityLabel', 'ItemList', 'OrderPanel', 'loadMessage', 'AsyncPanel', 'Résumé']) {

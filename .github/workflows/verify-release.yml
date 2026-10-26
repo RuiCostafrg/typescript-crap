@@ -70,6 +70,8 @@ jobs:
           "$executable" --root "$GITHUB_WORKSPACE/examples/shop" --threshold 20
           python3 "$GITHUB_WORKSPACE/scripts/verify-coverage-bundle.py" \
             --archive "$PWD/ts-crap-coverage-helpers.zip" --scanner "$executable"
+          python3 "$GITHUB_WORKSPACE/scripts/verify-ci-guide.py" \
+            --archive "$PWD/ts-crap-coverage-helpers.zip" --scanner "$executable"
           if [[ "$TARGET" == *linux* ]]; then
             docker run --rm --network none \
               --mount "type=bind,src=$executable,dst=/usr/local/bin/ts-crap,readonly" \

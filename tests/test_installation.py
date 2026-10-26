@@ -5,6 +5,7 @@ import io
 from pathlib import Path
 import tarfile
 import tempfile
+import sys
 import unittest
 import zipfile
 
@@ -94,3 +95,22 @@ class InstallationEvidenceTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     installation.stage(source, source / 'staged', target, version, 'shell')
             self.assertFalse((source / 'staged').exists())
+
+
+class InstallationCommandTests(unittest.TestCase):
+    def test_slow_command_timeout_keeps_partial_stdout_and_stderr(self):
+        command = [sys.executable, '-c',
+                   "import sys,time; print('output-'+str(17*13),flush=True); "
+                   "print('error-'+str(13*19),file=sys.stderr,flush=True); time.sleep(10)"]
+        with self.assertRaises(RuntimeError) as failure:
+            installation.run(command, timeout=1)
+        message = str(failure.exception)
+        self.assertIn('timed out after 1 seconds', message)
+        self.assertIn('output-221', message.splitlines())
+        self.assertIn('error-247', message.splitlines())
+
+    def test_command_override_keeps_real_exit_failures_and_output(self):
+        command = [sys.executable, '-c', "print('complete'); raise SystemExit(7)"]
+        self.assertEqual(installation.run(command, expected=7, timeout=10), 'complete\n')
+        with self.assertRaisesRegex(RuntimeError, 'expected 0, got 7'):
+            installation.run(command, timeout=10)

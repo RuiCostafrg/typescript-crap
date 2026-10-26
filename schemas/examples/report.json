@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "threshold": 2.0,
+  "files_scanned": 1,
+  "failed": false,
+  "files_missing_coverage": 0,
+  "functions_missing_coverage": 0,
+  "completeness_failed": false,
+  "functions": [
+    {
+      "identity": "e8a52265274110cdae68413c134609980f23c1bf6aeb3d540ec25268469ca07c",
+      "path": "example.ts",
+      "name": "example",
+      "line": 1,
+      "column": 8,
+      "column_utf16": 8,
+      "end_line": 4,
+      "complexity": 2,
+      "coverage": 1.0,
+      "crap": 2.0,
+      "failed": false
+    }
+  ]
+}

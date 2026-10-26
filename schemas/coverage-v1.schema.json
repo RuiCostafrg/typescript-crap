@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/RuiCostafrg/typescript-crap/main/schemas/coverage-v1.schema.json",
+  "title": "ts-crap native source-bound coverage v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "files"
+  ],
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[\\\\:]"
+          }
+        },
+        {
+          "not": {
+            "pattern": "(^/|/(?![\\s\\S])|//|(^|/)\\.{1,2}(/|(?![\\s\\S])))"
+          }
+        }
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "minLength": 64,
+      "maxLength": 64
+    }
+  },
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "files": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/path"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sha256",
+          "lines"
+        ],
+        "properties": {
+          "sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "lines": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[1-9][0-9]*(?![\\s\\S])"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            },
+            "description": "Canonical positive line keys; runtime enforces platform integer/source bounds and u64 counts."
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "threshold": 2.0,
+  "functions": [
+    {
+      "path": "example.ts",
+      "name": "example",
+      "identity": "e8a52265274110cdae68413c134609980f23c1bf6aeb3d540ec25268469ca07c",
+      "crap": 2.0
+    }
+  ]
+}

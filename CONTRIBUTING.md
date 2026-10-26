@@ -45,6 +45,20 @@ Windows). This separate suite installs pinned npm dependencies in a temporary
 workspace and requires network access. See [the framework coverage matrix](docs/FRAMEWORK_COVERAGE.md)
 for versions, assertions, and source-map limits. CI runs it on Linux, macOS, and Windows.
 
+Schemas and the clean installed-tool CI guide have executable checks:
+
+```sh
+npm ci --ignore-scripts --prefix tests/tooling
+node scripts/verify-contracts.mjs target/debug/ts-crap
+python3 scripts/bundle-coverage.py target/helper-bundle
+python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap --vitest tests/tooling/node_modules/vitest/vitest.mjs
+```
+
+[Independent adoption validation](docs/ADOPTION.md) documents the pinned upstream
+source harness and measurements. CI runs both checks separately and retains their
+reports. `verify-published.yml` verifies published assets and live Homebrew after
+release; candidate verification does not replace that publication evidence.
+
 Use `-j 1` on the Termux/proot development machine to limit compiler/linker memory.
 The minimum supported Rust version is **1.90**, matching the current lockfile's
 `tree-sitter-language` requirement; CI also checks that toolchain. Stable is tested

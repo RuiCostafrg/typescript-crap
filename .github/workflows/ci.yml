@@ -137,3 +137,63 @@ jobs:
           tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
       - run: actionlint
+  contracts-and-guide:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: '1.90'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tests/tooling/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund --prefix tests/tooling
+      - run: cargo build --locked
+      - name: Schemas and executable compatibility contract
+        run: node scripts/verify-contracts.mjs target/debug/ts-crap
+      - name: Installed CI guide with direct Node and actual Vitest
+        run: |
+          python3 scripts/bundle-coverage.py target/helper-bundle
+          python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap
+          python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap --vitest tests/tooling/node_modules/vitest/vitest.mjs --output target/ci-guide-reports
+      - name: Retain the deliberately failing PR's reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-guide-reports
+          path: target/ci-guide-reports/
+          if-no-files-found: warn
+          retention-days: 14
+  independent-adoption:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: '1.90'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tests/tooling/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund --prefix tests/tooling
+      - run: cargo build --locked --release
+      - name: Unmodified pinned service, TSX application and workspace sources
+        run: python3 scripts/measure-adoption.py --scanner target/release/ts-crap --build-profile release --workspace "$RUNNER_TEMP/independent-projects" --output target/adoption.json
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: independent-adoption
+          path: target/adoption.json
+          if-no-files-found: warn
+          retention-days: 14

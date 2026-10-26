@@ -259,3 +259,37 @@ fn duplicate_istanbul_evidence_is_rejected_before_publication() {
         assert_no_staging(dir.path());
     }
 }
+
+#[test]
+fn default_argument_counters_supply_direct_evidence_and_reject_invalid_metadata() {
+    for count in [0, 2] {
+        let dir = common::project(&[(
+            "a.ts",
+            "export function f(value = 1) {\n  return value;\n}\n",
+        )]);
+        let raw = json!({"a.ts":{"path":"a.ts", "statementMap":{"0":{"start":{"line":2,"column":2}}},
+            "s":{"0":2}, "branchMap":{"0":{"type":"default-arg","locations":[{"start":{"line":1,"column":26}}]}}, "b":{"0":[count]}}}).to_string();
+        let out = collect(dir.path(), "istanbul", &raw, "");
+        assert!(out.status.success(), "{out:?}");
+        let options = ts_crap::ScanOptions {
+            root: dir.path().into(),
+            coverage: Some(dir.path().join("native.json")),
+            require_coverage: Some(true),
+            ..Default::default()
+        };
+        let report = ts_crap::scan(&options).unwrap();
+        assert_eq!(report.functions_missing_coverage, 0);
+        assert_eq!(
+            report.functions[0].coverage,
+            if count == 0 { 0.5 } else { 1.0 }
+        );
+    }
+    for counters in [json!([]), json!([1, 2]), json!([-1]), json!(null)] {
+        let dir = fixture();
+        let raw = json!({"a.ts":{"path":"a.ts", "statementMap":{},"s":{},
+            "branchMap":{"0":{"type":"default-arg","locations":[{"start":{"line":1,"column":0}}]}}, "b":{"0":counters}}}).to_string();
+        let out = collect(dir.path(), "istanbul", &raw, "");
+        assert!(!out.status.success(), "{out:?}");
+        assert!(!dir.path().join("native.json").exists());
+    }
+}

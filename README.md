@@ -492,7 +492,9 @@ base64). Flat source maps v3, relative paths, `sourceRoot`, and file URLs are
 supported. Maps must embed `sourcesContent` matching the pre-test snapshot;
 URL schemes such as webpack virtual paths and indexed maps are rejected with an
 error. Configure the reporter to remap these to original TypeScript instead.
-Statement starts map using their UTF-16 generated column; LCOV maps line segments.
+Statement starts and direct Istanbul `default-arg` initializer counters map using
+their UTF-16 generated column; LCOV maps line segments and may omit default
+initializer declaration lines. Use JSON for complete evidence in those functions.
 Uncovered overlapping statements/segments keep a line uncovered. This conservative
 line approximation does not claim branch coverage. Existing native V8 collection
 remains available for Node's direct TypeScript execution.
@@ -509,3 +511,16 @@ pinned framework versions, repeat-run checks, and source-map limitations.
 function fingerprints. Upload it with your repository's SARIF integration; output
 does not change gate exit codes. Text and error diagnostics escape controls and
 bidirectional formatting characters; JSON retains raw values for machine readers.
+
+### Compatibility and CI adoption
+
+The [1.x compatibility contract](docs/COMPATIBILITY.md) defines scoring, exit codes,
+configuration, report fields, baseline identities, migrations, and Rust API
+stability. [Versioned JSON Schemas and examples](schemas/README.md) cover the four
+machine-readable documents.
+
+The [CI adoption guide](docs/CI_ADOPTION.md) and
+[copyable GitHub workflow](examples/ci/github-actions.yml) cover reviewed baselines,
+fresh Vitest coverage, PR selection, and reports retained on failed gates.
+[Independent adoption measurements](docs/ADOPTION.md) record the actual projects,
+versions, coverage limits, runtime, memory, and v1 resource-budget decision.

@@ -107,8 +107,26 @@ async function convert(root, files, records) {
   if (unmapped) throw new Error(`${unmapped} coverage locations could not be source-mapped; configure the test tool to emit remapped TypeScript coverage`);
 }
 function istanbul(raw) {
-  return Object.entries(raw).map(([key, file]) => ({ path: file.path || key, map: file.inputSourceMap,
-    hits: Object.entries(file.statementMap).map(([id, location]) => ({ line: location.start.line, column: location.start.column, count: integer(file.s[id]) })) }));
+  return Object.entries(raw).map(([key, file]) => {
+    const hits = Object.entries(file.statementMap).map(([id, location]) => ({
+      line: location.start.line, column: location.start.column, count: integer(file.s[id]),
+    }));
+    // Reporters record default-argument execution in branch metadata rather than
+    // statementMap. These are direct initializer hits, not inferred function hits.
+    for (const [id, branch] of Object.entries(file.branchMap ?? {})) {
+      if (branch.type !== 'default-arg') continue;
+      const counts = file.b?.[id];
+      if (!Array.isArray(branch.locations) || !branch.locations.length
+          || !Array.isArray(counts) || counts.length !== branch.locations.length) {
+        throw new Error('Invalid default-argument coverage');
+      }
+      for (let index = 0; index < counts.length; index++) {
+        const location = branch.locations[index];
+        hits.push({ line: location.start.line, column: location.start.column, count: integer(counts[index]) });
+      }
+    }
+    return { path: file.path || key, map: file.inputSourceMap, hits };
+  });
 }
 function lcov(raw) {
   const records = [];

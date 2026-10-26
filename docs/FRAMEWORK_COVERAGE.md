@@ -73,13 +73,16 @@ or event-dispatch environment is implied.
 - Failing actual Vitest assertions must prevent native coverage publication.
   Stale and during-collection mutation tests edit the Unicode TSX module itself.
 
-The `coverage-gaps/DefaultPanel.tsx` fixture is scanned separately: its destructured
-default argument executes in tests, but statement/line reporters can omit the
-declaration line's evidence. The regression check requires the completeness gate
-to reject that missing evidence. The primary TSX fixtures still require complete
-coverage and the original threshold of 4. For this reporter limitation, putting a
-fallback in a body statement (as in `OrderPanel`) gives the line reporter an
-explicit statement to record; the importer does not infer hits from branch counts.
+The `coverage-gaps/DefaultPanel.tsx` fixture is scanned separately. Istanbul JSON
+provides direct `default-arg` counters for destructured default initializers; the
+importer now maps those counters alongside statement starts. JSON completeness
+must pass, including when a zero count correctly records an unexecuted default.
+Malformed default-argument locations/counter arrays reject the import. LCOV lacks
+those records and can omit the declaration line; its completeness check must
+still reject missing evidence. Use JSON for these functions, or place a fallback
+in an explicit body statement (as in `OrderPanel`). Arbitrary branch totals are
+never used to infer statement execution. The primary TSX fixtures still require
+complete coverage and the original threshold of 4.
 
 ## Source-map limits
 

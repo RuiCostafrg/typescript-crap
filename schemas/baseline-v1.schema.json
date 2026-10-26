@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/RuiCostafrg/typescript-crap/main/schemas/baseline-v1.schema.json",
+  "title": "ts-crap regression baseline v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "threshold",
+    "functions"
+  ],
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[\\\\:]"
+          }
+        },
+        {
+          "not": {
+            "pattern": "(^/|/(?![\\s\\S])|//|(^|/)\\.{1,2}(/|(?![\\s\\S])))"
+          }
+        }
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "minLength": 64,
+      "maxLength": 64
+    }
+  },
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "threshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1.7976931348623157e+308
+    },
+    "functions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "name",
+          "identity",
+          "crap"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "#/$defs/path"
+          },
+          "name": {
+            "type": "string"
+          },
+          "identity": {
+            "$ref": "#/$defs/sha256"
+          },
+          "crap": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1.7976931348623157e+308
+          }
+        }
+      }
+    }
+  }
+}

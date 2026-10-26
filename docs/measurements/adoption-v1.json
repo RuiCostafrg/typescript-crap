@@ -1,0 +1,231 @@
+{
+  "measured_at": "2026-10-26T23:23:08.902925+00:00",
+  "platform": "Android-12-aarch64-64bit",
+  "node": "v26.3.1",
+  "scanner_version": "ts-crap 0.4.0",
+  "scanner_build_profile": "release",
+  "vitest": "5.0.5",
+  "coverage_provider": "istanbul",
+  "scanner_sha256": "e22dac5a19540874a870abd9aa2b442660448767a0064ffc0814dba1de454640",
+  "rss_definition": "Peak resident set of each scanner process, measured by a fresh POSIX resource worker; KiB. Collection is wall-clock only.",
+  "limits": "Targeted smoke tests exercise real source; they are not full upstream test suites or full applications. Source subsets and revisions are explicit.",
+  "projects": [
+    {
+      "name": "hono-service",
+      "repository": "https://github.com/honojs/hono.git",
+      "commit": "76b7109d0c15dc85a947741593630460224f7b81",
+      "version": "v4.6.12",
+      "kind": "Node/web service",
+      "paths": [
+        "src"
+      ],
+      "coverage": [
+        "src/**/*.ts"
+      ],
+      "sparse": [
+        "src",
+        "package.json",
+        "LICENSE",
+        "tsconfig.json"
+      ],
+      "source_unmodified": true,
+      "uncovered": {
+        "elapsed_seconds": 1.1575100519694388,
+        "peak_rss_kib": 17996.0,
+        "exit_code": 1
+      },
+      "covered": {
+        "elapsed_seconds": 1.012598958099261,
+        "peak_rss_kib": 18228.0,
+        "exit_code": 1
+      },
+      "collection_and_scans_seconds": 19.03822952392511,
+      "files_scanned": 166,
+      "functions": 956,
+      "functions_missing_coverage": 63,
+      "files_missing_coverage": 39,
+      "partially_covered_functions": 28,
+      "uncovered_functions": 899,
+      "mapping_failures": 0,
+      "repeat_identical": true,
+      "highest_scores": [
+        {
+          "path": "src/jsx/dom/render.ts",
+          "name": "build",
+          "complexity": 59,
+          "coverage": 0.0,
+          "crap": 3540.0
+        },
+        {
+          "path": "src/jsx/dom/render.ts",
+          "name": "applyProps",
+          "complexity": 47,
+          "coverage": 0.0,
+          "crap": 2256.0
+        },
+        {
+          "path": "src/router/linear-router/router.ts",
+          "name": "LinearRouter::match",
+          "complexity": 41,
+          "coverage": 0.0,
+          "crap": 1722.0
+        },
+        {
+          "path": "src/jsx/dom/render.ts",
+          "name": "applyNodeObject",
+          "complexity": 28,
+          "coverage": 0.0,
+          "crap": 812.0
+        },
+        {
+          "path": "src/utils/url.ts",
+          "name": "_getQueryParam",
+          "complexity": 27,
+          "coverage": 0.0,
+          "crap": 756.0
+        }
+      ]
+    },
+    {
+      "name": "tanstack-monorepo",
+      "repository": "https://github.com/TanStack/table.git",
+      "commit": "f4dc742b7b8bf01bb7dd10ee7d2f238400befcc0",
+      "version": "v8.21.3",
+      "kind": "React/core workspace monorepo",
+      "paths": [
+        "packages/table-core/src",
+        "packages/react-table/src"
+      ],
+      "coverage": [
+        "packages/table-core/src/**/*.ts",
+        "packages/react-table/src/**/*.tsx"
+      ],
+      "sparse": [
+        "packages/table-core/src",
+        "packages/react-table/src",
+        "package.json",
+        "LICENSE",
+        "tsconfig.json"
+      ],
+      "source_unmodified": true,
+      "uncovered": {
+        "elapsed_seconds": 0.2509997400920838,
+        "peak_rss_kib": 18248.0,
+        "exit_code": 1
+      },
+      "covered": {
+        "elapsed_seconds": 0.21821468695998192,
+        "peak_rss_kib": 17972.0,
+        "exit_code": 1
+      },
+      "collection_and_scans_seconds": 9.810836402932182,
+      "files_scanned": 38,
+      "functions": 710,
+      "functions_missing_coverage": 24,
+      "files_missing_coverage": 2,
+      "partially_covered_functions": 23,
+      "uncovered_functions": 589,
+      "mapping_failures": 0,
+      "repeat_identical": true,
+      "highest_scores": [
+        {
+          "path": "packages/table-core/src/utils/getFilteredRowModel.ts",
+          "name": "getFilteredRowModel::<anonymous@9:10>::<anonymous@16:7>",
+          "complexity": 17,
+          "coverage": 0.0,
+          "crap": 306.0
+        },
+        {
+          "path": "packages/table-core/src/utils/getSortedRowModel.ts",
+          "name": "getSortedRowModel::<anonymous@8:10>::<anonymous@11:7>::sortData::<anonymous@50:27>",
+          "complexity": 17,
+          "coverage": 0.0,
+          "crap": 306.0
+        },
+        {
+          "path": "packages/table-core/src/features/RowSorting.ts",
+          "name": "createColumn::column.toggleSorting::<anonymous@372:24>",
+          "complexity": 16,
+          "coverage": 0.0,
+          "crap": 272.0
+        },
+        {
+          "path": "packages/table-core/src/features/ColumnSizing.ts",
+          "name": "createHeader::header.getResizeHandler::<anonymous@347:14>",
+          "complexity": 10,
+          "coverage": 0.0,
+          "crap": 110.0
+        },
+        {
+          "path": "packages/table-core/src/sortingFns.ts",
+          "name": "compareAlphanumeric",
+          "complexity": 10,
+          "coverage": 0.0,
+          "crap": 110.0
+        }
+      ]
+    },
+    {
+      "name": "vite-react-ts-app",
+      "repository": "https://github.com/vitejs/vite.git",
+      "commit": "e954a9cda0b5254be495a937333a0be1b8503d8f",
+      "version": "create-vite React TypeScript template at pinned commit",
+      "kind": "TSX application",
+      "paths": [
+        "packages/create-vite/template-react-ts/src"
+      ],
+      "coverage": [
+        "packages/create-vite/template-react-ts/src/**/*.tsx"
+      ],
+      "sparse": [
+        "packages/create-vite/template-react-ts",
+        "package.json",
+        "LICENSE",
+        "tsconfig.json"
+      ],
+      "source_unmodified": true,
+      "uncovered": {
+        "elapsed_seconds": 0.035410520853474736,
+        "peak_rss_kib": 18272.0,
+        "exit_code": 0
+      },
+      "covered": {
+        "elapsed_seconds": 0.07021484384313226,
+        "peak_rss_kib": 18244.0,
+        "exit_code": 0
+      },
+      "collection_and_scans_seconds": 8.009654476074502,
+      "files_scanned": 2,
+      "functions": 3,
+      "functions_missing_coverage": 0,
+      "files_missing_coverage": 0,
+      "partially_covered_functions": 0,
+      "uncovered_functions": 2,
+      "mapping_failures": 0,
+      "repeat_identical": true,
+      "highest_scores": [
+        {
+          "path": "packages/create-vite/template-react-ts/src/App.tsx",
+          "name": "App::<anonymous@27:20>",
+          "complexity": 1,
+          "coverage": 0.0,
+          "crap": 2.0
+        },
+        {
+          "path": "packages/create-vite/template-react-ts/src/App.tsx",
+          "name": "App::<anonymous@27:20>::<anonymous@27:35>",
+          "complexity": 1,
+          "coverage": 0.0,
+          "crap": 2.0
+        },
+        {
+          "path": "packages/create-vite/template-react-ts/src/App.tsx",
+          "name": "App",
+          "complexity": 1,
+          "coverage": 1.0,
+          "crap": 1.0
+        }
+      ]
+    }
+  ]
+}

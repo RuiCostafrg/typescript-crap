@@ -1,0 +1,5 @@
+[
+  {"name":"hono-service","repository":"https://github.com/honojs/hono.git","commit":"76b7109d0c15dc85a947741593630460224f7b81","version":"v4.6.12","kind":"Node/web service","paths":["src"],"coverage":["src/**/*.ts"],"sparse":["src","package.json","LICENSE","tsconfig.json"]},
+  {"name":"tanstack-monorepo","repository":"https://github.com/TanStack/table.git","commit":"f4dc742b7b8bf01bb7dd10ee7d2f238400befcc0","version":"v8.21.3","kind":"React/core workspace monorepo","paths":["packages/table-core/src","packages/react-table/src"],"coverage":["packages/table-core/src/**/*.ts","packages/react-table/src/**/*.tsx"],"sparse":["packages/table-core/src","packages/react-table/src","package.json","LICENSE","tsconfig.json"]},
+  {"name":"vite-react-ts-app","repository":"https://github.com/vitejs/vite.git","commit":"e954a9cda0b5254be495a937333a0be1b8503d8f","version":"create-vite React TypeScript template at pinned commit","kind":"TSX application","paths":["packages/create-vite/template-react-ts/src"],"coverage":["packages/create-vite/template-react-ts/src/**/*.tsx"],"sparse":["packages/create-vite/template-react-ts","package.json","LICENSE","tsconfig.json"]}
+]

@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/RuiCostafrg/typescript-crap/main/schemas/report-v1.schema.json",
+  "title": "ts-crap JSON report v1",
+  "type": "object",
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[\\\\:]"
+          }
+        },
+        {
+          "not": {
+            "pattern": "(^/|/(?![\\s\\S])|//|(^|/)\\.{1,2}(/|(?![\\s\\S])))"
+          }
+        }
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "minLength": 64,
+      "maxLength": 64
+    }
+  },
+  "required": [
+    "version",
+    "threshold",
+    "files_scanned",
+    "failed",
+    "files_missing_coverage",
+    "functions_missing_coverage",
+    "completeness_failed",
+    "functions"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "threshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1.7976931348623157e+308
+    },
+    "files_scanned": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "failed": {
+      "type": "boolean"
+    },
+    "files_missing_coverage": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "functions_missing_coverage": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "completeness_failed": {
+      "type": "boolean"
+    },
+    "functions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "identity",
+          "path",
+          "name",
+          "line",
+          "column",
+          "column_utf16",
+          "end_line",
+          "complexity",
+          "coverage",
+          "crap",
+          "failed"
+        ],
+        "properties": {
+          "identity": {
+            "$ref": "#/$defs/sha256"
+          },
+          "path": {
+            "$ref": "#/$defs/path"
+          },
+          "name": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "column_utf16": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "end_line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "complexity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "coverage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "crap": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1.7976931348623157e+308
+          },
+          "failed": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  },
+  "description": "Readers must tolerate additive output fields. Cross-field scoring/completeness invariants are validated by executable contract tests."
+}

@@ -67,5 +67,7 @@ Changed source, failing tests, malformed or unmappable evidence abort publicatio
 Already remapped TypeScript coverage works directly. Generated JavaScript needs
 flat source maps v3 with `sourcesContent` matching the snapshot; webpack virtual
 URLs and indexed maps are unsupported. Coverage is a conservative line-based
-approximation, not branch coverage. Missing evidence is never treated as covered.
+approximation, not branch coverage. Istanbul JSON also maps direct `default-arg`
+initializer counters; LCOV can omit that declaration-line evidence. Use JSON for
+complete default-argument evidence. Missing evidence is never treated as covered.
 These helpers run trusted test commands with your permissions; they are not a sandbox.

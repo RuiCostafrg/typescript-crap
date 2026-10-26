@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use tree_sitter::{Node, Parser};
 
@@ -29,6 +30,24 @@ fn is_function(kind: &str) -> bool {
 
 fn text<'a>(node: Node<'_>, source: &'a str) -> &'a str {
     &source[node.byte_range()]
+}
+
+fn skip_type_trivia(mut source: &str) -> &str {
+    loop {
+        source = source.trim_start_matches(char::is_whitespace);
+        if source.starts_with("//") {
+            if let Some((_, rest)) = source.split_once('\n') {
+                source = rest;
+                continue;
+            }
+        } else if let Some(comment) = source.strip_prefix("/*")
+            && let Some((_, rest)) = comment.split_once("*/")
+        {
+            source = rest;
+            continue;
+        }
+        return source;
+    }
 }
 
 fn local_name(node: Node<'_>, source: &str) -> String {
@@ -303,11 +322,121 @@ impl Analyzer {
                 .context("cannot initialize TypeScript parser")?;
             *slot = Some(parser);
         }
-        let tree = slot
-            .as_mut()
-            .context("TypeScript parser unavailable")?
+        let parser = slot.as_mut().context("TypeScript parser unavailable")?;
+        let mut parsed_source = Cow::Borrowed(source);
+        let mut tree = parser
             .parse(source, None)
             .context("TypeScript parser failed")?;
+        // The grammar can end an interface/object type early when a return type is
+        // followed by another generic call signature without an explicit ';'.
+        // Inserting that optional separator at an existing line boundary leaves
+        // every runtime line/column and original coverage hash unchanged. Never
+        // ignore an ERROR or synthesize braces; the repaired parse must be valid.
+        for _ in 0..64 {
+            if !tree.root_node().has_error() {
+                break;
+            }
+            let mut separators = Vec::new();
+            let mut type_exports = Vec::new();
+            let mut token_end = 0;
+            walk(tree.root_node(), |node| {
+                // TypeScript 5's `export type *` is parsed as an otherwise
+                // complete export with one ERROR containing only `type`.
+                // Erasing that type-only modifier preserves byte coordinates.
+                if node.is_error()
+                    && text(node, &parsed_source) == "type"
+                    && let Some(parent) = node.parent()
+                    && parent.kind() == "export_statement"
+                    && parent
+                        .child_by_field_name("source")
+                        .is_some_and(|source| !source.has_error())
+                {
+                    let mut previous = node.prev_sibling();
+                    while previous.is_some_and(|sibling| sibling.kind() == "comment") {
+                        previous = previous.and_then(|sibling| sibling.prev_sibling());
+                    }
+                    let mut next = node.next_sibling();
+                    while next.is_some_and(|sibling| sibling.kind() == "comment") {
+                        next = next.and_then(|sibling| sibling.next_sibling());
+                    }
+                    if previous.is_some_and(|sibling| sibling.kind() == "export")
+                        && next.is_some_and(|sibling| {
+                            matches!(sibling.kind(), "*" | "namespace_export")
+                                && !sibling.has_error()
+                        })
+                    {
+                        type_exports.push(node.byte_range());
+                    }
+                }
+                if node.kind() == "type_parameters"
+                    && node.parent().is_some_and(|parent| parent.is_error())
+                    && let Some(parameters) = node.next_named_sibling()
+                    && parameters.kind() == "formal_parameters"
+                    && !parameters.has_error()
+                    && skip_type_trivia(&parsed_source[parameters.end_byte()..]).starts_with(':')
+                {
+                    let mut ancestor = node.parent();
+                    let mut in_type_body = false;
+                    while let Some(parent) = ancestor {
+                        if matches!(parent.kind(), "interface_body" | "object_type") {
+                            in_type_body = true;
+                            break;
+                        }
+                        ancestor = parent.parent();
+                    }
+                    let previous = &parsed_source[..token_end];
+                    let gap = &parsed_source[token_end..node.start_byte()];
+                    if in_type_body
+                        && gap.contains('\n')
+                        && skip_type_trivia(gap).is_empty()
+                        && !previous.ends_with(['{', ';', ','])
+                    {
+                        separators.push(token_end);
+                    }
+                }
+                if node.is_missing()
+                    && node.kind() == "}"
+                    && node.parent().is_some_and(|parent| {
+                        matches!(parent.kind(), "interface_body" | "object_type")
+                    })
+                {
+                    let mut previous = node.prev_named_sibling();
+                    while previous.is_some_and(|sibling| sibling.kind() == "comment") {
+                        previous = previous.and_then(|sibling| sibling.prev_named_sibling());
+                    }
+                    if let Some(previous) = previous
+                        && previous.kind() == "call_signature"
+                        && !previous.has_error()
+                    {
+                        let remainder = &parsed_source[previous.end_byte()..];
+                        let next = skip_type_trivia(remainder);
+                        let gap = &remainder[..remainder.len() - next.len()];
+                        if gap.contains('\n') && next.starts_with('<') {
+                            separators.push(previous.end_byte());
+                        }
+                    }
+                }
+                if node.child_count() == 0 && !node.is_missing() && node.kind() != "comment" {
+                    token_end = node.end_byte();
+                }
+                true
+            });
+            if separators.is_empty() && type_exports.is_empty() {
+                break;
+            }
+            for range in type_exports {
+                parsed_source.to_mut().replace_range(range, "    ");
+            }
+            separators.sort_unstable();
+            separators.dedup();
+            for byte in separators.into_iter().rev() {
+                parsed_source.to_mut().insert(byte, ';');
+            }
+            tree = parser
+                .parse(parsed_source.as_ref(), None)
+                .context("TypeScript parser failed")?;
+        }
+        let source = parsed_source.as_ref();
         if tree.root_node().has_error() {
             let mut issue = None;
             // Descend to the earliest concrete ERROR or missing token using the

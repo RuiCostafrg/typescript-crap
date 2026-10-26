@@ -80,12 +80,24 @@ and Homebrew are unavailable in that local environment, so their results must
 come from hosted CI. This matrix is not evidence of compatibility with older
 macOS or Windows releases.
 
-The live Homebrew tap was still at v0.3.0 when inspected on 2026-10-26; its
-v0.4.0 synchronization awaited the protected `homebrew` deployment approval in
-[this verified sync run](https://github.com/RuiCostafrg/homebrew-tap/actions/runs/40189299841).
-Generated-formula installation checks do not verify that a formula has been
-published to the live tap. Before beta acceptance, finish that protected sync,
-review/merge its formula PR after Tap CI passes, and verify
-`brew install RuiCostafrg/tap/ts-crap` and `brew update && brew upgrade ts-crap`
-against the published tap. No release or tap publication is performed by these
-read-only verification jobs.
+Hosted installation CI for [PR #24](https://github.com/RuiCostafrg/typescript-crap/pull/24)
+passed every advertised installer target. The
+[candidate release dry run](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40415478665)
+on exact main commit `ed9105e820e8dddf4ba302d068389d3911114766` passed all five
+archives, candidate installers/upgrades, installed helper bundles, three Homebrew
+targets, and both clean Linux runtimes.
+
+The provenance-verified live tap [v0.4.0 update](https://github.com/RuiCostafrg/homebrew-tap/pull/8)
+is merged; [required Tap CI](https://github.com/RuiCostafrg/homebrew-tap/actions/runs/40418867847)
+passed on its exact head. The manual `verify-published.yml` workflow additionally
+checks live formula bytes against the published asset, installs from unchanged
+GitHub URLs, upgrades from the exact previous formula in tap history with
+`brew update`/`brew upgrade`, and repeats fresh/reinstall TS/TSX/coverage checks on
+macOS ARM64/Intel and Linux x86-64. It refuses an existing ts-crap install or tap,
+and removes its own installation/tap afterward. Use a clean runner.
+
+After each new release, run that workflow with its version and a previous published
+upgrade fixture. Leave guide verification enabled for releases containing helpers.
+For the legacy v0.4.0 tap check only, disable guide verification and select v0.3.0
+as the previous version. A green candidate run remains distinct from a green
+published-path run; publication evidence must be recorded after it occurs.

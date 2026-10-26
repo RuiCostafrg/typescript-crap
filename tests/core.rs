@@ -395,3 +395,121 @@ fn root_selection_order_deduplication_and_output_protection() {
     opts.pr = Some("1".into());
     assert!(scan(&opts).is_err());
 }
+
+#[test]
+fn semicolon_free_generic_interface_signatures_preserve_runtime_metrics_and_locations() {
+    let root = tempfile::tempdir().unwrap();
+    let source = "interface Get<E> {\n <K extends keyof E['Variables']>(key: K): E['Variables'][K]\n <K extends keyof E>(key: K): E[K]\n}\nexport function actual(value: boolean) {\n  if (value) return 1;\n  return 0;\n}\n";
+    fs::write(root.path().join("a.ts"), source).unwrap();
+    let opts = options(root.path());
+    let report = scan(&opts).unwrap();
+    assert_eq!(report.functions.len(), 1);
+    let f = &report.functions[0];
+    assert_eq!(
+        (f.name.as_str(), f.line, f.column, f.end_line, f.complexity),
+        ("actual", 5, 8, 8, 2)
+    );
+    for broken in [
+        source.replace("return 1;", "return (;"),
+        source.replace("}\nexport", "\nexport"),
+        source.replace("<K extends keyof E>(key: K)", "<K extends >(key:)"),
+    ] {
+        fs::write(root.path().join("a.ts"), broken).unwrap();
+        assert!(scan(&opts).is_err());
+    }
+    fs::write(root.path().join("a.ts"), source.replace("[K]\n", "[K];\n")).unwrap();
+    assert_eq!(scan(&opts).unwrap().functions[0].identity, f.identity);
+}
+
+#[test]
+fn generic_interface_intersection_overloads_recover_without_changing_source_columns() {
+    let root = tempfile::tempdir().unwrap();
+    let prefix = "interface Respond {\n <T,U>(text:T,status?:U): Response & TypedResponse<T,U,'text'>\n <T,U>(text:T,init?:Init): Response & TypedResponse<T,U,'text'>\n <T,U>(text:T): Response & TypedResponse<T,U,'text'>\n}\n";
+    let body = "export const Render = () => <span>👋</span>;\n";
+    for newline in ["\n", "\r\n"] {
+        let prefix = prefix.replace("\n <T,U>", "\n // overload comment\n <T,U>");
+        let expected_line = prefix.lines().count() + 1;
+        let source = format!("{prefix}{body}").replace('\n', newline);
+        fs::write(root.path().join("view.tsx"), &source).unwrap();
+        let report = scan(&options(root.path())).unwrap();
+        assert_eq!(report.functions.len(), 1);
+        let f = &report.functions[0];
+        assert_eq!(
+            (
+                f.name.as_str(),
+                f.line,
+                f.column,
+                f.column_utf16,
+                f.complexity
+            ),
+            ("Render", expected_line, 23, 23, 1)
+        );
+        fs::write(
+            root.path().join("view.tsx"),
+            source.replace("<span>👋</span>", "<span>"),
+        )
+        .unwrap();
+        assert!(scan(&options(root.path())).is_err());
+    }
+}
+
+#[test]
+fn type_only_wildcard_exports_preserve_functions_and_reject_malformed_exports() {
+    let root = tempfile::tempdir().unwrap();
+    let body = "export function actual(flag:boolean){if(flag)return 1;return 0;}";
+    let opts = options(root.path());
+    for export in [
+        "export type * from './types';",
+        "export /* before */ type /* after */ * from './types';",
+        "export type * as namespace from './types';",
+    ] {
+        fs::write(root.path().join("a.ts"), format!("{export}\n{body}")).unwrap();
+        let report = scan(&opts).unwrap();
+        assert_eq!(report.functions.len(), 1);
+        let f = &report.functions[0];
+        assert_eq!((f.line, f.column, f.complexity), (2, 8, 2));
+        fs::write(
+            root.path().join("a.ts"),
+            format!("{}\n{body}", export.replacen("type", "    ", 1)),
+        )
+        .unwrap();
+        assert_eq!(scan(&opts).unwrap().functions[0].identity, f.identity);
+    }
+    for broken in [
+        "export type * from ;",
+        "export type * as from './types';",
+        "export default type * from './types';",
+        "export type * from './types'; function broken( {",
+        "interface Broken { <T>(x:T):T\n <U>(x:U):U",
+    ] {
+        fs::write(root.path().join("a.ts"), broken).unwrap();
+        assert!(scan(&opts).is_err(), "{broken}");
+    }
+    fs::write(root.path().join("a.ts"), format!("// export type * from './types';\nconst text = \"export type * from './types';\";\n{body}")).unwrap();
+    assert_eq!(scan(&opts).unwrap().functions[0].line, 3);
+}
+
+#[test]
+fn generic_object_type_overloads_do_not_hide_runtime_errors_or_change_identity() {
+    let root = tempfile::tempdir().unwrap();
+    let prefix = "type UseStateType = {\n <T>(initialState:T|(()=>T)): [T, UpdateStateFunction<T>]\n <T = undefined>(): [T | undefined, UpdateStateFunction<T | undefined>]\n}\n";
+    let body = "export const useState: UseStateType = <T>(initialState?: T):T => initialState!;\n";
+    let opts = options(root.path());
+    fs::write(root.path().join("a.ts"), format!("{prefix}{body}")).unwrap();
+    let report = scan(&opts).unwrap();
+    assert_eq!(report.functions.len(), 1);
+    let f = &report.functions[0];
+    assert_eq!((f.name.as_str(), f.line, f.complexity), ("useState", 5, 1));
+    fs::write(
+        root.path().join("a.ts"),
+        format!("{}{body}", prefix.replace("]\n", "];\n")),
+    )
+    .unwrap();
+    assert_eq!(scan(&opts).unwrap().functions[0].identity, f.identity);
+    fs::write(
+        root.path().join("a.ts"),
+        format!("{prefix}{}", body.replace("initialState!", "(")),
+    )
+    .unwrap();
+    assert!(scan(&opts).is_err());
+}

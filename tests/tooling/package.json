@@ -1,0 +1,13 @@
+{
+  "name": "ts-crap-release-validation",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": ">=24" },
+  "devDependencies": {
+    "ajv": "8.17.1",
+    "vitest": "5.0.5",
+    "@vitest/coverage-istanbul": "5.0.5",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  }
+}

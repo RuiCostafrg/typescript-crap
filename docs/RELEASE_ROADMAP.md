@@ -48,9 +48,8 @@ Linux/macOS/Windows matrix with Node 24.
 Local validation on 2026-10-26 passed all six framework/provider/reporter
 combinations,
 including 13 Vitest behavioral cases covering complex TSX, async errors, nested
-handlers, lazy imports, and Unicode paths. Reporter gaps for default-argument
-lines are checked separately and documented; missing evidence still fails the
-completeness gate. Framework validation used Node 26.3.1 on Linux aarch64
+handlers, lazy imports, and Unicode paths. Direct Istanbul JSON default-argument counters now supply initializer-line
+evidence; LCOV gaps are checked separately and still fail the completeness gate. Framework validation used Node 26.3.1 on Linux aarch64
 (Termux/proot). All 132 Rust tests, all 14 Python tests, formatting, Node script
 syntax, and actionlint 1.7.12 passed during item 2 implementation; the seven
 importer regression tests were also rerun after expanding the fixtures. Hosted Node 24 and
@@ -83,7 +82,7 @@ The [archive smoke workflow](../.github/workflows/verify-release.yml) verifies
 checksums and runs unpacked binaries. Extend verification to the advertised
 installation and upgrade paths.
 
-Implementation in progress: the [installation matrix](../.github/workflows/installation.yml)
+Implemented: the [installation matrix](../.github/workflows/installation.yml)
 tests a pinned published v0.3.0/v0.4.0 pair through real shell, PowerShell, and
 Homebrew installers. Candidate release verification uses the same runner against
 assembled assets before publication. Linux verification also runs both archive
@@ -91,49 +90,71 @@ architectures in stock Ubuntu 26.04 containers without network access or build
 tools. See [installation compatibility](INSTALLATION_COMPATIBILITY.md) for exact
 coverage and remaining publication evidence.
 
-- [ ] Test shell and PowerShell installation and upgrades in clean environments.
+- [x] Test shell and PowerShell installation and upgrades in clean environments.
 - [ ] Verify Homebrew formula publication, installation, and upgrades.
-- [ ] Decide the supported Linux runtime baseline: current builds require Ubuntu
+- [x] Decide the supported Linux runtime baseline: current builds require Ubuntu
   26.04 or compatible glibc. Broaden compatibility or prominently document that
   minimum, and test the chosen minimum runtime explicitly.
-- [ ] Confirm the documented commands work on each advertised platform.
+- [x] Confirm the documented commands work on each advertised platform.
 
-Local validation on 2026-10-26 passed the real ARM64 Linux shell install,
-reinstall, and upgrade checks, including TS/TSX and coverage-gate smoke commands,
-and all 19 Python regression tests. Hosted PowerShell, Homebrew, and clean Docker
-runtime results remain pending. The live Homebrew tap's v0.4.0 sync still requires
-its protected deployment approval and reviewed formula update; generated-formula
-checks do not establish live tap publication. These items stay unchecked until
-their evidence is available.
+The item-4 PR passed its entire hosted installation matrix and was merged as
+`ed9105e820e8dddf4ba302d068389d3911114766`. The
+[candidate release dry run](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40415478665)
+on that exact main commit passed all five archives, installed helper bundles,
+shell/PowerShell upgrades, three Homebrew targets, and both clean Linux runtimes.
+The live tap's [v0.4.0 formula PR](https://github.com/RuiCostafrg/homebrew-tap/pull/8)
+was provenance-verified and merged after all three required Tap CI checks passed.
+The final unchecked item requires the new live-tap upgrade verification; generated
+formulas alone do not establish that published-path behavior.
 
 ## During beta, before v1.0.0
 
 ### 5. Define the 1.x compatibility contract
 
-- [ ] Document stability expectations for scoring rules, exit codes,
+- [x] Document stability expectations for scoring rules, exit codes,
   configuration, JSON/SARIF output, baseline identities, and the public Rust API.
-- [ ] Publish machine-readable JSON Schemas for configuration, native coverage,
+- [x] Publish machine-readable JSON Schemas for configuration, native coverage,
   baselines, and JSON reports, with examples checked against them.
-- [ ] Define migration and versioning rules for scoring or identity changes.
+- [x] Define migration and versioning rules for scoring or identity changes.
+
+The [compatibility contract](COMPATIBILITY.md) and [versioned schemas](../schemas/README.md)
+cover these promises. Executable validation checks examples, actual CLI reports,
+baselines, malformed inputs, and additive report fields in CI. Schema publication
+is versioned with the source package and repository release tag.
 
 ### 6. Validate independent project adoption
 
-- [ ] Exercise 3–5 independent projects, including a Node service, a TSX
+- [x] Exercise 3–5 independent projects, including a Node service, a TSX
   application, and a monorepo.
-- [ ] Record setup friction, surprising scores, coverage mapping failures,
+- [x] Record setup friction, surprising scores, coverage mapping failures,
   runtime, and peak memory, with reproducible project/version details.
-- [ ] Resolve adoption-blocking defects and document supported limitations.
-- [ ] Use those measurements to decide whether configurable resource budgets and
+- [x] Resolve adoption-blocking defects and document supported limitations.
+- [x] Use those measurements to decide whether configurable resource budgets and
   subprocess timeouts must block v1.0.0. The current local trusted-command CLI
   does not promise sandboxing or bounded resource use.
 
+The [adoption report](ADOPTION.md), pinned manifest, harness, and raw measurements
+record Hono, TanStack Table, and the Vite React TSX app. Actual Vitest JSON coverage
+imports and repeated scans succeeded without editing upstream source. Parser and
+default-initializer evidence blockers were fixed with regressions. Resource budgets
+are deferred for the documented trusted local CLI scope; no resource guarantees
+are inferred from these measurements.
+
 ### 7. Publish a complete CI adoption guide
 
-- [ ] Provide a working example covering fresh coverage collection, reviewed
+- [x] Provide a working example covering fresh coverage collection, reviewed
   baseline creation, PR gating, and report upload even when the quality gate fails.
-- [ ] Explain exit codes, stale reports, Git history requirements, and safe
+- [x] Explain exit codes, stale reports, Git history requirements, and safe
   repeated execution under the importer's fresh-destination requirement.
 - [ ] Verify the guide from a clean checkout using published installation paths.
+
+The [CI guide](CI_ADOPTION.md) and [copyable workflow](../examples/ci/github-actions.yml)
+use reviewed base policy/baselines and retain reports on failed gates. Executable
+clean-project validation passes with both direct Node and real Vitest collection.
+Candidate release verification runs the guide with packaged CLI/helper bytes on
+all five targets. The final published-path check requires a new release containing
+the standalone helper bundle; v0.4.0 predates it. Run `verify-published.yml` after
+publication and live tap synchronization, then record the exact evidence here.
 
 ## Release acceptance
 

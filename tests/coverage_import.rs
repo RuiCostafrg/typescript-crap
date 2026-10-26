@@ -39,7 +39,7 @@ fn istanbul_and_lcov_native_fixtures_roundtrip_and_detect_staleness() {
     ] {
         let dir = fixture(); let out = collect(dir.path(),format,&raw, "");
         assert!(out.status.success(), "{}",String::from_utf8_lossy(&out.stderr));
-        let mut options = ts_crap::ScanOptions { root: dir.path().into(), coverage:Some(dir.path().join("native.json")), require_coverage: true, ..Default::default() };
+        let mut options = ts_crap::ScanOptions { root: dir.path().into(), coverage:Some(dir.path().join("native.json")), require_coverage: Some(true), ..Default::default() };
         let report = ts_crap::scan(&options).unwrap(); assert!(!report.failed); assert_eq!(report.functions[0].coverage,1.0);
         fs::write(dir.path().join("a.ts"), "export function changed(){return 2;}").unwrap();
         assert!(ts_crap::scan(&options).unwrap_err().to_string().contains("SHA256 mismatch"));

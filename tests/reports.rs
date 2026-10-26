@@ -265,7 +265,7 @@ fn every_presentation_combination_preserves_report_gate_totals_and_machine_order
     fs::write(directory.path().join("a.ts"), "function pass(){return 1;} function fail(a:boolean,b:boolean){if(a)return 1;if(b)return 2;return 3;} function another(a:boolean,b:boolean){if(a)return 4;if(b)return 5;return 6;}").unwrap();
     let mut report = scan(&ScanOptions {
         root: directory.path().into(),
-        require_coverage: true,
+        require_coverage: Some(true),
         ..Default::default()
     })
     .unwrap();

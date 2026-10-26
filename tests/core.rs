@@ -39,7 +39,7 @@ fn known_crap_values_locations_order_and_strict_gate() {
         "export function low() {\n  return 1;\n}\nexport function high(a:boolean,b:boolean) {\n  if(a && b) return 1;\n  return 0;\n}\n",
     );
     let mut opts = options(root.path());
-    opts.threshold = 12.0;
+    opts.threshold = Some(12.0);
     let r = scan(&opts).unwrap();
     assert_eq!(r.version, 1);
     assert_eq!(r.threshold, 12.0);
@@ -64,17 +64,17 @@ fn known_crap_values_locations_order_and_strict_gate() {
         (f.complexity, f.coverage, f.crap, f.failed),
         (3, 0.0, 12.0, false)
     );
-    opts.threshold = 11.9;
+    opts.threshold = Some(11.9);
     assert!(scan(&opts).unwrap().failed);
     assert!(!scan(&opts).unwrap().functions[0].failed);
-    opts.threshold = 0.0;
+    opts.threshold = Some(0.0);
     assert!(scan(&opts).unwrap().functions[0].failed);
     for threshold in [-1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        opts.threshold = threshold;
+        opts.threshold = Some(threshold);
         assert!(scan(&opts).is_err());
     }
     let default = ScanOptions::default();
-    assert_eq!(default.threshold, 10.0);
+    assert_eq!(default.threshold, None);
     assert_eq!(default.root, PathBuf::from("."));
     assert!(
         default.paths.is_empty()
@@ -318,7 +318,7 @@ fn reports_replace_forbidden_controls_and_preserve_legal_whitespace() {
 fn reports_render_complete_values_and_escaping() {
     let root = project("export const data = { ['a&<b>\\\"\\\'']() { return 1; } };");
     let mut opts = options(root.path());
-    opts.threshold = 1.0;
+    opts.threshold = Some(1.0);
     let r = scan(&opts).unwrap();
     let value: serde_json::Value =
         serde_json::from_str(&render(&r, Format::Json).unwrap()).unwrap();

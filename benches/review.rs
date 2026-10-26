@@ -64,7 +64,7 @@ fn main() {
     fs::write(root.join("source.ts"), &source).unwrap();
     let options = ScanOptions {
         root: root.into(),
-        threshold: 0.0,
+        threshold: Some(0.0),
         ..Default::default()
     };
     let mut report = scan(&options).unwrap();

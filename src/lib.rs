@@ -58,30 +58,33 @@ impl RenderOptions {
 pub struct ScanOptions {
     pub root: PathBuf,
     pub paths: Vec<PathBuf>,
-    pub threshold: f64,
+    /// Explicit override; None inherits project configuration, then 10.
+    pub threshold: Option<f64>,
     pub coverage: Option<PathBuf>,
     pub diff: Option<String>,
     pub pr: Option<String>,
     pub config: Option<PathBuf>,
     pub include: Vec<String>,
     pub exclude: Vec<String>,
-    pub require_coverage: bool,
-    pub fail_on_empty: bool,
+    /// Explicit override; None inherits project configuration, then false.
+    pub require_coverage: Option<bool>,
+    /// Explicit override; None inherits project configuration, then false.
+    pub fail_on_empty: Option<bool>,
 }
 impl Default for ScanOptions {
     fn default() -> Self {
         Self {
             root: PathBuf::from("."),
             paths: Vec::new(),
-            threshold: 10.0,
+            threshold: None,
             coverage: None,
             diff: None,
             pr: None,
             config: None,
             include: Vec::new(),
             exclude: Vec::new(),
-            require_coverage: false,
-            fail_on_empty: false,
+            require_coverage: None,
+            fail_on_empty: None,
         }
     }
 }
@@ -136,9 +139,11 @@ impl Report {
 }
 
 /// Analyze selected files. No report is published and no repository is modified.
-/// An empty selection is a passing report with zero functions.
+/// Empty selections pass unless the effective fail_on_empty policy is enabled.
 pub fn scan(args: &ScanOptions) -> Result<Report> {
-    validate_threshold(args.threshold)?;
+    if let Some(threshold) = args.threshold {
+        validate_threshold(threshold)?;
+    }
     if args.diff.is_some() && args.pr.is_some() {
         bail!("--diff and --pr are mutually exclusive");
     }
@@ -150,6 +155,9 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
         bail!("project root is not a directory");
     }
     let rules = config::Rules::load(&root, args.config.as_ref(), &args.include, &args.exclude)?;
+    let threshold = args.threshold.unwrap_or(rules.threshold);
+    let require_coverage = args.require_coverage.unwrap_or(rules.require_coverage);
+    let fail_on_empty = args.fail_on_empty.unwrap_or(rules.fail_on_empty);
     let selection = selection::files(&root, &args.paths, args.diff.as_deref(), args.pr.as_deref())?;
     let mut files = selection.paths;
     let mut identities = std::collections::BTreeSet::new();
@@ -218,7 +226,7 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
                 complexity: method.complexity,
                 coverage: cov,
                 crap,
-                failed: crap > args.threshold,
+                failed: crap > threshold,
             });
         }
     }
@@ -227,13 +235,12 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
     }
     functions
         .sort_unstable_by(|a, b| (&a.path, a.line, a.column).cmp(&(&b.path, b.line, b.column)));
-    let completeness_failed = (args.fail_on_empty && functions.is_empty())
-        || (args.require_coverage
-            && (files_missing_coverage > 0 || functions_missing_coverage > 0));
+    let completeness_failed = (fail_on_empty && functions.is_empty())
+        || (require_coverage && (files_missing_coverage > 0 || functions_missing_coverage > 0));
     let report = Report {
         version: 1,
         source_paths: files.clone(),
-        threshold: args.threshold,
+        threshold,
         files_scanned: files.len(),
         files_missing_coverage,
         functions_missing_coverage,

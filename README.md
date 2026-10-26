@@ -375,8 +375,9 @@ provenance. Public source and forks remain available under MIT.
 
 ## Adoption gates (v0.2)
 
-`ts-crap.json` in the project root configures selection. Unknown fields and unknown
-versions are errors. Globs use forward slashes relative to `--root`; `*` stops at directory boundaries and `**` matches
+`ts-crap.json` in the project root configures selection and gate policy. Unknown
+fields and unknown versions are errors. Globs use forward slashes relative to
+`--root`; `*` stops at directory boundaries and `**` matches
 across directories. Includes default to all supported sources and excludes default
 to empty. Built-in generated/dependency exclusions and ignore rules still apply.
 Explicit paths and Git selection intersect these rules. Excludes always win.
@@ -385,15 +386,44 @@ Explicit paths and Git selection intersect these rules. Excludes always win.
 ancestor config is loaded, so results do not depend on the caller's directory.
 
 ```json
-{"version":1,"include":["packages/**/src/**/*.ts"],"exclude":["**/*.test.ts"]}
+{
+  "version": 1,
+  "include": ["packages/**/src/**/*.ts", "packages/**/src/**/*.tsx"],
+  "exclude": ["**/*.test.ts", "**/*.test.tsx"],
+  "threshold": 10,
+  "require_coverage": true,
+  "fail_on_empty": true
+}
 ```
+
+Gate settings resolve independently: an explicit CLI value overrides the project
+config, which overrides the built-in defaults (`threshold: 10`,
+`require_coverage: false`, `fail_on_empty: false`). A threshold must be finite and
+nonnegative; zero is valid. Boolean settings must be JSON booleans. Nulls,
+duplicate fields, and invalid gate settings are errors even when overridden by
+the CLI. Existing selection-only configs keep their previous behavior.
+
+Bare boolean flags enable their gates. Use `=false` to disable a configured gate,
+or `=true` to enable it explicitly. Boolean values require `=` so a following path
+is never consumed as a value:
+
+```sh
+ts-crap --coverage imported-coverage.json
+ts-crap --threshold 20 --require-coverage=false --fail-on-empty=false
+```
+
+The resolved threshold appears in reports and baselines. Baseline comparison
+still requires matching thresholds, and a baseline cannot suppress a configured
+completeness failure. In the Rust API, `ScanOptions.threshold`,
+`require_coverage`, and `fail_on_empty` are `Option` overrides: `None` inherits
+policy; `Some(value)` explicitly overrides it, including `Some(false)`.
 
 `--require-coverage` fails when any selected file has no coverage entry or any
 function-owned statement start has no line entry. A recorded zero is evidence of
 an uncovered line; it still affects CRAP normally. Reports count files and
 functions missing evidence. `--fail-on-empty` fails selections with no implemented
-functions. Both are opt-in; empty diffs keep passing by default. Completeness
-failures remain failures when using a regression baseline.
+functions. Both are opt-in through config or flags; empty diffs keep passing by
+default. Completeness failures remain failures when using a regression baseline.
 
 ### Regression baselines
 

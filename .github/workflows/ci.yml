@@ -81,6 +81,33 @@ jobs:
           scanner=target/debug/ts-crap
           if [[ "$RUNNER_OS" == Windows ]]; then scanner="$scanner.exe"; fi
           python3 scripts/verify-coverage-bundle.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner "$scanner"
+  framework-coverage:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    timeout-minutes: 15
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: "1.90"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tests/fixtures/frameworks/package-lock.json
+      - run: cargo build --locked
+      - name: Real Jest and Vitest coverage imports and gates
+        shell: bash
+        run: |
+          scanner=target/debug/ts-crap
+          if [[ "$RUNNER_OS" == Windows ]]; then scanner="$scanner.exe"; fi
+          node scripts/test-framework-coverage.mjs "$scanner"
   audit:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     timeout-minutes: 15

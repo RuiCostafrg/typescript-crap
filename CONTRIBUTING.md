@@ -39,6 +39,12 @@ node --check scripts/coverage.mjs
 node --check scripts/coverage-hook.mjs
 ```
 
+For actual Jest/Vitest reporter integration, build the scanner and run
+`node scripts/test-framework-coverage.mjs target/debug/ts-crap` (add `.exe` on
+Windows). This separate suite installs pinned npm dependencies in a temporary
+workspace and requires network access. See [the framework coverage matrix](docs/FRAMEWORK_COVERAGE.md)
+for versions, assertions, and source-map limits. CI runs it on Linux, macOS, and Windows.
+
 Use `-j 1` on the Termux/proot development machine to limit compiler/linker memory.
 The minimum supported Rust version is **1.90**, matching the current lockfile's
 `tree-sitter-language` requirement; CI also checks that toolchain. Stable is tested

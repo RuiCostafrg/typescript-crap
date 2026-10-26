@@ -1,0 +1,8 @@
+{
+  "name": "@ts-crap-fixture/service",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@ts-crap-fixture/core": "1.0.0"
+  }
+}

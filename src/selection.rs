@@ -40,8 +40,16 @@ fn excluded(path: &Path, root: &Path) -> bool {
 }
 
 fn checked(path: &Path, root: &Path) -> Result<PathBuf> {
-    if path.symlink_metadata()?.file_type().is_symlink() {
-        bail!("symbolic link source is not supported: {}", path.display());
+    // Check before canonicalizing or matching selection rules: a directory link
+    // must not substitute another Git/baseline identity for the requested source.
+    // The caller has already canonicalized the project root itself.
+    for ancestor in path.ancestors().take_while(|ancestor| *ancestor != root) {
+        if ancestor.symlink_metadata()?.file_type().is_symlink() {
+            bail!(
+                "symbolic link source is not supported: {}",
+                ancestor.display()
+            );
+        }
     }
     let absolute = path
         .canonicalize()
@@ -97,7 +105,13 @@ fn diff_files(root: &Path, reference: &str) -> Result<BTreeMap<PathBuf, String>>
         ],
     )?;
     let top = String::from_utf8(git(root, &["rev-parse", "--show-toplevel"])?)?;
-    let top = PathBuf::from(top.trim_end()).canonicalize()?;
+    // Git appends one LF. Whitespace preceding it belongs to the directory name.
+    let top = top
+        .strip_suffix('\n')
+        .context("Git root omitted line terminator")?;
+    #[cfg(windows)]
+    let top = top.strip_suffix('\r').unwrap_or(top);
+    let top = PathBuf::from(top).canonicalize()?;
     let mut result = BTreeMap::new();
     // With rename detection disabled, raw -z records are metadata/path pairs.
     // Object IDs are safe batch requests even when filenames contain newlines.

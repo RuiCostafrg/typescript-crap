@@ -1,11 +1,70 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-use super::{BlobReader, without_crlf};
+use super::{BlobReader, matches_committed, without_crlf};
 use std::{
     fs,
-    io::Write,
+    io::{Cursor, Write},
     path::Path,
     process::{Command, Stdio},
 };
+
+#[test]
+fn streaming_comparison_preserves_boundaries_lone_cr_and_response_framing() {
+    for prefix in [0, 8190, 8191, 8192, 16383] {
+        for suffix in ["", "\r", "\n", "\r\n", "\r\r\n", "\rX\n", "😀\0\r\n"] {
+            let committed = format!("{}{suffix}", "x".repeat(prefix));
+            let normalized: Vec<_> = without_crlf(committed.as_bytes()).collect();
+            for source in [committed.as_bytes(), normalized.as_slice()] {
+                let mut response = committed.as_bytes().to_vec();
+                response.extend(b"\nnext response");
+                let mut reader = Cursor::new(response);
+                assert_eq!(
+                    matches_committed(&mut reader, committed.len() as u64, source).unwrap(),
+                    without_crlf(committed.as_bytes()).eq(without_crlf(source)),
+                    "{prefix}, {suffix:?}"
+                );
+                assert_eq!(reader.position(), committed.len() as u64);
+                for different in [b"".as_slice(), b"different", &[source, b"x"].concat()] {
+                    if different == normalized {
+                        continue;
+                    }
+                    reader.set_position(0);
+                    assert!(
+                        !matches_committed(&mut reader, committed.len() as u64, different).unwrap()
+                    );
+                    assert_eq!(reader.position(), committed.len() as u64);
+                }
+            }
+        }
+    }
+    // CRLF equivalence works in either direction; lone CR is never discarded.
+    assert!(matches_committed(&mut Cursor::new(b"a\nb"), 3, b"a\r\nb").unwrap());
+    assert!(!matches_committed(&mut Cursor::new(b"a\rb"), 3, b"a\nb").unwrap());
+    assert!(!matches_committed(&mut Cursor::new(b"\r\r\n"), 3, b"\r\n").unwrap());
+    assert!(matches_committed(&mut Cursor::new(b"short"), 6, b"short").is_err());
+}
+
+#[test]
+fn malformed_batch_framing_and_truncated_blobs_are_rejected() {
+    use std::io::BufReader;
+    for response in [
+        "id blob 3\nabc!",
+        "id blob 4\nabc",
+        "id blob 3\nabc",
+        "id blob nope\n",
+        "id blob\n",
+    ] {
+        let mut child = Command::new("node")
+            .args(["-e", "process.stdin.once('data',()=>{process.stdout.end(process.argv[1]);process.stdin.destroy();});", response])
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
+        let output = BufReader::new(child.stdout.take().unwrap());
+        let mut reader = BlobReader { child, output };
+        assert!(
+            reader.verify("id", Path::new("a.ts"), "abc").is_err(),
+            "{response:?}"
+        );
+        // Drop must also terminate/reap malformed-response processes.
+    }
+}
 
 #[test]
 fn normalization_changes_only_crlf_pairs() {

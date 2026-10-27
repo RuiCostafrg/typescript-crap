@@ -31,6 +31,161 @@ fn collect(root: &Path, format: &str, fixture: &str, extra: &str) -> std::proces
 fn fixture() -> tempfile::TempDir {
     common::project(&[("a.ts", "export function f(){\nreturn 1;\n}\n")])
 }
+
+#[test]
+fn independent_lcov_test_records_combine_hits_without_changing_source_identity() {
+    for names in [("test_a", "test_b"), ("same", "same"), ("", "")] {
+        for reversed in [false, true] {
+            let dir = common::project(&[(
+                "a.ts",
+                "export function f(a:boolean,b:boolean){\nif(a && b)return 1;\nreturn 0;\n}\n",
+            )]);
+            let mut records = [
+                format!("TN:{}\nSF:a.ts\nDA:2,2\nDA:3,1\nend_of_record\n", names.0),
+                format!("TN:{}\nSF:a.ts\nDA:2,0\nDA:3,0\nend_of_record\n", names.1),
+            ];
+            if reversed {
+                records.reverse();
+            }
+            let out = collect(dir.path(), "lcov", &records.concat(), "");
+            assert!(out.status.success(), "{out:?}");
+            let native: serde_json::Value =
+                serde_json::from_slice(&fs::read(dir.path().join("native.json")).unwrap()).unwrap();
+            assert_eq!(native["files"]["a.ts"]["lines"], json!({"2":2,"3":1}));
+            let report = ts_crap::scan(&ts_crap::ScanOptions {
+                root: dir.path().into(),
+                coverage: Some(dir.path().join("native.json")),
+                require_coverage: Some(true),
+                ..Default::default()
+            })
+            .unwrap();
+            assert!(!report.failed);
+            assert_eq!(report.functions[0].coverage, 1.0);
+            assert_eq!(report.functions[0].crap, 3.0);
+        }
+    }
+}
+
+#[test]
+fn real_lcov_aggregate_retains_positive_test_hits() {
+    // Generated with LCOV v1.16 (dfeb7505ef372f806ddb280b52a90f41cd8169cd):
+    // cd tests/fixtures/lcov && lcov -a covered.info -a uncovered.info -o aggregate.info
+    let dir = common::project(&[(
+        "a.ts",
+        "export function f(a:boolean,b:boolean){\nif(a && b)return 1;\nreturn 0;\n}\n",
+    )]);
+    let out = collect(
+        dir.path(),
+        "lcov",
+        include_str!("fixtures/lcov/aggregate.info"),
+        "",
+    );
+    assert!(out.status.success(), "{out:?}");
+    let report = ts_crap::scan(&ts_crap::ScanOptions {
+        root: dir.path().into(),
+        coverage: Some(dir.path().join("native.json")),
+        require_coverage: Some(true),
+        ..Default::default()
+    })
+    .unwrap();
+    assert!(!report.failed);
+    assert_eq!(report.functions[0].coverage, 1.0);
+    assert_eq!(report.functions[0].crap, 3.0);
+}
+
+#[test]
+fn lcov_repeated_records_add_counts_but_reject_ambiguous_lines_and_overflow() {
+    for (raw, expected) in [
+        (
+            "TN:same\nSF:a.ts\nDA:2,2\nend_of_record\nTN:same\nSF:./a.ts\nDA:2,3\nend_of_record\n",
+            Some(5),
+        ),
+        (
+            "SF:a.ts\nDA:2,0\nend_of_record\nSF:a.ts\nDA:2,0\nend_of_record\n",
+            Some(0),
+        ),
+        ("SF:a.ts\nDA:2,0\nDA:2,1\nend_of_record\n", None),
+        ("SF:a.ts\nDA:2,1\nDA:2,0\nend_of_record\n", None),
+        (
+            "TN:a\nSF:a.ts\nDA:2,9007199254740991\nend_of_record\nTN:b\nSF:a.ts\nDA:2,1\nend_of_record\n",
+            None,
+        ),
+        (
+            "TN:a\nSF:a.ts\nDA:2,9007199254740991\nend_of_record\nTN:a\nSF:a.ts\nDA:2,1\nend_of_record\n",
+            None,
+        ),
+        ("SF:a.ts\nTN:interrupted\nDA:2,1\nend_of_record\n", None),
+    ] {
+        let dir = fixture();
+        let out = collect(dir.path(), "lcov", raw, "");
+        if let Some(count) = expected {
+            assert!(out.status.success(), "{out:?}");
+            let native: serde_json::Value =
+                serde_json::from_slice(&fs::read(dir.path().join("native.json")).unwrap()).unwrap();
+            assert_eq!(native["files"]["a.ts"]["lines"]["2"], count);
+        } else {
+            assert_eq!(out.status.code(), Some(2), "{out:?}");
+            assert!(!dir.path().join("native.json").exists());
+            assert_no_staging(dir.path());
+        }
+    }
+}
+
+#[test]
+fn lcov_tests_add_after_conservative_source_map_overlap() {
+    for reversed in [false, true] {
+        let dir = fixture();
+        let source = fs::read_to_string(dir.path().join("a.ts")).unwrap();
+        let map = json!({"version":3,"sources":["a.ts"],"sourcesContent":[source],"names":[],"mappings":"AACA;AAAA"});
+        fs::write(dir.path().join("generated.js.map"), map.to_string()).unwrap();
+        fs::write(
+            dir.path().join("generated.js"),
+            "x\ny\n//# sourceMappingURL=generated.js.map",
+        )
+        .unwrap();
+        let mut records = [
+            "TN:partial\nSF:generated.js\nDA:1,3\nDA:2,0\nend_of_record\n",
+            "TN:covered\nSF:generated.js\nDA:1,2\nDA:2,1\nend_of_record\n",
+        ];
+        if reversed {
+            records.reverse();
+        }
+        let out = collect(dir.path(), "lcov", &records.concat(), "");
+        assert!(out.status.success(), "{out:?}");
+        let native: serde_json::Value =
+            serde_json::from_slice(&fs::read(dir.path().join("native.json")).unwrap()).unwrap();
+        // Each test first takes min(3,0) or min(2,1); only then do tests add.
+        assert_eq!(native["files"]["a.ts"]["lines"]["2"], 1);
+    }
+}
+
+#[test]
+fn generated_sources_in_one_lcov_test_share_conservative_overlap() {
+    for independent in [false, true] {
+        let dir = fixture();
+        let source = fs::read_to_string(dir.path().join("a.ts")).unwrap();
+        for name in ["first", "second"] {
+            fs::write(
+                dir.path().join(format!("{name}.js")),
+                format!("x\n//# sourceMappingURL={name}.js.map"),
+            )
+            .unwrap();
+            fs::write(dir.path().join(format!("{name}.js.map")), json!({"version":3,"sources":["a.ts"],"sourcesContent":[source],"names":[],"mappings":"AACA"}).to_string()).unwrap();
+        }
+        let raw = format!(
+            "TN:one\nSF:first.js\nDA:1,3\nend_of_record\nTN:{}\nSF:second.js\nDA:1,0\nend_of_record\n",
+            if independent { "two" } else { "one" }
+        );
+        let out = collect(dir.path(), "lcov", &raw, "");
+        assert!(out.status.success(), "{out:?}");
+        let native: serde_json::Value =
+            serde_json::from_slice(&fs::read(dir.path().join("native.json")).unwrap()).unwrap();
+        assert_eq!(
+            native["files"]["a.ts"]["lines"]["2"],
+            if independent { 3 } else { 0 }
+        );
+    }
+}
 #[test]
 fn istanbul_and_lcov_native_fixtures_roundtrip_and_detect_staleness() {
     for (format, raw) in [

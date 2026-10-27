@@ -1,5 +1,54 @@
 # Performance and CI measurement
 
+## Committed Git blob comparison
+
+The committed-byte verifier now compares through an 8 KiB buffer and a reader
+limited to Git's declared blob size. It retains the captured worktree source for
+analysis and source hashing, without allocating a second full committed-source
+buffer. CRLF/LF equivalence, lone CR bytes, batch framing and process cleanup
+remain covered by regression tests.
+
+Measured 2026-10-27 on Android/aarch64 in Ubuntu/proot, Rust 1.96.0 and Git 2.54.0.
+Baseline is `9bdcf9e7f0fa353a6f7b5569949e0cdad1fd9b19`. The same benchmark body
+was built against the retained-buffer verifier and the bounded streaming verifier;
+each executable was saved before rebuilding the other. Source and executable
+hashes, all timing samples and RSS observations are in
+[the raw measurements](measurements/committed-blob-2026-10-27.json).
+
+| Synthetic captured source | Baseline median peak RSS (KiB) | Streaming median peak RSS (KiB) |
+| --- | ---: | ---: |
+| Approximately 1 MiB | 5,652 | 3,760 |
+| Approximately 32 MiB | 69,344 | 35,536 |
+
+Each cell is the median of three fresh processes, alternating baseline/current.
+Each process constructs the source and stores its Git blob outside the timed
+region, then verifies that blob five times (one cold and four warm calls). Peak
+RSS is the parent's `VmHWM`, including setup and runtime overhead, excluding Git
+children. This isolates verification from parsing and reporting; it does not
+measure whole-scan or total process-tree memory. The 32 MiB fixture observed
+about 49% lower parent peak RSS. It is a synthetic local result, not a memory
+guarantee for arbitrary projects.
+
+Other validation builds/tests were active during these measurements. Timing
+samples are retained for inspection but do not establish a throughput speedup.
+There are no timing/RSS assertions in CI.
+
+Reproduce the current implementation with separate fresh invocations:
+
+```sh
+cargo bench --locked -j 1 --bench committed -- 1
+cargo bench --locked -j 1 --bench committed -- 32
+```
+
+For a historical comparison, copy `benches/committed.rs` into a detached checkout
+at the baseline and register its `harness = false` bench target. Set the original
+verifier's test-module path to `committed/tests.rs` so Cargo's bench cfg resolves
+the private tests. This changes test discovery only. Use separate target
+directories, save and hash each executable, and repeat each size in fresh
+processes. Prefer serial measurements without competing validation workloads.
+
+## Scan benchmarks
+
 The scan benchmark now covers both a large file and collections of small files,
 including alternating TypeScript/TSX grammars and copies of the runnable shop,
 inventory and async retry modules. Every case uses real files and source-hashed

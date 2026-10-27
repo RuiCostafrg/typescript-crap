@@ -95,10 +95,11 @@ pub fn execute() -> Result<bool> {
         top: args.top,
     };
     presentation.validate(args.format)?;
+    let default_config = args.root.join("ts-crap.json");
     let config_path = args
         .config
         .clone()
-        .unwrap_or_else(|| args.root.join("ts-crap.json"));
+        .unwrap_or_else(|| default_config.clone());
     let destinations = [&args.write_baseline, &args.output]
         .into_iter()
         .flatten()
@@ -109,9 +110,9 @@ pub fn execute() -> Result<bool> {
         .flatten()
         .map(PathBuf::as_path)
         .collect();
-    if config_path.exists() {
-        protected.push(config_path.as_path());
-    }
+    // Reserve both config locations even when absent: a successful publication
+    // must not create an invalid config for a later default or explicit scan.
+    protected.extend([default_config.as_path(), config_path.as_path()]);
     let publication = crate::output::DestinationPlan::new(&args.root, destinations, protected)?;
     let mut report = ts_crap::scan(&ScanOptions {
         root: args.root.clone(),

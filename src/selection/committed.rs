@@ -42,18 +42,14 @@ impl BlobReader {
             .next()
             .context("Git blob size unavailable")?
             .parse()?;
-        // Only one committed file is buffered at a time; the scan keeps one batch
-        // process instead of starting Git once per source. No filters are executed.
-        let mut committed = Vec::new();
-        self.output
-            .by_ref()
-            .take(size)
-            .read_to_end(&mut committed)?;
+        // Keep one batch process, but only a fixed-size comparison buffer. The
+        // worktree snapshot remains the exact buffer subsequently analyzed/hashed.
+        let matches = matches_committed(&mut self.output, size, source.as_bytes())?;
         let mut terminator = [0];
         self.output.read_exact(&mut terminator)?;
         ensure!(terminator == *b"\n", "invalid Git blob response");
         ensure!(
-            without_crlf(&committed).eq(without_crlf(source.as_bytes())),
+            matches,
             "uncommitted changes in selected source {}; commit or restore it before a diff/PR scan (only CRLF/LF differences are allowed)",
             path.display()
         );
@@ -68,6 +64,32 @@ impl BlobReader {
         );
         Ok(())
     }
+}
+
+fn matches_committed(reader: &mut impl Read, size: u64, source: &[u8]) -> Result<bool> {
+    let mut committed = reader.take(size);
+    let mut expected = without_crlf(source);
+    let mut buffer = [0; 8192];
+    let mut pending_cr = false;
+    let mut matches = true;
+    for offset in (0..size).step_by(buffer.len()) {
+        let length = (size - offset).min(buffer.len() as u64) as usize;
+        // Read exactly the advertised blob, never its framing or the next reply.
+        committed.read_exact(&mut buffer[..length])?;
+        for &byte in &buffer[..length] {
+            if pending_cr && byte != b'\n' {
+                matches &= expected.next() == Some(b'\r');
+            }
+            pending_cr = byte == b'\r';
+            if !pending_cr {
+                matches &= expected.next() == Some(byte);
+            }
+        }
+    }
+    if pending_cr {
+        matches &= expected.next() == Some(b'\r');
+    }
+    Ok(matches && expected.next().is_none())
 }
 
 // Preserve lone CR bytes and all other content. Parsing and source hashes still
@@ -91,4 +113,5 @@ impl Drop for BlobReader {
 }
 
 #[cfg(test)]
+#[path = "committed/tests.rs"]
 mod tests;

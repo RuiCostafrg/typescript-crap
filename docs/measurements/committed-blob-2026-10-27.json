@@ -1,0 +1,186 @@
+{
+  "date": "2026-10-27",
+  "environment": "Android/aarch64 Ubuntu/proot",
+  "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25) (built from a source tarball)",
+  "git": "git version 2.54.0",
+  "before_ref": "9bdcf9e7f0fa353a6f7b5569949e0cdad1fd9b19",
+  "after_source_sha256": "ca72ae297b47b4ae1c8d234cfad5680c88b37ff37c8289c32d3a3db4692dc2db",
+  "benchmark_sha256": "c6b1ff359a03a6a8cad0c109ec1e369b56960f534c7166329d8c7eb82f317729",
+  "executables_sha256": {
+    "before": "a524ab728a7b13bc43c959d9cf02483f386a77cbc7c14a41e545d7c2fb786afe",
+    "after": "bce1a9d9c62af5b82fa286c06f6caffe72afc0d1f606dd95766f07cce678c58b"
+  },
+  "method": "Three fresh processes per variant and size; five verification samples each, first sample cold. Alternating before/after. Source construction and hash-object storage outside timed samples. RSS is parent VmHWM including setup, excluding Git children and analysis.",
+  "concurrent_validation": true,
+  "limits": "Local mobile/proot observation. Validation builds/tests were active; timing samples do not establish a throughput improvement. Synthetic source; no AST or whole-scan memory claim.",
+  "samples": [
+    {
+      "variant": "before",
+      "size_mib": 1,
+      "fresh_process": 1,
+      "bytes": 1048575,
+      "process_peak_rss_kib": 5612,
+      "samples_ms": [
+        75.981719,
+        6.799323,
+        8.910781,
+        7.227344,
+        9.318177
+      ]
+    },
+    {
+      "variant": "after",
+      "size_mib": 1,
+      "fresh_process": 1,
+      "bytes": 1048575,
+      "process_peak_rss_kib": 3760,
+      "samples_ms": [
+        42.012135,
+        8.111718999999999,
+        4.924219,
+        4.460312,
+        4.17698
+      ]
+    },
+    {
+      "variant": "before",
+      "size_mib": 1,
+      "fresh_process": 2,
+      "bytes": 1048575,
+      "process_peak_rss_kib": 5668,
+      "samples_ms": [
+        82.460364,
+        7.132239,
+        8.791719,
+        13.271719,
+        12.339218
+      ]
+    },
+    {
+      "variant": "after",
+      "size_mib": 1,
+      "fresh_process": 2,
+      "bytes": 1048575,
+      "process_peak_rss_kib": 3860,
+      "samples_ms": [
+        157.491666,
+        9.539843,
+        6.349532,
+        14.954323,
+        13.500209000000002
+      ]
+    },
+    {
+      "variant": "before",
+      "size_mib": 1,
+      "fresh_process": 3,
+      "bytes": 1048575,
+      "process_peak_rss_kib": 5652,
+      "samples_ms": [
+        85.171927,
+        9.502448,
+        9.573594,
+        9.189271,
+        8.534583
+      ]
+    },
+    {
+      "variant": "after",
+      "size_mib": 1,
+      "fresh_process": 3,
+      "bytes": 1048575,
+      "process_peak_rss_kib": 3756,
+      "samples_ms": [
+        117.473646,
+        14.5275,
+        11.490833,
+        17.6725,
+        7.871458
+      ]
+    },
+    {
+      "variant": "before",
+      "size_mib": 32,
+      "fresh_process": 1,
+      "bytes": 33554431,
+      "process_peak_rss_kib": 69344,
+      "samples_ms": [
+        308.941718,
+        300.57453200000003,
+        309.79031299999997,
+        253.852291,
+        245.191875
+      ]
+    },
+    {
+      "variant": "after",
+      "size_mib": 32,
+      "fresh_process": 1,
+      "bytes": 33554431,
+      "process_peak_rss_kib": 35544,
+      "samples_ms": [
+        203.734792,
+        78.55557300000001,
+        114.016614,
+        119.185625,
+        87.777344
+      ]
+    },
+    {
+      "variant": "before",
+      "size_mib": 32,
+      "fresh_process": 2,
+      "bytes": 33554431,
+      "process_peak_rss_kib": 69364,
+      "samples_ms": [
+        305.84812500000004,
+        175.811406,
+        216.938907,
+        212.781562,
+        203.12224
+      ]
+    },
+    {
+      "variant": "after",
+      "size_mib": 32,
+      "fresh_process": 2,
+      "bytes": 33554431,
+      "process_peak_rss_kib": 35476,
+      "samples_ms": [
+        155.69677000000001,
+        132.867083,
+        156.88843699999998,
+        128.3675,
+        104.265938
+      ]
+    },
+    {
+      "variant": "before",
+      "size_mib": 32,
+      "fresh_process": 3,
+      "bytes": 33554431,
+      "process_peak_rss_kib": 69340,
+      "samples_ms": [
+        245.217709,
+        190.338907,
+        233.193594,
+        190.110052,
+        173.808021
+      ]
+    },
+    {
+      "variant": "after",
+      "size_mib": 32,
+      "fresh_process": 3,
+      "bytes": 33554431,
+      "process_peak_rss_kib": 35536,
+      "samples_ms": [
+        153.43744800000002,
+        74.79177100000001,
+        86.328281,
+        78.49895799999999,
+        76.26812500000001
+      ]
+    }
+  ]
+}

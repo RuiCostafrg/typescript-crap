@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Reject symlinked source ancestors before Git identity and selection rules can
+  substitute a different baseline path or silently omit a changed violation.
+- Preserve whitespace in Git repository-root names when selecting committed
+  changes, including nested project roots.
+- Combine independent LCOV test counters after conservative source-map overlap
+  reduction. Repeated captures of the same test/source add before mapping;
+  duplicate lines within one record and unsafe counter sums are rejected.
+- Reserve default and explicit config destinations before they exist, preventing
+  reports and baseline snapshots from creating an invalid future project config.
+
+### Changed
+
+- Compare committed Git blobs with a fixed-size buffer instead of retaining a
+  second full source copy, preserving CRLF/LF equivalence and batch verification.
+
+These fixes do not change native coverage/config/baseline document versions,
+function scoring, or fingerprints. LCOV users should recollect native coverage
+with the matching updated helper and review resulting gate/baseline differences;
+old imported evidence cannot be repaired by rerunning the scanner alone.
+Because accepted LCOV input can produce different gate outcomes, these changes
+target the next major release (2.0.0) under the 1.x compatibility contract, not a
+1.x patch or minor release. This implementation PR does not publish a release.
+
 ## 1.0.0
 
 ### Added

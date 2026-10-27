@@ -513,10 +513,13 @@ bidirectional formatting characters; JSON retains raw values for machine readers
 
 ### Compatibility and CI adoption
 
-The [1.x compatibility contract](docs/COMPATIBILITY.md) defines scoring, exit codes,
+The [2.x compatibility contract](docs/COMPATIBILITY.md) defines scoring, exit codes,
 configuration, report fields, baseline identities, migrations, and Rust API
 stability. [Versioned JSON Schemas and examples](schemas/README.md) cover the four
 machine-readable documents.
+
+For v1 installations, follow the [v2 migration guide](docs/MIGRATING_TO_V2.md),
+including fresh LCOV collection and review of changed gate/baseline results.
 
 The [CI adoption guide](docs/CI_ADOPTION.md) and
 [copyable GitHub workflow](examples/ci/github-actions.yml) cover reviewed baselines,

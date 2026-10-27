@@ -10,7 +10,7 @@ The [installation workflow](../.github/workflows/installation.yml) verifies a
 pinned published upgrade pair, v0.3.0 to v0.4.0. The
 [release verification workflow](../.github/workflows/verify-release.yml) repeats
 installation and upgrades using the candidate release assets before publication.
-It upgrades from the fixed v0.3.0 compatibility fixture; update that fixture
+It upgrades v2 candidates from the published v1.0.0 release; update that fixture
 explicitly if its supported upgrade range changes. Tagged publication requires
 successful installation CI on the source commit as well as the existing Rust,
 coverage, mutation, and release checks.

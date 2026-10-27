@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.0.0
 
 ### Fixed
 
@@ -23,9 +23,9 @@ These fixes do not change native coverage/config/baseline document versions,
 function scoring, or fingerprints. LCOV users should recollect native coverage
 with the matching updated helper and review resulting gate/baseline differences;
 old imported evidence cannot be repaired by rerunning the scanner alone.
-Because accepted LCOV input can produce different gate outcomes, these changes
-target the next major release (2.0.0) under the 1.x compatibility contract, not a
-1.x patch or minor release. This implementation PR does not publish a release.
+Because accepted LCOV input can produce different gate outcomes, this is a major
+release under the previous 1.x compatibility contract. See the
+[v2 migration guide](docs/MIGRATING_TO_V2.md) before upgrading collected evidence.
 
 ## 1.0.0
 

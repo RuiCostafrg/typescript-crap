@@ -19,9 +19,10 @@ describe the pre-fix behavior at the reviewed commit.
 | 5 | Stream committed blobs through an 8 KiB buffer and a size-limited reader | [Verifier tests](../src/selection/committed/tests.rs) cover chunk boundaries, lone CR, framing, mismatches and process cleanup; [measurements](PERFORMANCE.md#committed-git-blob-comparison) record fresh-process comparisons |
 
 The LCOV correction changes outcomes for accepted inputs. Under the
-[compatibility contract](COMPATIBILITY.md), it targets the next major release
-(2.0.0), not a 1.x patch/minor. The [changelog](../CHANGELOG.md) explains coverage
-recollection and baseline review; this implementation does not publish a release.
+[previous 1.x contract](https://github.com/RuiCostafrg/typescript-crap/blob/v1.0.0/docs/COMPATIBILITY.md), it requires a major release. Version 2.0.0 is prepared; the
+[changelog](../CHANGELOG.md) and [migration guide](MIGRATING_TO_V2.md) explain
+coverage recollection and baseline review. Protected publication and post-release
+verification remain required.
 
 ## Original review
 
@@ -203,7 +204,7 @@ streaming optimization can wait for measurements. Configurable resource budgets
 remain conditional on the already documented trusted-local-CLI scope; these
 probes do not establish a need for a workspace split, caching layer, or service.
 
-Review outcome-changing fixes against the [1.x contract](COMPATIBILITY.md)
+Review outcome-changing fixes against the [1.x contract](https://github.com/RuiCostafrg/typescript-crap/blob/v1.0.0/docs/COMPATIBILITY.md)
 before choosing their release version, particularly LCOV changes affecting
 accepted coverage and baseline scores. Publish through a new reviewed release
 with explicit release notes; keep v1.0.0 immutable. Preserve the 95% coverage

@@ -60,7 +60,8 @@ Install/configure the test framework and coverage reporter in your project first
 
 LCOV `TN:` test groups are aggregated independently. Repeated records for the
 same test name and resolved `SF:` source add execution counts before mapping;
-missing/empty `TN:` belongs to the unnamed group. Within a test, overlapping
+missing/empty `TN:` belongs to the unnamed group for that record, without
+inheriting the preceding record's test name. Within a test, overlapping
 statements or generated locations mapped to the same source line take the
 minimum count. The resulting per-test line counts then add. Duplicate `DA:` line
 numbers within one source record and sums outside JavaScript's safe-integer range

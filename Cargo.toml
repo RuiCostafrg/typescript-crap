@@ -1,6 +1,6 @@
 [package]
 name = "ts-crap"
-version = "1.0.0"
+version = "2.0.0"
 edition = "2024"
 rust-version = "1.90"
 description = "Source-aware CRAP scores for TypeScript functions"
@@ -22,6 +22,7 @@ include = [
     "/docs/COVERAGE_HELPERS.md",
     "/docs/COMPATIBILITY.md",
     "/docs/MIGRATING_TO_V1.md",
+    "/docs/MIGRATING_TO_V2.md",
     "/docs/CI_ADOPTION.md",
     "/tests/tooling/package*.json",
     "/tests/adoption/*.json",

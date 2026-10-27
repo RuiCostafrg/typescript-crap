@@ -168,6 +168,7 @@ function lcov(raw, root) {
         } else files.set(record.path, record);
       }
       record = undefined;
+      testName = '';
     }
   }
   if (record) throw new Error('LCOV record missing end_of_record');

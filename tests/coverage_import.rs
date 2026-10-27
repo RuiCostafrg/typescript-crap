@@ -160,6 +160,30 @@ fn lcov_tests_add_after_conservative_source_map_overlap() {
 }
 
 #[test]
+fn lcov_unnamed_records_do_not_inherit_the_previous_test_name() {
+    for unnamed in ["", "TN:\n"] {
+        let dir = fixture();
+        let source = fs::read_to_string(dir.path().join("a.ts")).unwrap();
+        fs::write(dir.path().join("generated.js.map"), json!({"version":3,"sources":["a.ts"],"sourcesContent":[source],"names":[],"mappings":"AACA;AAAA"}).to_string()).unwrap();
+        fs::write(
+            dir.path().join("generated.js"),
+            "x\ny\n//# sourceMappingURL=generated.js.map",
+        )
+        .unwrap();
+        let raw = format!(
+            "TN:named\nSF:generated.js\nDA:1,3\nDA:2,0\nend_of_record\n{unnamed}SF:generated.js\nDA:1,0\nDA:2,2\nend_of_record\n"
+        );
+        let out = collect(dir.path(), "lcov", &raw, "");
+        assert!(out.status.success(), "{out:?}");
+        let native: serde_json::Value =
+            serde_json::from_slice(&fs::read(dir.path().join("native.json")).unwrap()).unwrap();
+        // Separate partial tests reduce to zero each. Inheriting TN would merge
+        // generated counters first and invent min(3,2)=2 hits on the source line.
+        assert_eq!(native["files"]["a.ts"]["lines"]["2"], 0);
+    }
+}
+
+#[test]
 fn generated_sources_in_one_lcov_test_share_conservative_overlap() {
     for independent in [false, true] {
         let dir = fixture();

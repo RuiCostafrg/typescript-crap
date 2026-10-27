@@ -43,6 +43,7 @@ jobs:
         with:
           node-version: 24
       - name: Download published CLI, helpers, checksums and provenance
+        id: assets
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -50,9 +51,11 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          assets_dir=$(mktemp -d "$RUNNER_TEMP/ts-crap-published.XXXXXX")
+          echo "path=$assets_dir" >> "$GITHUB_OUTPUT"
           gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" \
-            --pattern "ts-crap-$TARGET.*" --pattern 'ts-crap-coverage-helpers.zip*' --dir assets
-          for asset in assets/*; do
+            --pattern "ts-crap-$TARGET.*" --pattern 'ts-crap-coverage-helpers.zip*' --dir "$assets_dir"
+          for asset in "$assets_dir"/*; do
             gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
               --source-ref "refs/tags/v$VERSION" --deny-self-hosted-runners
@@ -61,12 +64,13 @@ jobs:
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
+          ASSETS_DIR: ${{ steps.assets.outputs.path }}
         run: |
-          mkdir unpacked
-          cd assets
+          unpack_dir=$(mktemp -d "$RUNNER_TEMP/ts-crap-unpacked.XXXXXX")
+          cd "$ASSETS_DIR"
           if [[ "$TARGET" == *windows* ]]; then
             sha256sum --check "ts-crap-$TARGET.zip.sha256"
-            unzip -q "ts-crap-$TARGET.zip" -d ../unpacked
+            unzip -q "ts-crap-$TARGET.zip" -d "$unpack_dir"
             binary=ts-crap.exe
           else
             if command -v sha256sum >/dev/null 2>&1; then
@@ -74,15 +78,15 @@ jobs:
             else
               shasum -a 256 --check "ts-crap-$TARGET.tar.xz.sha256"
             fi
-            tar -xf "ts-crap-$TARGET.tar.xz" -C ../unpacked
+            tar -xf "ts-crap-$TARGET.tar.xz" -C "$unpack_dir"
             binary=ts-crap
           fi
-          cd ..
-          executable=$(find "$PWD/unpacked" -type f -name "$binary")
-          python3 scripts/verify-ci-guide.py --archive assets/ts-crap-coverage-helpers.zip --scanner "$executable" --output guide-reports
+          cd "$GITHUB_WORKSPACE"
+          executable=$(find "$unpack_dir" -type f -name "$binary")
+          python3 scripts/verify-ci-guide.py --archive "$ASSETS_DIR/ts-crap-coverage-helpers.zip" --scanner "$executable" --output guide-reports
           if [[ "$TARGET" == x86_64-unknown-linux-gnu ]]; then
             npm ci --ignore-scripts --no-audit --no-fund --prefix tests/tooling
-            python3 scripts/verify-ci-guide.py --archive assets/ts-crap-coverage-helpers.zip --scanner "$executable" --vitest tests/tooling/node_modules/vitest/vitest.mjs --output guide-reports
+            python3 scripts/verify-ci-guide.py --archive "$ASSETS_DIR/ts-crap-coverage-helpers.zip" --scanner "$executable" --vitest tests/tooling/node_modules/vitest/vitest.mjs --output guide-reports
           fi
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

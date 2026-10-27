@@ -37,6 +37,10 @@ def verify(args):
         prefix = root/'homebrew'
         run(['git', 'clone', '--quiet', '--depth=1', '--no-hardlinks', seed.as_uri(), prefix])
         run(['git', '-C', prefix, 'remote', 'set-url', 'origin', 'https://github.com/Homebrew/brew'])
+        # The seed may be on Homebrew's local `stable` branch. Its remote HEAD
+        # must describe the official upstream, not a branch in the local seed.
+        run(['git', '-C', prefix, 'config', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*'])
+        run(['git', '-C', prefix, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main'])
         brew = prefix/'bin/brew'
         env['PATH'] = str(prefix/'bin') + os.pathsep + os.environ.get('PATH', '')
         for flag, expected in [('--prefix', prefix), ('--cellar', prefix/'Cellar'), ('--cache', root/'cache')]:

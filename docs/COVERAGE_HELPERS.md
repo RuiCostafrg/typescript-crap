@@ -58,6 +58,17 @@ For LCOV, use `--format lcov --input /project/coverage/lcov.info`, with a comman
 that emits LCOV (for example `npx vitest run --coverage --coverage.reporter=lcov`).
 Install/configure the test framework and coverage reporter in your project first.
 
+LCOV `TN:` test groups are aggregated independently. Repeated records for the
+same test name and resolved `SF:` source add execution counts before mapping;
+missing/empty `TN:` belongs to the unnamed group for that record, without
+inheriting the preceding record's test name. Within a test, overlapping
+statements or generated locations mapped to the same source line take the
+minimum count. The resulting per-test line counts then add. Duplicate `DA:` line
+numbers within one source record and sums outside JavaScript's safe-integer range
+are errors. Istanbul's already aggregated statement counts retain conservative
+overlap behavior. Recollect coverage with the updated helper to benefit from
+aggregation fixes; review changed gate results before updating baselines.
+
 Both raw input and native output must be **fresh paths** before each import.
 Use a new run directory and configure your reporter to write there, or remove
 only those previous generated reports before rerunning. The importer runs tests

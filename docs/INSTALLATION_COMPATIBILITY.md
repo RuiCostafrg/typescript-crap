@@ -10,7 +10,7 @@ The [installation workflow](../.github/workflows/installation.yml) verifies a
 pinned published upgrade pair, v0.3.0 to v0.4.0. The
 [release verification workflow](../.github/workflows/verify-release.yml) repeats
 installation and upgrades using the candidate release assets before publication.
-It upgrades from the fixed v0.3.0 compatibility fixture; update that fixture
+It upgrades v2 candidates from the published v1.0.0 release; update that fixture
 explicitly if its supported upgrade range changes. Tagged publication requires
 successful installation CI on the source commit as well as the existing Rust,
 coverage, mutation, and release checks.
@@ -105,8 +105,11 @@ packages and taps do not participate, and the temporary installation is removed
 afterward. This live-path test covers a nondefault prefix; the separate staged
 installer matrix exercises the hosted runner's standard Homebrew prefix.
 
-After each new release, run that workflow with its version and a previous published
-upgrade fixture. Leave guide verification enabled for releases containing helpers.
+After each new release, run that workflow with its version and an explicitly
+selected, distinct previous published upgrade fixture. There is no default
+previous version: use `version=2.0.0`, `previous-version=1.0.0` for v2 verification,
+or `version=1.0.0`, `previous-version=0.4.0` when rechecking v1.
+Leave guide verification enabled for releases containing helpers.
 For the legacy v0.4.0 tap check only, disable guide verification and select v0.3.0
 as the previous version. A green candidate run remains distinct from a green
 published-path run; publication evidence must be recorded after it occurs.

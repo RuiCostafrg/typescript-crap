@@ -66,7 +66,11 @@ async function sourceMap(filename, inline) {
 }
 async function convert(root, files, records) {
   let unmapped = 0;
+  const tests = new Map();
   for (const record of records) {
+    const testName = record.testName ?? '';
+    if (!tests.has(testName)) tests.set(testName, new Map());
+    const test = tests.get(testName);
     const filename = resolveSource(root, record.path);
     let mapper;
     if (files.has(filename) && !record.map) {
@@ -99,12 +103,21 @@ async function convert(root, files, records) {
       if (!targets.length) { unmapped++; continue; }
       for (const { file, line } of targets) {
         if (line > file.lineCount) throw new Error('Mapped line outside source');
-        // Conservative overlap: an uncovered statement/segment keeps the line uncovered.
-        file.lines[line] = Math.min(file.lines[line] ?? hit.count, hit.count);
+        if (!test.has(file)) test.set(file, new Map());
+        const lines = test.get(file);
+        // Within one test, an uncovered statement/segment keeps the line uncovered.
+        lines.set(line, Math.min(lines.get(line) ?? hit.count, hit.count));
       }
     }
   }
   if (unmapped) throw new Error(`${unmapped} coverage locations could not be source-mapped; configure the test tool to emit remapped TypeScript coverage`);
+  // Independent tests add only after their conservative source-map reduction.
+  // Istanbul is already an aggregate and remains a single conservative group.
+  for (const test of tests.values()) {
+    for (const [file, lines] of test) {
+      for (const [line, count] of lines) file.lines[line] = integer((file.lines[line] ?? 0) + count);
+    }
+  }
 }
 function istanbul(raw) {
   return Object.entries(raw).map(([key, file]) => {
@@ -128,24 +141,40 @@ function istanbul(raw) {
     return { path: file.path || key, map: file.inputSourceMap, hits };
   });
 }
-function lcov(raw) {
-  const records = [];
-  let record;
+function lcov(raw, root) {
+  const tests = new Map();
+  let record, testName = '';
   for (const line of raw.split(/\r?\n/)) {
-    if (line.startsWith('SF:')) {
+    if (line.startsWith('TN:')) {
+      if (record) throw new Error('LCOV test name inside source record');
+      testName = line.slice(3);
+    } else if (line.startsWith('SF:')) {
       if (record) throw new Error('LCOV record missing end_of_record');
-      record = { path: line.slice(3), hits: [] };
+      record = { path: resolveSource(root, line.slice(3)), testName, hits: new Map() };
     } else if (line.startsWith('DA:')) {
       if (!record) throw new Error('LCOV DA outside record');
       const [number, count] = line.slice(3).split(',');
-      record.hits.push({ line: integer(Number(number), 1), count: integer(Number(count)) });
+      const location = integer(Number(number), 1);
+      if (record.hits.has(location)) throw new Error('Duplicate LCOV line within source record');
+      record.hits.set(location, integer(Number(count)));
     } else if (line === 'end_of_record') {
-      if (record) records.push(record);
+      if (record) {
+        if (!tests.has(testName)) tests.set(testName, new Map());
+        const files = tests.get(testName);
+        const previous = files.get(record.path);
+        if (previous) {
+          // Repeated captures of the same test/source add counters before mapping.
+          for (const [line, count] of record.hits) previous.hits.set(line, integer((previous.hits.get(line) ?? 0) + count));
+        } else files.set(record.path, record);
+      }
       record = undefined;
+      testName = '';
     }
   }
   if (record) throw new Error('LCOV record missing end_of_record');
-  return records;
+  return [...tests.values()].flatMap(files => [...files.values()].map(record => ({
+    ...record, hits: [...record.hits].map(([line, count]) => ({ line, count })),
+  })));
 }
 async function main() {
   const argv = process.argv.slice(2), separator = argv.indexOf('--');
@@ -176,7 +205,7 @@ async function main() {
   });
   if (status !== 0) throw new Error(`Coverage command failed: ${status}`);
   const raw = await fs.readFile(input, 'utf8');
-  const records = options['--format'] === 'istanbul' ? istanbul(parseUniqueJson(raw)) : lcov(raw);
+  const records = options['--format'] === 'istanbul' ? istanbul(parseUniqueJson(raw)) : lcov(raw, root);
   if (!records.some(record => record.hits.length)) throw new Error('Empty imported coverage');
   await convert(root, files, records);
   const result = { version: 1, files: {} };

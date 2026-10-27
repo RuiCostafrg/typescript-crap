@@ -1,6 +1,6 @@
-# The 1.x compatibility contract
+# The 2.x compatibility contract
 
-This contract applies starting with ts-crap 1.0.0. The CLI, helper bundle, and
+This contract applies starting with ts-crap 2.0.0. The CLI, helper bundle, and
 schemas are versioned together. Install helpers from the exact same release as
 the scanner. Native coverage, configuration, baseline, and JSON report documents currently use independent integer schema version **1**.
 
@@ -36,7 +36,15 @@ selects a caller-relative file. No environment or ancestor policy is loaded.
 Each explicit gate override wins over config and then built-in defaults
 (threshold 10; require_coverage/fail_on_empty false). Bare boolean flags mean true;
 `=false` explicitly disables a configured gate. Include/exclude replacement and
-exclusion precedence are documented in the README and remain stable in 1.x.
+exclusion precedence are documented in the README and remain stable in 2.x.
+
+LCOV helpers aggregate captures by testcase and source before source mapping,
+retain conservative overlap within each testcase, then add independent testcase
+line counts. A missing or empty `TN:` names the unnamed testcase for that source
+record; it never inherits the preceding record's name. See the
+[v2 migration guide](MIGRATING_TO_V2.md) for the change from v1 behavior. Native
+version-1 coverage JSON retains its existing meaning; recollect rather than
+relabeling old imported evidence.
 
 ## Process and output behavior
 
@@ -58,7 +66,8 @@ exclusion precedence are documented in the README and remain stable in 1.x.
 
 ## Input documents and migration
 
-See [upgrading from v0.4.0](MIGRATING_TO_V1.md) for the concrete CLI/Rust migration.
+See [upgrading from v1](MIGRATING_TO_V2.md) for the current migration, or
+[upgrading from v0.4.0](MIGRATING_TO_V1.md) for the earlier CLI/Rust migration.
 
 [Versioned JSON Schemas](../schemas/README.md) cover config, native coverage,
 baselines, and reports. Input objects reject unknown/duplicate fields and

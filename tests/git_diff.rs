@@ -364,6 +364,127 @@ fn clean_filters_cannot_hide_content_changes_from_head_verification() {
 
 #[cfg(unix)]
 #[test]
+fn parent_symlinks_cannot_change_git_identity_or_hide_selected_violations() {
+    use std::os::unix::fs::symlink;
+    let dir = repo();
+    let root = dir.path();
+    fs::create_dir(root.join("b")).unwrap();
+    fs::write(
+        root.join("b/f.ts"),
+        "export function f(a:boolean,b:boolean,c:boolean){if(a && b && c)return 1;return 0;}",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "historical violation"]);
+    git(root, &["branch", "-f", "base"]);
+    let baseline = root.join("baseline.json");
+    assert_eq!(
+        run(root, &["--write-baseline", baseline.to_str().unwrap()])
+            .status
+            .code(),
+        Some(1)
+    );
+    fs::create_dir(root.join("a")).unwrap();
+    let source = "export function f(a:boolean,b:boolean){if(a && b)return 1;return 0;}";
+    fs::write(root.join("a/f.ts"), source).unwrap();
+    git(root, &["add", "a"]);
+    git(root, &["commit", "-m", "new violation"]);
+    for args in [
+        vec!["--baseline", baseline.to_str().unwrap()],
+        vec!["--include", "a/**"],
+    ] {
+        let mut flags = vec!["--diff", "base"];
+        flags.extend(args);
+        let out = run(root, &flags);
+        assert_eq!(out.status.code(), Some(1), "{out:?}");
+        let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(value["functions"][0]["path"], "a/f.ts");
+        assert_eq!(value["files_scanned"], 1);
+    }
+    fs::rename(root.join("a"), root.join("saved-a")).unwrap();
+    fs::write(root.join("b/f.ts"), source).unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(outside.path().join("f.ts"), source).unwrap();
+    // Include/exclude filters must not conceal an unsupported substitution,
+    // whether its target is inside or outside the project.
+    for target in [root.join("b"), outside.path().to_path_buf()] {
+        symlink(target, root.join("a")).unwrap();
+        for args in [
+            vec!["--baseline", baseline.to_str().unwrap()],
+            vec!["--include", "a/**"],
+            vec!["--exclude", "a/**"],
+        ] {
+            let report = root.join("report.json");
+            fs::write(&report, "previous report").unwrap();
+            let mut flags = vec!["--diff", "base", "--output", report.to_str().unwrap()];
+            flags.extend(args);
+            let out = run(root, &flags);
+            assert_eq!(out.status.code(), Some(2), "{out:?}");
+            assert!(
+                String::from_utf8_lossy(&out.stderr).contains("symbolic link source"),
+                "{out:?}"
+            );
+            assert!(out.stdout.is_empty());
+            assert_eq!(fs::read_to_string(report).unwrap(), "previous report");
+        }
+        fs::remove_file(root.join("a")).unwrap();
+    }
+    // Now both changed Git identities would collapse into b/f.ts under the old
+    // canonical-key map. Reject the substitution instead of deduplicating it.
+    git(root, &["add", "b/f.ts"]);
+    git(root, &["commit", "-m", "both identities changed"]);
+    symlink(root.join("b"), root.join("a")).unwrap();
+    let out = run(root, &["--diff", "base"]);
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("symbolic link source"));
+}
+
+#[cfg(unix)]
+#[test]
+fn git_roots_preserve_trailing_whitespace_and_nested_project_paths() {
+    for ending in [" ", "\t", "\n", "\r", " \n"] {
+        let dir = repo();
+        let parent = tempfile::tempdir().unwrap();
+        let root = parent.path().join(format!("repo{ending}"));
+        fs::rename(dir.path(), &root).unwrap();
+        fs::create_dir(root.join("pkg")).unwrap();
+        fs::write(
+            root.join("pkg/a.ts"),
+            "export function f(a:boolean,b:boolean){if(a && b)return 1;return 0;}",
+        )
+        .unwrap();
+        git(&root, &["add", "."]);
+        git(&root, &["commit", "-m", "nested violation"]);
+        for sibling_exists in [false, true] {
+            if sibling_exists {
+                fs::create_dir(parent.path().join("repo")).unwrap();
+            }
+            for selected_root in [&root, &root.join("pkg")] {
+                let out = run(selected_root, &["--diff", "base"]);
+                assert_eq!(
+                    out.status.code(),
+                    Some(1),
+                    "{ending:?}, {sibling_exists}: {out:?}"
+                );
+                let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+                assert_eq!(value["files_scanned"], 1);
+                assert_eq!(
+                    value["functions"][0]["path"],
+                    if selected_root == &root {
+                        "pkg/a.ts"
+                    } else {
+                        "a.ts"
+                    }
+                );
+                let empty = run(selected_root, &["--diff", "HEAD"]);
+                assert_eq!(empty.status.code(), Some(0), "{empty:?}");
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
 fn github_pr_lookup_uses_gh_and_refuses_a_mismatching_checkout() {
     use std::os::unix::fs::PermissionsExt;
     let dir = repo();

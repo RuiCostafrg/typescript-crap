@@ -11,9 +11,9 @@ on:
         type: boolean
         default: true
       previous-version:
-        description: Published upgrade fixture without v
+        description: Distinct previous published upgrade fixture without v
         type: string
-        default: '0.4.0'
+        required: true
 permissions:
   contents: read
 jobs:
@@ -123,6 +123,7 @@ jobs:
         run: |
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
           [[ "$PREVIOUS" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          [[ "$VERSION" != "$PREVIOUS" ]]
           if [[ "$RUNNER_OS" == Linux ]]; then
             eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           fi

@@ -1,10 +1,8 @@
 # The 1.x compatibility contract
 
-This contract applies when ts-crap 1.0.0 is released. The current unreleased work
-is preparing that boundary; a green development build is not a published release.
-The CLI, helper bundle, and schemas are versioned together. Install helpers from
-the exact same release as the scanner. Native coverage, configuration, baseline,
-and JSON report documents currently use independent integer schema version **1**.
+This contract applies starting with ts-crap 1.0.0. The CLI, helper bundle, and
+schemas are versioned together. Install helpers from the exact same release as
+the scanner. Native coverage, configuration, baseline, and JSON report documents currently use independent integer schema version **1**.
 
 ## Scoring and selection
 
@@ -59,6 +57,8 @@ exclusion precedence are documented in the README and remain stable in 1.x.
   Optional SARIF properties may be added without changing these meanings.
 
 ## Input documents and migration
+
+See [upgrading from v0.4.0](MIGRATING_TO_V1.md) for the concrete CLI/Rust migration.
 
 [Versioned JSON Schemas](../schemas/README.md) cover config, native coverage,
 baselines, and reports. Input objects reject unknown/duplicate fields and

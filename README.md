@@ -63,9 +63,8 @@ See [installation verification](docs/INSTALLATION_COMPATIBILITY.md) for tested
 install/upgrade paths, runtime boundaries, and outstanding release-time evidence.
 
 Git is needed for diff mode, and authenticated `gh` for GitHub PR discovery.
-Starting with the next release after v0.4.0, the optional coverage collectors are
-also available as `ts-crap-coverage-helpers.zip` in GitHub Releases, with a SHA-256
-checksum. Download the bundle from the same release as your CLI, verify and extract
+Starting with v1.0.0, the optional coverage collectors ship as
+`ts-crap-coverage-helpers.zip` in GitHub Releases, with a SHA-256 checksum. Download the bundle from the same release as your CLI, verify and extract
 it, and keep its directory intact. The helpers require Node 24+; the prebuilt CLI
 itself does not. See the [standalone helper installation and usage guide](docs/COVERAGE_HELPERS.md).
 

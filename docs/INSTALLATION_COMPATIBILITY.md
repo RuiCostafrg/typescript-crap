@@ -94,7 +94,10 @@ checks live formula bytes against the published asset, installs from unchanged
 GitHub URLs, upgrades from the exact previous formula in tap history with
 `brew update`/`brew upgrade`, and repeats fresh/reinstall TS/TSX/coverage checks on
 macOS ARM64/Intel and Linux x86-64. It clones the installed Homebrew implementation
-into a disposable prefix with its own empty Cellar, taps, cache, logs, and config.
+into a disposable directory under the runner's home, with its own empty Cellar,
+taps, cache, logs, and config. The prefix is outside OS temporary trees that
+Homebrew grants sandboxed workers permission to write; runtime temporary/cache
+paths are sibling directories. Homebrew's sandbox remains enabled.
 The system installation supplies the initial implementation; the clone's origin
 is the official Homebrew repository, so `brew update` remains real. Prefix/Cellar/
 cache identities are checked before package operations. The caller's existing

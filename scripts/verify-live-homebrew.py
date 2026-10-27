@@ -21,7 +21,9 @@ def verify(args):
     # Homebrew updates can migrate unrelated installed packages (for example the
     # hosted runner's Azure CLI). Use the real implementation in a disposable
     # prefix with an empty Cellar, rather than changing the runner's packages.
-    with tempfile.TemporaryDirectory(prefix='ts-crap-live-tap-') as temporary:
+    # Homebrew's sandbox grants access to OS temporary trees. Keep its own
+    # executable outside those trees so download/install workers cannot write it.
+    with tempfile.TemporaryDirectory(prefix='.ts-crap-live-tap-', dir=Path.home()) as temporary:
         root = Path(temporary).resolve()
         env = {key:value for key,value in os.environ.items() if not key.startswith('HOMEBREW_')}
         env.update(HOMEBREW_NO_AUTO_UPDATE='1', HOMEBREW_NO_ANALYTICS='1',

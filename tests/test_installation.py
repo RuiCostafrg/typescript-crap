@@ -148,3 +148,40 @@ class LiveHomebrewIsolationTests(unittest.TestCase):
                 stage.assert_not_called()
                 package_operations = {'install','uninstall','tap','update','upgrade','reinstall'}
                 self.assertFalse(any(len(cmd)>1 and cmd[1] in package_operations for cmd in commands))
+
+
+    def test_disposable_homebrew_is_outside_runtime_writable_trees(self):
+        from contextlib import redirect_stdout
+        from unittest import mock
+        live_spec = importlib.util.spec_from_file_location('verify_live_homebrew_layout', ROOT / 'scripts/verify-live-homebrew.py')
+        live = importlib.util.module_from_spec(live_spec)
+        live_spec.loader.exec_module(live)
+        class BootstrapComplete(Exception):
+            pass
+        with tempfile.TemporaryDirectory() as temporary:
+            user_directory = Path(temporary).resolve()/'runner-account'
+            user_directory.mkdir()
+            prefix = None
+            runtime = {}
+            def command(args, **kwargs):
+                nonlocal prefix
+                runtime.update(kwargs['env'])
+                if args == ['/system/brew', '--repository']:
+                    return str(user_directory/'system-brew')
+                if args[:2] == ['git', 'clone']:
+                    prefix = Path(args[-1])
+                if prefix and str(args[0]) == str(prefix/'bin/brew'):
+                    if args[1] == 'list':
+                        raise BootstrapComplete()
+                    return str({'--prefix':prefix, '--cellar':prefix/'Cellar', '--cache':prefix.parent/'cache'}[args[1]])
+                return ''
+            with mock.patch.object(live.shutil, 'which', return_value='/system/brew'), \
+                 mock.patch.object(live.Path, 'home', return_value=user_directory), \
+                 mock.patch.object(live.installation, 'run', side_effect=command), \
+                 redirect_stdout(io.StringIO()):
+                with self.assertRaises(BootstrapComplete):
+                    live.verify(object())
+            self.assertTrue(prefix.is_relative_to(user_directory))
+            for key in ['HOMEBREW_TEMP','HOMEBREW_CACHE','HOMEBREW_LOGS','XDG_CONFIG_HOME']:
+                self.assertFalse(prefix.is_relative_to(Path(runtime[key])))
+            self.assertFalse(prefix.parent.exists(), 'Disposable Homebrew was not removed')

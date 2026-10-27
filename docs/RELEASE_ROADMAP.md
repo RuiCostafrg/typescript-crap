@@ -113,7 +113,8 @@ The [published installer and live tap matrix](https://github.com/RuiCostafrg/typ
 passed on exact head `bf8a52d7be37c871939746bfe3ceae807e2bdf49`, including
 unchanged live formula URLs, fresh/reinstall checks, and v0.3.0 to v0.4.0 upgrades
 on macOS ARM64/Intel and Linux x86-64. All pre-beta installation items now have
-hosted evidence. The v1.0.0 package also passed its own candidate and
+hosted evidence. The v1.0.0 package also passed its own
+[candidate dry run](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40461673913) and
 [published-path checks](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40494926411).
 
 ## During beta, before v1.0.0

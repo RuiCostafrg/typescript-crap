@@ -1,11 +1,11 @@
 # Adopt the CI gate with installed tools
 
 Use a published CLI and matching `ts-crap-coverage-helpers.zip` from the same
-release. The [copyable workflow](../examples/ci/github-actions.yml) targets 1.0.0;
-set its version to a reviewed release that actually contains the helper asset.
-The v0.4.0 release predates the helper bundle and gate-policy fields. Until the
-new release is published, candidate-bundle verification is the available evidence;
-do not treat an unpublished download URL as a successful installation.
+release. The [copyable workflow](../examples/ci/github-actions.yml) targets the
+published [v1.0.0 release](https://github.com/RuiCostafrg/typescript-crap/releases/tag/v1.0.0),
+which includes the standalone helper bundle and persisted gate policy.
+The v0.4.0 release predates both features. When upgrading the example, select a
+reviewed release and keep its CLI/helper versions identical.
 
 The example uses Node 24, Vitest's installed Istanbul provider, and an Ubuntu
 26.04 runner for the prebuilt GNU binary. Install/configure Vitest and
@@ -114,12 +114,14 @@ python3 scripts/verify-ci-guide.py \
   --scanner target/debug/ts-crap --vitest tests/tooling/node_modules/vitest/vitest.mjs
 ```
 
-A final clean run using the published new release's CLI and helper archive remains
-release-time evidence. Record the tag/commit, helper checksum, runner, and run URL
-in the release acceptance record. Candidate/local verification cannot establish
-that a release asset has already been published.
+A [clean published-tool run](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40494926411)
+passed with v1.0.0's checksum/provenance-verified CLI and helper archive on all
+five targets: Linux ARM64/x86-64, macOS ARM64/Intel, and Windows x86-64. The Linux
+x86-64 job additionally passed actual Vitest/Istanbul collection. The
+[acceptance ledger](RELEASE_V1.md) records the immutable tag/source, helper
+checksum, and related installation evidence.
 
-After publication and live Homebrew synchronization, dispatch
+For each new release, after publication and live Homebrew synchronization, dispatch
 [Verify published adoption](../.github/workflows/verify-published.yml) with the
 published version and previous upgrade fixture. Keep guide verification enabled.
 It downloads checksum/provenance-verified published CLI/helpers, runs this clean
@@ -130,5 +132,5 @@ releases does not satisfy the new-release acceptance criterion.
 
 Hosted [contract/guide CI](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40420847597)
 passed on `bf8a52d7be37c871939746bfe3ceae807e2bdf49` with Node 24 and both
-collection paths. That run used candidate helpers before publication. The roadmap's published-guide
-checkbox stays open until post-publication verification actually succeeds.
+collection paths. That run used candidate helpers before publication; the v1.0.0
+published-tool run above supplies the subsequent public-download evidence.

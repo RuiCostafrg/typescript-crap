@@ -102,3 +102,9 @@ untrusted repositories must provide process/container isolation and resource
 limits. A hosted or untrusted-command mode would require a separate budget and
 cancellation design before release. Revisit the decision when larger-project
 measurements or adoption failures establish a concrete need.
+
+Hosted [independent adoption CI](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40420847597)
+passed the same three revisions with Node 24.21.0 on Ubuntu 26.04 x86-64 at
+`bf8a52d7be37c871939746bfe3ceae807e2bdf49`. Its `independent-adoption` artifact
+contains separate hosted timings/RSS and scanner SHA-256; the committed local
+measurements above are not substituted for those results.

@@ -53,7 +53,8 @@ evidence; LCOV gaps are checked separately and still fail the completeness gate.
 (Termux/proot). All 132 Rust tests, all 14 Python tests, formatting, Node script
 syntax, and actionlint 1.7.12 passed during item 2 implementation; the seven
 importer regression tests were also rerun after expanding the fixtures. Hosted Node 24 and
-macOS/Windows runs remain CI evidence to obtain for the release commit.
+macOS/Windows framework jobs now pass on the item-5–7 PR; the final release commit
+still requires its own exact-commit checks.
 
 ### 3. Persist project gate policy
 
@@ -74,7 +75,9 @@ explicit configs, selection precedence, coverage evidence, and baseline policy.
 CI includes it in both the full Rust suite and the macOS/Windows behavior job.
 Local validation on 2026-10-26 passed all 141 Rust tests, all 14 Python tests,
 strict Clippy, rustdoc with warnings denied, formatting, and actionlint 1.7.12.
-Hosted checks for this implementation remain release-time evidence to obtain.
+Hosted policy tests passed on Linux, macOS, and Windows in
+[PR #25 CI](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40420847597);
+the final release commit still requires its own exact-commit checks.
 
 ### 4. Verify installation and platform compatibility
 
@@ -91,7 +94,7 @@ tools. See [installation compatibility](INSTALLATION_COMPATIBILITY.md) for exact
 coverage and remaining publication evidence.
 
 - [x] Test shell and PowerShell installation and upgrades in clean environments.
-- [ ] Verify Homebrew formula publication, installation, and upgrades.
+- [x] Verify Homebrew formula publication, installation, and upgrades.
 - [x] Decide the supported Linux runtime baseline: current builds require Ubuntu
   26.04 or compatible glibc. Broaden compatibility or prominently document that
   minimum, and test the chosen minimum runtime explicitly.
@@ -104,8 +107,11 @@ on that exact main commit passed all five archives, installed helper bundles,
 shell/PowerShell upgrades, three Homebrew targets, and both clean Linux runtimes.
 The live tap's [v0.4.0 formula PR](https://github.com/RuiCostafrg/homebrew-tap/pull/8)
 was provenance-verified and merged after all three required Tap CI checks passed.
-The final unchecked item requires the new live-tap upgrade verification; generated
-formulas alone do not establish that published-path behavior.
+The [published installer and live tap matrix](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40420847643)
+passed on exact head `bf8a52d7be37c871939746bfe3ceae807e2bdf49`, including
+unchanged live formula URLs, fresh/reinstall checks, and v0.3.0 to v0.4.0 upgrades
+on macOS ARM64/Intel and Linux x86-64. All pre-beta installation items now have
+hosted evidence. The final v1 package repeats candidate and published-path checks.
 
 ## During beta, before v1.0.0
 
@@ -155,6 +161,17 @@ Candidate release verification runs the guide with packaged CLI/helper bytes on
 all five targets. The final published-path check requires a new release containing
 the standalone helper bundle; v0.4.0 predates it. Run `verify-published.yml` after
 publication and live tap synchronization, then record the exact evidence here.
+
+## Release preparation status
+
+[PR #25](https://github.com/RuiCostafrg/typescript-crap/pull/25) is merged as
+`9fca2f9e5daab58965248e4b9889f639f06ee2ce`. Its exact head passed every check,
+including all advertised platform/installer paths, installed-guide contracts,
+three independent projects, advisories, **97.56% production Rust line coverage**,
+and **94.93% assertion-killed mutations** with zero timeouts. No quality floor
+was changed. The package is now being prepared as 1.0.0; preparation does not
+publish a tag or release. [The v1 acceptance ledger](RELEASE_V1.md) separates
+completed implementation evidence from exact-release and publication checks.
 
 ## Release acceptance
 

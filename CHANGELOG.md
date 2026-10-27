@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.0
 
 ### Added
 
@@ -28,6 +28,9 @@
 
 ### Changed
 
+- Establish the [1.x compatibility contract](docs/COMPATIBILITY.md). See
+  [the v0.4.0 migration guide](docs/MIGRATING_TO_V1.md) before upgrading library
+  integrations or enabling persisted gate policy.
 - Rust `ScanOptions` gate fields are now `Option` values. Use `None` to inherit
   project policy, or wrap explicit values in `Some`, including `Some(false)`.
   Resolved defaults remain threshold 10 and both completeness gates disabled.

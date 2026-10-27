@@ -646,3 +646,36 @@ fn sarif_stream_preserves_order_fingerprints_locations_and_completeness() {
         serde_json::json!({"ruleId":"TSCRAP002","level":"error","message":{"text":format!("Incomplete selection: {} files and {} functions missing coverage; 2 functions selected", report.files_missing_coverage, report.functions_missing_coverage)}})
     );
 }
+
+#[test]
+fn baseline_gate_passes_exact_threshold_for_new_and_previously_covered_functions() {
+    use sha2::{Digest, Sha256};
+    let source = "export function f(){\n return 1;\n}\n";
+    let dir = project(source);
+    let mut options = opts(&dir);
+    options.threshold = Some(2.0);
+    let coverage = dir.path().join("coverage.json");
+    fs::write(
+        &coverage,
+        serde_json::json!({"version":1,"files":{"a.ts":{
+            "sha256":hex::encode(Sha256::digest(source.as_bytes())),"lines":{"2":1}
+        }}})
+        .to_string(),
+    )
+    .unwrap();
+    options.coverage = Some(coverage);
+    let covered = scan(&options).unwrap();
+    assert_eq!(covered.functions[0].crap, 1.0);
+    let matched = Baseline::capture(&covered);
+    fs::write(dir.path().join("a.ts"), "export type Empty = string;\n").unwrap();
+    options.coverage = None;
+    let empty = Baseline::capture(&scan(&options).unwrap());
+    fs::write(dir.path().join("a.ts"), source).unwrap();
+    for baseline in [matched, empty] {
+        let mut current = scan(&options).unwrap();
+        assert_eq!(current.functions[0].crap, current.threshold);
+        baseline.apply(&mut current, &[]).unwrap();
+        assert!(!current.failed);
+        assert!(!current.functions[0].failed);
+    }
+}

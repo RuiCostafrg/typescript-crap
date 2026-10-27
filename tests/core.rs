@@ -513,3 +513,33 @@ fn generic_object_type_overloads_do_not_hide_runtime_errors_or_change_identity()
     .unwrap();
     assert!(scan(&opts).is_err());
 }
+
+#[test]
+fn overload_recovery_handles_block_comment_line_breaks_before_generic_signatures() {
+    let root = tempfile::tempdir().unwrap();
+    for separator in [
+        " \t/* first\nsecond */  ",
+        " /* first\nsecond\nthird */\n\t",
+        "\r\n/* ü 👋 */\t",
+    ] {
+        let source = format!(
+            "interface Respond {{\n <T,U>(text:T,status?:U): Response & TypedResponse<T,U,'text'>{separator}<T,U>(text:T,init?:Init): Response & TypedResponse<T,U,'text'>\n}}\nexport const real = (value:boolean) => value ? 1 : 0;\n"
+        );
+        fs::write(root.path().join("a.ts"), &source).unwrap();
+        let report = scan(&options(root.path())).unwrap();
+        assert_eq!(report.functions.len(), 1);
+        assert_eq!(report.functions[0].name, "real");
+        assert_eq!(report.functions[0].line, source.lines().count());
+        assert_eq!(report.functions[0].column, 21);
+        assert_eq!(report.functions[0].complexity, 2);
+        fs::write(
+            root.path().join("a.ts"),
+            source.replace("TypedResponse<T,U,'text'>", "TypedResponse<T,U,'text'>;"),
+        )
+        .unwrap();
+        assert_eq!(
+            scan(&options(root.path())).unwrap().functions[0].identity,
+            report.functions[0].identity
+        );
+    }
+}

@@ -107,3 +107,10 @@ which refreshes Homebrew and all preinstalled taps on a cold hosted runner. Othe
 installer commands retain their three-minute deadline; the job retains its
 20-minute limit. Timeout failures include bounded partial stdout/stderr. These
 are verification-runner limits, not product subprocess guarantees.
+
+The [full live-tap run](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40420847643)
+on `bf8a52d7be37c871939746bfe3ceae807e2bdf49` passed on all three Homebrew
+targets, including the Intel macOS cold-update path. It verified the published
+v0.4.0 formula bytes, actual GitHub downloads, v0.3.0 upgrades, fresh installs,
+reinstalls, and installed TS/TSX/coverage behavior. New releases still require
+verification of their own published assets after tap synchronization.

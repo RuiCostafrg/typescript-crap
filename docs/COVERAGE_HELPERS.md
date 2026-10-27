@@ -1,6 +1,6 @@
 # Standalone coverage helpers
 
-Starting with the next release after v0.4.0, GitHub releases include
+Starting with v1.0.0, releases include
 `ts-crap-coverage-helpers.zip` and its `.sha256` checksum. The bundle contains both
 collectors and every supporting module; no repository checkout, npm install, or
 Rust compiler is needed. Install the standalone `ts-crap` binary separately.

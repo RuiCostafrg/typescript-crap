@@ -125,3 +125,59 @@ fn missing_blob_and_nonblob_objects_fail_verification() {
     );
     reader.finish().unwrap();
 }
+
+#[test]
+fn failed_batch_process_is_rejected_and_reaped() {
+    let dir = tempfile::tempdir().unwrap();
+    assert!(
+        Command::new("git")
+            .current_dir(dir.path())
+            .args(["init", "-q"])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let mut reader = BlobReader::new(dir.path()).unwrap();
+    reader.child.kill().unwrap();
+    assert!(reader.finish().is_err());
+    assert!(reader.child.stdin.is_none());
+    assert!(!reader.child.try_wait().unwrap().unwrap().success());
+}
+
+#[test]
+fn dropping_a_reader_terminates_and_reaps_a_waiting_batch_process() {
+    let dir = tempfile::tempdir().unwrap();
+    assert!(
+        Command::new("git")
+            .current_dir(dir.path())
+            .args(["init", "-q"])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let mut reader = BlobReader::new(dir.path()).unwrap();
+    let pid = reader.child.id();
+    // Keep the input pipe open outside the reader. Dropping a handle alone would
+    // leave Git waiting for more input, so successful cleanup must kill and reap.
+    let input = reader.child.stdin.take().unwrap();
+    drop(reader);
+    let probe = r#"
+        try {
+            const pid = Number(process.argv[1]);
+            process.kill(pid, 0);
+            process.kill(pid, 'SIGKILL');
+            process.exitCode = 1;
+        } catch (error) {
+            if (error.code !== 'ESRCH') throw error;
+        }
+    "#;
+    let status = Command::new("node")
+        .args(["-e", probe, &pid.to_string()])
+        .status()
+        .unwrap();
+    drop(input);
+    assert!(
+        status.success(),
+        "Git batch process survived reader cleanup"
+    );
+}

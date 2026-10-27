@@ -127,3 +127,8 @@ project on all five archive targets (plus actual Vitest on Linux x86-64), and
 checks unchanged live Homebrew URLs on its three supported targets. Record the
 run URL and source commit in the roadmap; a skipped guide check for legacy
 releases does not satisfy the new-release acceptance criterion.
+
+Hosted [contract/guide CI](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40420847597)
+passed on `bf8a52d7be37c871939746bfe3ceae807e2bdf49` with Node 24 and both
+collection paths. That run used candidate helpers before publication. The roadmap's published-guide
+checkbox stays open until post-publication verification actually succeeds.

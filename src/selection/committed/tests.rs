@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-use super::{BlobReader, matches_committed, without_crlf};
+use super::compare::without_crlf;
+use super::{BlobReader, matches_committed};
 use std::{
     fs,
     io::{Cursor, Write},

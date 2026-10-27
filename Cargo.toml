@@ -21,6 +21,7 @@ include = [
     "/assets/icon.svg",
     "/docs/COVERAGE_HELPERS.md",
     "/docs/COMPATIBILITY.md",
+    "/docs/VERIFICATION.md",
     "/docs/MIGRATING_TO_V1.md",
     "/docs/MIGRATING_TO_V2.md",
     "/docs/CI_ADOPTION.md",

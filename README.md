@@ -325,7 +325,8 @@ The CLI stages file output and buffers stdout before writing. Each baseline
 application compares absolute scores anew, independently of earlier comparisons.
 See **[CONTRIBUTING.md](CONTRIBUTING.md)** for folder
 conventions, enforced safety/lint rules, release settings, benchmarks and quality
-commands. These rules reduce risk; they are not proof of maximum performance or
+commands. See [verification contracts](docs/VERIFICATION.md) for bounded Kani
+proofs and the released Rust API compatibility check. These rules reduce risk; they are not proof of maximum performance or
 of safety in third-party/native dependencies.
 
 ## Reproducible example and tests

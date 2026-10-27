@@ -1,13 +1,13 @@
 # Roadmap to public beta and v1.0.0
 
 Assessment date: 2026-10-25. Starting point: v0.4.0.
+Completion date: 2026-10-27. Released version: v1.0.0.
 
-The core feature set is sufficient to move toward beta: TypeScript CRAP scoring,
-source-bound coverage validation, regression baselines, Git diff/PR selection,
-SARIF, HTML reports, and release automation already exist. The next priorities
-are installation, integration, and dependable compatibility. This document is a
-proposed release checklist; unchecked items are not implemented or verified by
-this roadmap.
+The starting v0.4.0 core already provided TypeScript CRAP scoring, source-bound
+coverage validation, regression baselines, Git diff/PR selection, SARIF, HTML
+reports, and release automation. This roadmap added installation, integration,
+and compatibility verification. All items now have implementation and hosted
+verification evidence recorded below and in the [v1 acceptance ledger](RELEASE_V1.md).
 
 ## Before public beta
 
@@ -26,9 +26,10 @@ snapshots and validation remain in the distributed, unchanged collector modules.
 - [x] Add installed-bundle smoke tests to cross-platform CI and release
   verification, using the assembled release assets before publication.
 
-The implementation will ship with the next release after v0.4.0. Existing
-published releases are not retroactively changed. Hosted results and a published
-download remain release-time evidence, not claims made by the local smoke test.
+The helpers ship in the immutable [v1.0.0 release](https://github.com/RuiCostafrg/typescript-crap/releases/tag/v1.0.0).
+Existing published releases were not retroactively changed. The
+[acceptance ledger](RELEASE_V1.md) records exact-source hosted checks and
+publication evidence separately from local smoke tests.
 
 ### 2. Exercise real Jest and Vitest projects
 
@@ -53,8 +54,8 @@ evidence; LCOV gaps are checked separately and still fail the completeness gate.
 (Termux/proot). All 132 Rust tests, all 14 Python tests, formatting, Node script
 syntax, and actionlint 1.7.12 passed during item 2 implementation; the seven
 importer regression tests were also rerun after expanding the fixtures. Hosted Node 24 and
-macOS/Windows framework jobs now pass on the item-5–7 PR; the final release commit
-still requires its own exact-commit checks.
+macOS/Windows framework jobs passed on the item-5–7 PR. The exact v1.0.0 source
+also passed its own [main CI](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40461657144).
 
 ### 3. Persist project gate policy
 
@@ -77,7 +78,8 @@ Local validation on 2026-10-26 passed all 141 Rust tests, all 14 Python tests,
 strict Clippy, rustdoc with warnings denied, formatting, and actionlint 1.7.12.
 Hosted policy tests passed on Linux, macOS, and Windows in
 [PR #25 CI](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40420847597);
-the final release commit still requires its own exact-commit checks.
+the exact v1.0.0 source subsequently passed its own
+[main CI](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40461657144).
 
 ### 4. Verify installation and platform compatibility
 
@@ -111,7 +113,8 @@ The [published installer and live tap matrix](https://github.com/RuiCostafrg/typ
 passed on exact head `bf8a52d7be37c871939746bfe3ceae807e2bdf49`, including
 unchanged live formula URLs, fresh/reinstall checks, and v0.3.0 to v0.4.0 upgrades
 on macOS ARM64/Intel and Linux x86-64. All pre-beta installation items now have
-hosted evidence. The final v1 package repeats candidate and published-path checks.
+hosted evidence. The v1.0.0 package also passed its own candidate and
+[published-path checks](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40494926411).
 
 ## During beta, before v1.0.0
 
@@ -152,26 +155,31 @@ are inferred from these measurements.
   baseline creation, PR gating, and report upload even when the quality gate fails.
 - [x] Explain exit codes, stale reports, Git history requirements, and safe
   repeated execution under the importer's fresh-destination requirement.
-- [ ] Verify the guide from a clean checkout using published installation paths.
+- [x] Verify the guide from a clean checkout using published installation paths.
 
 The [CI guide](CI_ADOPTION.md) and [copyable workflow](../examples/ci/github-actions.yml)
 use reviewed base policy/baselines and retain reports on failed gates. Executable
 clean-project validation passes with both direct Node and real Vitest collection.
 Candidate release verification runs the guide with packaged CLI/helper bytes on
-all five targets. The final published-path check requires a new release containing
-the standalone helper bundle; v0.4.0 predates it. Run `verify-published.yml` after
-publication and live tap synchronization, then record the exact evidence here.
+all five targets. After v1.0.0 publication and live tap synchronization,
+[Verify published adoption](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40494926411)
+passed the guide using public CLI/helper downloads on all five platforms,
+including actual Vitest/Istanbul on Linux x86-64. All three live Homebrew targets
+also passed v0.4.0 to v1.0.0 upgrades, reinstalls, and fresh installations.
 
-## Release preparation status
+## v1.0.0 release status
 
-[PR #25](https://github.com/RuiCostafrg/typescript-crap/pull/25) is merged as
-`9fca2f9e5daab58965248e4b9889f639f06ee2ce`. Its exact head passed every check,
-including all advertised platform/installer paths, installed-guide contracts,
-three independent projects, advisories, **97.56% production Rust line coverage**,
-and **94.93% assertion-killed mutations** with zero timeouts. No quality floor
-was changed. The package is now being prepared as 1.0.0; preparation does not
-publish a tag or release. [The v1 acceptance ledger](RELEASE_V1.md) separates
-completed implementation evidence from exact-release and publication checks.
+The immutable [v1.0.0 release](https://github.com/RuiCostafrg/typescript-crap/releases/tag/v1.0.0)
+selects `4ce57b9aa3b9979166965aebbf15e16eabb6ccac`, merged through
+[PR #26](https://github.com/RuiCostafrg/typescript-crap/pull/26). Its exact main
+commit passed every required workflow, including advisories, real framework and
+independent-project tests, **97.75% production Rust line coverage**, and
+**95.77% assertion-killed mutations** with zero timeouts. The full candidate dry
+run and protected tag-triggered release workflow passed. The provenance-verified
+[Homebrew update](https://github.com/RuiCostafrg/homebrew-tap/pull/9) is merged,
+and all eight published-adoption jobs passed. No quality floor or publication
+protection was lowered. [The v1 acceptance ledger](RELEASE_V1.md) records exact
+commits, workflow URLs, the published helper checksum, and remaining product limits.
 
 ## Release acceptance
 
@@ -195,8 +203,9 @@ Local validation on 2026-10-25 passed 132 Rust tests (including the bundled Node
 suites and real Git/Node integration tests), 12 Python tests, and
 `cargo fmt --check`. These results describe the assessed v0.4.0 checkout; they do
 not establish completion of this checklist. Hosted CI, published installers,
-current advisory results, and fresh coverage/mutation measurements were not
-revalidated for this assessment.
+advisories, and fresh coverage/mutation measurements were not revalidated during
+that original assessment; their subsequent v1.0.0 evidence is recorded in the
+release status above and the acceptance ledger.
 
 The earlier security/correctness review's main findings are addressed by the
 current release; see [P2 implementation and validation](P2_IMPLEMENTATION.md).

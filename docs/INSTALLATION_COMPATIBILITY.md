@@ -71,7 +71,7 @@ Use the matching target triple from `--help`. Windows uses `--installer powershe
 The script requires Python 3 and the actual installer's prerequisites. It never
 changes the caller's HOME, profiles, or global environment variables.
 
-## Evidence and remaining work
+## Verification evidence
 
 Local validation on 2026-10-26 exercised the published ARM64 Linux shell
 installers on Ubuntu 26.04/Termux proot: fresh install, reinstall, and v0.3.0 to
@@ -133,3 +133,16 @@ quality gate is skipped. The matrix records its tested prefix and platforms;
 Homebrew's upstream platform support remains separate. The 2026-10-27 Intel
 job emitted Homebrew's unsupported-platform warning; ts-crap's shell/manual
 Intel archives retain their separately tested installation paths.
+
+The immutable [v1.0.0 release](https://github.com/RuiCostafrg/typescript-crap/releases/tag/v1.0.0)
+selects `4ce57b9aa3b9979166965aebbf15e16eabb6ccac`. Its
+[tag-triggered workflow](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40464740215)
+passed all five archives, candidate helper/guide checks, real installer upgrades,
+three Homebrew targets, and both clean Linux runtimes before protected publication.
+The provenance-verified [v1.0.0 tap update](https://github.com/RuiCostafrg/homebrew-tap/pull/9)
+merged after all required checks passed. The subsequent
+[published-adoption run](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40494926411)
+passed every job: installed CLI/helpers and the CI guide on all five platforms,
+plus live v0.4.0 to v1.0.0 Homebrew upgrades, reinstalls, and fresh installs on
+macOS ARM64/Intel and Linux x86-64. The [acceptance ledger](RELEASE_V1.md)
+records the exact source, verifier, tap commits, and helper checksum.

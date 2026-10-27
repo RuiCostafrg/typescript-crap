@@ -1,10 +1,10 @@
 # v1.0.0 acceptance ledger
 
-Status on 2026-10-27: implementation, exact-source candidate verification, and
-protected publication, and Homebrew sync complete; published-path verification
-is in progress. The `v1.0.0` tag selects
-`4ce57b9aa3b9979166965aebbf15e16eabb6ccac`. The [roadmap](RELEASE_ROADMAP.md)
-retains the final published-guide check until actual published tools pass it.
+Status on 2026-10-27: all v1.0.0 implementation and release acceptance steps
+complete, including protected publication, Homebrew synchronization, and
+published-tool verification. The immutable `v1.0.0` tag selects
+`4ce57b9aa3b9979166965aebbf15e16eabb6ccac`. Every item in the
+[roadmap](RELEASE_ROADMAP.md) has implementation and hosted release evidence.
 
 ## Completed implementation evidence
 
@@ -22,9 +22,9 @@ head `bf8a52d7be37c871939746bfe3ceae807e2bdf49`:
 | Production Rust coverage: 1517 / 1555 lines, **97.56%** | [coverage](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40420847587), floor 95% |
 | Mutation testing: 337 caught, 18 missed, 30 unviable, **94.93%**, zero timeouts | [mutations](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40420847618), floor 90% |
 
-Coverage/mutation numbers belong to that exact implementation head. The final
-1.0.0 release commit must pass its own full checks. The package version change
-adds no scoring, identity, input-schema, or production-algorithm change.
+Those coverage/mutation numbers belong to that implementation head. The exact
+1.0.0 source has its own full checks below. The package version change adds no
+scoring, identity, input-schema, or production-algorithm change.
 
 ## Mutation survivor review
 
@@ -104,6 +104,31 @@ in [Tap CI](https://github.com/RuiCostafrg/homebrew-tap/actions/runs/40494039197
 including actual macOS ARM64 and Linux x86-64 installs. The PR merged as
 `38c488213ceb94d823427832e0f079566fa12f24` on 2026-10-27.
 
+## Published installation and guide verification
+
+[Verify published adoption](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40494926411)
+passed all eight jobs with `version=1.0.0`, `previous-version=0.4.0`, and
+`verify-guide=true`:
+
+- Published CLI/helper downloads, checksums, provenance, and the clean-project
+  CI guide passed on Linux ARM64/x86-64, macOS ARM64/Intel, and Windows x86-64.
+  Linux x86-64 additionally passed actual Vitest/Istanbul collection.
+- Reviewed baseline creation, empty/comment/regression PRs, deterministic fresh
+  repeats, JSON/SARIF on gate failure, and stale-input rejection passed with
+  the installed tools. Each target uploaded its guide reports.
+- Live Homebrew passed exact published formula/download checks, v0.4.0 to
+  v1.0.0 upgrades through `brew update`/`brew upgrade`, reinstalls, fresh installs,
+  and TS/TSX/coverage behavior on macOS ARM64/Intel and Linux x86-64.
+
+This run used verifier commit `b9e4a88485015cf06c95dffe47b276e792563d1f` to
+download the immutable v1.0.0 assets whose release source remains
+`4ce57b9aa3b9979166965aebbf15e16eabb6ccac`. The first published-guide attempt
+included the checked-out `assets/icon.svg` in its provenance loop because it
+reused the repository's assets directory. The corrected verifier downloads and
+unpacks only into fresh runner-temporary directories. All attestation/checksum
+checks remain enabled. An exact-step local regression also passed with the
+existing icon present and the real published ARM64 CLI/helpers.
+
 ## Exact-release and publication checklist
 
 - [x] Merge the version-preparation PR after every check passes.
@@ -114,10 +139,10 @@ including actual macOS ARM64 and Linux x86-64 installs. The PR merged as
   Homebrew targets, and clean Linux runtimes.
 - [x] Owner-approved protected publication of the immutable `v1.0.0` tag/assets.
 - [x] Provenance-verified stable Homebrew sync, formula PR checks, and merge.
-- [ ] `Verify published adoption` with version `1.0.0`, previous version `0.4.0`,
+- [x] `Verify published adoption` with version `1.0.0`, previous version `0.4.0`,
   and guide verification enabled: all five installed-guide targets, actual Vitest
   on Linux x86-64, and all three live-tap targets.
-- [ ] Record the final tag/commit and workflow URLs, then close the roadmap's
+- [x] Record the final tag/commit and workflow URLs, then close the roadmap's
   published-guide item.
 
 Publish through the existing protected workflow described in [SECURITY.md](../SECURITY.md).

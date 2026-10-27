@@ -108,3 +108,10 @@ passed the same three revisions with Node 24.21.0 on Ubuntu 26.04 x86-64 at
 `bf8a52d7be37c871939746bfe3ceae807e2bdf49`. Its `independent-adoption` artifact
 contains separate hosted timings/RSS and scanner SHA-256; the committed local
 measurements above are not substituted for those results.
+
+The exact v1.0.0 source, `4ce57b9aa3b9979166965aebbf15e16eabb6ccac`, repeated
+the pinned-project adoption suite successfully in
+[main CI](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40461657144).
+The [acceptance ledger](RELEASE_V1.md) records that release's installation,
+provenance, coverage, mutation, and published-tool evidence separately from these
+historical local performance measurements.

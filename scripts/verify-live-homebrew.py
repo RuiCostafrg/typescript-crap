@@ -15,20 +15,35 @@ spec.loader.exec_module(installation)
 
 
 def verify(args):
-    brew = shutil.which('brew')
-    if not brew:
+    system_brew = shutil.which('brew')
+    if not system_brew:
         raise ValueError('Homebrew is required')
-    env = {**os.environ, 'HOMEBREW_NO_AUTO_UPDATE':'1', 'HOMEBREW_NO_ANALYTICS':'1',
-           'HOMEBREW_NO_INSTALL_CLEANUP':'1', 'HOMEBREW_NO_ENV_HINTS':'1'}
-    def run(command, *, timeout=180):
-        return installation.run(command, env=env, timeout=timeout)
-    if any(line.split()[0] == 'ts-crap' for line in run([brew, 'list', '--formula', '--versions']).splitlines() if line.strip()):
-        raise ValueError('Use a clean runner without ts-crap installed')
-    tap = 'ruicostafrg/tap'
-    if tap in run([brew, 'tap']).lower().splitlines():
-        raise ValueError('Use a clean runner without the live tap already configured')
-    with tempfile.TemporaryDirectory(prefix='ts-crap live tap ') as temporary:
-        root = Path(temporary)
+    # Homebrew updates can migrate unrelated installed packages (for example the
+    # hosted runner's Azure CLI). Use the real implementation in a disposable
+    # prefix with an empty Cellar, rather than changing the runner's packages.
+    with tempfile.TemporaryDirectory(prefix='ts-crap-live-tap-') as temporary:
+        root = Path(temporary).resolve()
+        env = {key:value for key,value in os.environ.items() if not key.startswith('HOMEBREW_')}
+        env.update(HOMEBREW_NO_AUTO_UPDATE='1', HOMEBREW_NO_ANALYTICS='1',
+                   HOMEBREW_NO_INSTALL_CLEANUP='1', HOMEBREW_NO_ENV_HINTS='1',
+                   HOMEBREW_CACHE=str(root/'cache'), HOMEBREW_LOGS=str(root/'logs'),
+                   HOMEBREW_TEMP=str(root/'temp'), XDG_CONFIG_HOME=str(root/'config'))
+        for directory in ['cache', 'logs', 'temp', 'config']:
+            (root/directory).mkdir()
+        def run(command, *, timeout=180):
+            print('Verify live Homebrew: ' + ' '.join(map(str, command)), flush=True)
+            return installation.run(command, env=env, timeout=timeout)
+        seed = Path(run([system_brew, '--repository']).strip()).resolve()
+        prefix = root/'homebrew'
+        run(['git', 'clone', '--quiet', '--depth=1', '--no-hardlinks', seed.as_uri(), prefix])
+        run(['git', '-C', prefix, 'remote', 'set-url', 'origin', 'https://github.com/Homebrew/brew'])
+        brew = prefix/'bin/brew'
+        env['PATH'] = str(prefix/'bin') + os.pathsep + os.environ.get('PATH', '')
+        for flag, expected in [('--prefix', prefix), ('--cellar', prefix/'Cellar'), ('--cache', root/'cache')]:
+            if Path(run([brew, flag]).strip()).resolve() != expected:
+                raise ValueError('Homebrew escaped the disposable verification prefix')
+        if run([brew, 'list', '--formula', '--versions']).strip() or run([brew, 'tap']).strip():
+            raise ValueError('Disposable Homebrew must have no preinstalled formulae or taps')
         current = installation.stage(args.assets, root/'current', args.target, args.version, 'homebrew')
         previous = installation.stage(args.previous_assets, root/'previous', args.target, args.previous_version, 'homebrew')
         try:
@@ -60,8 +75,8 @@ def verify(args):
             run(['git', '-C', repository, 'checkout', 'main'])
             if run(['git', '-C', repository, 'rev-parse', 'HEAD']).strip() != head:
                 raise ValueError('Unexpected live tap branch')
-            # A cold Intel macOS runner may spend several minutes refreshing
-            # Homebrew and its preinstalled taps. Keep the other command limits.
+            # Keep an explicit update followed by the real live-tap upgrade.
+            # Only this prefix's Homebrew/taps/packages participate.
             run([brew, 'update'], timeout=600)
             if (repository/'Formula/ts-crap.rb').read_bytes() != (args.assets/'ts-crap.rb').read_bytes():
                 raise ValueError('Live tap changed during verification')

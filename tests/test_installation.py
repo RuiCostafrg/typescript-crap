@@ -114,3 +114,37 @@ class InstallationCommandTests(unittest.TestCase):
         self.assertEqual(installation.run(command, expected=7, timeout=10), 'complete\n')
         with self.assertRaisesRegex(RuntimeError, 'expected 0, got 7'):
             installation.run(command, timeout=10)
+
+
+class LiveHomebrewIsolationTests(unittest.TestCase):
+    def test_escaped_prefix_cellar_or_cache_is_rejected_before_package_operations(self):
+        from contextlib import redirect_stdout
+        from unittest import mock
+        live_spec = importlib.util.spec_from_file_location('verify_live_homebrew', ROOT / 'scripts/verify-live-homebrew.py')
+        live = importlib.util.module_from_spec(live_spec)
+        live_spec.loader.exec_module(live)
+        for escaped in ['--prefix', '--cellar', '--cache']:
+            with self.subTest(escaped=escaped), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                prefix = root/'homebrew'
+                commands = []
+                def command(args, **_kwargs):
+                    commands.append(args)
+                    if args == ['/system/brew', '--repository']:
+                        return str(root/'seed')
+                    if str(args[0]) == str(prefix/'bin/brew'):
+                        if args[1] == escaped:
+                            return '/system/unsafe'
+                        return str({'--prefix':prefix, '--cellar':prefix/'Cellar', '--cache':root/'cache'}[args[1]])
+                    return ''
+                with mock.patch.object(live.shutil, 'which', return_value='/system/brew'), \
+                     mock.patch.object(live.tempfile, 'TemporaryDirectory') as directory, \
+                     mock.patch.object(live.installation, 'run', side_effect=command), \
+                     mock.patch.object(live.installation, 'stage') as stage, \
+                     redirect_stdout(io.StringIO()):
+                    directory.return_value.__enter__.return_value = str(root)
+                    with self.assertRaisesRegex(ValueError, 'escaped the disposable'):
+                        live.verify(object())
+                stage.assert_not_called()
+                package_operations = {'install','uninstall','tap','update','upgrade','reinstall'}
+                self.assertFalse(any(len(cmd)>1 and cmd[1] in package_operations for cmd in commands))

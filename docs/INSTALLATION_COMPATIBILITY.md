@@ -93,8 +93,14 @@ passed on its exact head. The manual `verify-published.yml` workflow additionall
 checks live formula bytes against the published asset, installs from unchanged
 GitHub URLs, upgrades from the exact previous formula in tap history with
 `brew update`/`brew upgrade`, and repeats fresh/reinstall TS/TSX/coverage checks on
-macOS ARM64/Intel and Linux x86-64. It refuses an existing ts-crap install or tap,
-and removes its own installation/tap afterward. Use a clean runner.
+macOS ARM64/Intel and Linux x86-64. It clones the installed Homebrew implementation
+into a disposable prefix with its own empty Cellar, taps, cache, logs, and config.
+The system installation supplies the initial implementation; the clone's origin
+is the official Homebrew repository, so `brew update` remains real. Prefix/Cellar/
+cache identities are checked before package operations. The caller's existing
+packages and taps do not participate, and the temporary installation is removed
+afterward. This live-path test covers a nondefault prefix; the separate staged
+installer matrix exercises the hosted runner's standard Homebrew prefix.
 
 After each new release, run that workflow with its version and a previous published
 upgrade fixture. Leave guide verification enabled for releases containing helpers.
@@ -103,7 +109,7 @@ as the previous version. A green candidate run remains distinct from a green
 published-path run; publication evidence must be recorded after it occurs.
 
 The live-tap verifier allows up to ten minutes for an explicit `brew update`,
-which refreshes Homebrew and all preinstalled taps on a cold hosted runner. Other
+which refreshes the disposable Homebrew implementation and its live tap. Other
 installer commands retain their three-minute deadline; the job retains its
 20-minute limit. Timeout failures include bounded partial stdout/stderr. These
 are verification-runner limits, not product subprocess guarantees.
@@ -114,3 +120,13 @@ targets, including the Intel macOS cold-update path. It verified the published
 v0.4.0 formula bytes, actual GitHub downloads, v0.3.0 upgrades, fresh installs,
 reinstalls, and installed TS/TSX/coverage behavior. New releases still require
 verification of their own published assets after tap synchronization.
+
+A prior Intel runner timeout was traced to the system `brew update` migrating its
+preinstalled Azure CLI into a cask and compiling an unrelated OpenSSL dependency.
+The verifier now has an empty disposable Cellar, so unrelated runner packages
+cannot trigger that migration. It still runs unmodified Homebrew code, published
+formula URLs/checksums, `brew update`, and `brew upgrade`; no upgrade assertion or
+quality gate is skipped. The matrix records its tested prefix and platforms;
+Homebrew's upstream platform support remains separate. The 2026-10-27 Intel
+job emitted Homebrew's unsupported-platform warning; ts-crap's shell/manual
+Intel archives retain their separately tested installation paths.

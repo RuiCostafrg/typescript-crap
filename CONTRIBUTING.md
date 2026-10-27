@@ -250,7 +250,7 @@ The owner can use the PR-only review bypass because self-authored PRs cannot
 receive an independent owner review. Mandatory CI remains enforced separately.
 Future collaborators require an explicit reconsideration of this policy.
 
-## P2 adoption features
+## Coverage and regression gates
 
 See the README for versioned selection config, source-bound Istanbul/LCOV imports,
 regression baselines, completeness flags, terminal escaping and SARIF. Baseline
@@ -264,7 +264,7 @@ with trusted credentials. Release validation requires successful main CI, covera
 and mutation runs for the exact tagged SHA, and all PR checks must pass before merge.
 
 
-## Remaining review improvements
+## Benchmarks and implementation notes
 
 See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the expanded multi-file and
 mixed-grammar benchmarks, parser reuse measurements and native Actions step timings.
@@ -282,3 +282,9 @@ Human report controls are exposed through `RenderOptions` and
 Machine formats reject non-default presentation settings. Filtering never mutates
 the `Report` used for exit codes or baselines. HTML uses escaped DOM text for
 search and fixed JavaScript, without interpolating source into executable code.
+
+When changing the HTML report UI, also open a generated report in a real browser.
+Include Unicode and HTML-special characters, check parsed rows and console
+errors, and exercise search, status filtering, and CLI presentation limits.
+The full gate and totals must stay unchanged. Node VM tests cover filter logic;
+they do not establish actual DOM parsing or layout behavior.

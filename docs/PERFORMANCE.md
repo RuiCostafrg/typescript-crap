@@ -394,6 +394,11 @@ when a budget fails: source SHAs, dirty-tree status, compiler/runtime versions,
 binary/module/harness hashes, every observation and budget decision. Inspect the
 raw pairs and reproduce before changing code or reviewing a budget adjustment;
 do not loosen a limit merely to make a failing change pass.
+The harness removes previous `results.json` evidence before setup, records
+metadata/build/measurement failures as failed attempts, and publishes complete
+JSON by syncing a sibling staging file and atomically replacing the result.
+If publication itself fails, the command fails and cleans its staging file;
+an earlier success is not reused after successful initial invalidation.
 
 ```sh
 # Linux needs GNU time; local Android/proot can use its GNU /usr/bin/time too.

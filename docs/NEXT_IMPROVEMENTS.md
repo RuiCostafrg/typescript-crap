@@ -6,9 +6,21 @@ Reviewed 2026-10-28. Items 1–3 were reproduced against code unchanged between
 (`06768012d18d9d80d4f2070dd5d16e7407371c36`). Item 4 concerns the performance
 harness introduced by that PR and depends on its merge.
 
-All items below are **proposed**, with locally reproduced evidence. This document
-is the approval scope for subsequent implementation PRs. The previous five
+All four items below are **implemented on the follow-up branch**, with regression
+tests; hosted checks and code-owner review remain merge requirements. The original
+reproductions and acceptance scope are retained below. The previous five
 [post-v1 priorities](IMPROVEMENT_PRIORITIES.md) are already implemented.
+
+| Item | Implementation | Regression evidence |
+| --- | --- | --- |
+| 1 | Shared config-destination protection in both helpers; additive `--config FILE` | [Helper config tests](../tests/coverage-config.test.mjs), wired into Rust tests on all three CI platforms |
+| 2 | Fall back only when the default config entry itself is missing | [Library/CLI policy tests](../tests/project_policy.rs) cover all gates and preserve existing outputs |
+| 3 | Validate every record/metric before aggregation | [Coverage-summary tests](../tests/test_coverage_summary.py) reject cancellation, booleans and invalid mixed metrics |
+| 4 | Invalidate stale results before setup; stage/sync/replace complete evidence | [Performance tests](../tests/test_performance.py) cover metadata/build/run failures, budget rejection, reruns and write failures |
+
+The implementation is stacked on PR #32 while it waits for code-owner approval.
+The original sequencing recommendation below is superseded by that explicit
+dependency; neither PR's review requirement is bypassed.
 
 P1 means the next correctness fix; P2 means subsequent evidence hardening.
 S estimates half to one engineer-day, M one to three days, including regressions
@@ -41,13 +53,13 @@ config as raw input or native output.
    top-level keys are `version` and `files`.
 4. The next scan exits 2 with `invalid project configuration`.
 
-**Proposed change:** reserve the canonical default config location for both
+**Implemented change:** reserve the canonical default config location for both
 helpers, including when absent, before executing tests and immediately before
 publishing. Resolve existing parent-directory aliases when comparing locations.
-Keep normal replacement of existing native coverage reports. Explicit alternative
-config paths need a documented way to declare protected inputs; the helpers do
-not currently accept the scanner's `--config` option. Decide that interface before
-adding it rather than pretending arbitrary config paths can be discovered.
+Keep normal replacement of existing native coverage reports. An additive,
+caller-relative `--config FILE` explicitly declares an alternative protected
+policy path without loading it or forwarding policy to tests. Arbitrary config
+paths are not inferred.
 
 **Acceptance:** existing/absent default configs, equivalent path spellings,
 directory symlink aliases, importer raw/native destinations, and successful
@@ -55,8 +67,8 @@ ordinary report destinations. Preflight failures must preserve policy bytes and
 avoid executing the child. Existing hardlink publication behavior must remain
 safe: replacing an output entry must not modify its other links.
 
-The native overwrite is reproduced. The importer absent-config cases are
-source-inspected follow-up coverage to reproduce during implementation.
+The native overwrite was reproduced before implementation. Both importer
+absent-config cases are now exercised by the helper integration regressions.
 
 ## 2. Distinguish missing configuration from a broken config link
 

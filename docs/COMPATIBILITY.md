@@ -33,6 +33,8 @@ change as a routine dependency update.
 
 Configuration discovery stays at `ROOT/ts-crap.json`, unless `--config` explicitly
 selects a caller-relative file. No environment or ancestor policy is loaded.
+A default config entry that is a dangling symlink is an error; only an absent
+entry uses built-in defaults. Working config symlinks remain supported.
 Each explicit gate override wins over config and then built-in defaults
 (threshold 10; require_coverage/fail_on_empty false). Bare boolean flags mean true;
 `=false` explicitly disables a configured gate. Include/exclude replacement and

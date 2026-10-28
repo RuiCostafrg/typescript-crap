@@ -267,6 +267,13 @@ concurrently is never replaced.
 Fresh-destination publication requires hard-link support on the destination
 filesystem; failures are reported without falling back to a partial direct write.
 
+Both helpers reserve `ROOT/ts-crap.json`, even when absent. Pass `--config FILE`
+before `--` to also protect an alternative policy file; the path is relative to
+the calling directory, just like the scanner's `--config`. This helper option
+only protects the destination and does not load policy or forward it to tests.
+The importer reserves both its raw input and native output against these paths.
+Existing directory aliases and config symlink targets are checked too.
+
 ```sh
 mkdir -p reports
 node scripts/coverage.mjs \

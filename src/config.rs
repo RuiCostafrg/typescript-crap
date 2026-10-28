@@ -57,7 +57,15 @@ impl Rules {
             Ok(bytes) => {
                 serde_json::from_slice::<Config>(&bytes).context("invalid project configuration")?
             }
-            Err(error) if config.is_none() && error.kind() == std::io::ErrorKind::NotFound => {
+            // A dangling policy link is a present but unreadable configuration,
+            // not an absent default file that may safely use built-in settings.
+            Err(error)
+                if config.is_none()
+                    && error.kind() == std::io::ErrorKind::NotFound
+                    && path
+                        .symlink_metadata()
+                        .is_err_and(|entry| entry.kind() == std::io::ErrorKind::NotFound) =>
+            {
                 Config {
                     version: 1,
                     include: vec![],

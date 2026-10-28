@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Collect Istanbul (Jest/Vitest/nyc) or LCOV with a pre-execution source snapshot.
 import { parseUniqueJson } from './strict-json.mjs';
-import { publishReport } from './coverage-publish.mjs';
+import { protectConfigDestinations, publishReport } from './coverage-publish.mjs';
 import { digest, snapshot } from './coverage-snapshot.mjs';
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
@@ -181,12 +181,14 @@ async function main() {
   const options = {};
   if (separator < 0 || separator % 2) throw new Error('Expected --root ROOT --format istanbul|lcov --input RAW --output NATIVE -- COMMAND');
   for (let i = 0; i < separator; i += 2) {
-    if (!['--root', '--format', '--input', '--output'].includes(argv[i]) || options[argv[i]]) throw new Error('Invalid or duplicate import option');
+    if (!['--root', '--format', '--input', '--output', '--config'].includes(argv[i]) || !argv[i + 1] || options[argv[i]]) throw new Error('Invalid or duplicate import option');
     options[argv[i]] = argv[i + 1];
   }
   if (!options['--root'] || !options['--input'] || !options['--output'] || !['istanbul', 'lcov'].includes(options['--format']) || !argv[separator + 1]) throw new Error('Missing required import options or command');
   const root = await fs.realpath(options['--root']);
   const input = path.resolve(options['--input']), output = path.resolve(options['--output']);
+  const protectConfig = () => protectConfigDestinations(root, [input, output], options['--config']);
+  await protectConfig();
   if (input === output || supported(input) || supported(output)) throw new Error('Coverage inputs/outputs must differ and cannot be TypeScript');
   // Import selection excludes declarations; post-command hashes below enforce
   // unchanged source. Fresh input/output destinations remain importer-only policy.
@@ -215,6 +217,6 @@ async function main() {
     if (Object.keys(file.lines).length) result.files[path.relative(root, absolute).split(path.sep).join('/')] = { sha256: file.sha256, lines: file.lines };
   }
   // A fresh destination is required, so never replace an existing entry.
-  await publishReport(output, `${JSON.stringify(result, null, 2)}\n`);
+  await publishReport(output, `${JSON.stringify(result, null, 2)}\n`, { validate: protectConfig });
 }
 main().catch(error => { console.error(JSON.stringify(error.message)); process.exitCode = 2; });

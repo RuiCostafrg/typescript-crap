@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('performance', ROOT / 'scripts/check-performance.py')
@@ -13,6 +14,94 @@ spec.loader.exec_module(performance)
 
 
 class PerformanceTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform in ('linux', 'android') and Path('/usr/bin/time').exists(), 'Linux GNU time required')
+    def test_metadata_failures_replace_previous_success_with_failure(self):
+        """Missing Git/compiler/runtime/time metadata cannot leave old successful evidence."""
+        for failed_tool in ['git', 'rustc', 'node', '/usr/bin/time']:
+            with self.subTest(tool=failed_tool), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                report = root / 'results.json'
+                report.write_text('{"passed":true,"candidate_sha":"old-run"}')
+                def metadata(command, **kwargs):
+                    """Fail the selected real orchestration boundary before any build."""
+                    if command[0] == failed_tool:
+                        raise RuntimeError(f'{failed_tool} unavailable')
+                    return 'metadata\n'
+                with patch('sys.argv', ['check-performance.py', '--output', str(root)]), \
+                        patch.object(performance, 'run', side_effect=metadata):
+                    with self.assertRaisesRegex(RuntimeError, 'unavailable'):
+                        performance.main()
+                result = json.loads(report.read_text())
+                self.assertIs(result['passed'], False)
+                self.assertIn('unavailable', result['error'])
+                self.assertNotEqual(result.get('candidate_sha'), 'old-run')
+                self.assertEqual(list(root.glob('.results-*')), [])
+
+    @unittest.skipUnless(sys.platform in ('linux', 'android') and Path('/usr/bin/time').exists(), 'Linux GNU time required')
+    def test_run_failures_budget_rejection_and_successful_rerun_refresh_evidence(self):
+        """Retain failed attempts across execution errors and publish only completed successes."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            def exported(reference, destination):
+                """Provide a minimal source export without invoking Git or a compiler."""
+                (destination / 'scripts').mkdir(parents=True)
+                (destination / 'scripts/coverage-lines.mjs').write_text('baseline module')
+                return 'baseline-sha'
+            def built(source, target):
+                """Provide a hashable binary stand-in; actual measurement is tested separately."""
+                target.mkdir(parents=True, exist_ok=True)
+                binary = target / 'scanner'
+                binary.write_bytes(b'scanner')
+                return binary
+            good = {'assessment': {'wall_ms': {'regressed': False}}}
+            bad = {'assessment': {'wall_ms': {'regressed': True}}}
+            for phase in ['build', 'timeout', 'malformed', 'budget', 'success']:
+                with self.subTest(phase=phase), \
+                        patch('sys.argv', ['check-performance.py', '--output', str(root), '--case', 'nested']), \
+                        patch.object(performance, 'run', return_value='metadata\n'), \
+                        patch.object(performance, 'export_baseline', side_effect=exported), \
+                        patch.object(performance, 'build', side_effect=RuntimeError('build failed') if phase == 'build' else built), \
+                        patch.object(performance, 'compare_case', return_value=bad if phase == 'budget' else good,
+                                     side_effect=RuntimeError('process exceeded 60s') if phase == 'timeout' else
+                                     ValueError('invalid observations') if phase == 'malformed' else None):
+                    (root / 'results.json').write_text('{"passed":true,"candidate_sha":"old-run"}')
+                    if phase in ['build', 'timeout', 'malformed']:
+                        with self.assertRaises((RuntimeError, ValueError)):
+                            performance.main()
+                    elif phase == 'budget':
+                        with self.assertRaisesRegex(SystemExit, 'Performance regression detected'):
+                            performance.main()
+                    else:
+                        performance.main()
+                    result = json.loads((root / 'results.json').read_text())
+                    self.assertEqual(result['passed'], phase == 'success')
+                    self.assertNotEqual(result.get('candidate_sha'), 'old-run')
+                    self.assertEqual(list(root.glob('.results-*')), [])
+
+    @unittest.skipUnless(sys.platform in ('linux', 'android') and Path('/usr/bin/time').exists(), 'Linux GNU time required')
+    def test_report_write_failures_preserve_atomicity_and_remove_staging(self):
+        """Serialization, sync and replacement failures cannot expose partial JSON."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report = root / 'results.json'
+            previous = '{"passed":false,"error":"previous failure"}'
+            for target in ['json.dump', 'os.fsync', 'os.replace']:
+                report.write_text(previous)
+                with patch.object(performance.json if target.startswith('json') else performance.os,
+                                  target.split('.')[1], side_effect=OSError('write failed')):
+                    with self.assertRaisesRegex(OSError, 'write failed'):
+                        performance.publish_results(root, {'passed': True})
+                self.assertEqual(report.read_text(), previous)
+                self.assertEqual(list(root.glob('.results-*')), [])
+            report.write_text('{"passed":true,"candidate_sha":"old-run"}')
+            with patch('sys.argv', ['check-performance.py', '--output', str(root)]), \
+                    patch.object(performance, 'run', side_effect=RuntimeError('metadata failed')), \
+                    patch.object(performance.os, 'replace', side_effect=PermissionError('cannot publish')):
+                with self.assertRaisesRegex(PermissionError, 'cannot publish'):
+                    performance.main()
+            self.assertFalse(report.exists())
+            self.assertEqual(list(root.glob('.results-*')), [])
+
     def test_large_consistent_slowdowns_and_memory_growth_fail(self):
         """Reject substantive time/RSS growth while accepting improvements."""
         for ratio, slack, old, new in [(1.5, 50, 100, 220), (1.3, 16384, 32768, 65536)]:

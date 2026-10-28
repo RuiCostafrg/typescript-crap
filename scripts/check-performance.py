@@ -245,6 +245,23 @@ def compare_case(case, binaries, modules, workspace, args):
             'observations': observations, 'assessment': assessments}
 
 
+def publish_results(destination, results):
+    """Replace evidence atomically after writing and syncing a complete sibling file."""
+    staging = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=destination,
+                                         prefix='.results-', suffix='.tmp', delete=False) as output:
+            staging = Path(output.name)
+            json.dump(results, output, indent=2)
+            output.write('\n')
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(staging, destination / 'results.json')
+    finally:
+        if staging is not None:
+            staging.unlink(missing_ok=True)
+
+
 def main():
     """Compare alternating baseline/candidate pairs and fail substantive regressions."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -257,20 +274,26 @@ def main():
     parser.add_argument('--rss-ratio', type=positive, default=1.3)
     parser.add_argument('--rss-slack-kib', type=positive, default=16384)
     args = parser.parse_args()
-    if sys.platform not in ('linux', 'android') or not Path('/usr/bin/time').is_file():
-        parser.error('requires Linux and GNU /usr/bin/time (install the time package)')
-    if args.pairs < 3 or args.pairs % 2 == 0 or args.time_ratio <= 1 or args.rss_ratio <= 1:
-        parser.error('use an odd pair count >=3 and ratios >1')
     destination = args.output.resolve()
     destination.mkdir(parents=True, exist_ok=True)
-    results = {'version': 1, 'baseline_ref': args.baseline, 'candidate_sha': run(['git', 'rev-parse', 'HEAD'], cwd=ROOT).strip(),
-               'rustc': run(['rustc', '--version']).strip(), 'node': run(['node', '--version']).strip(),
-               'platform': platform.platform(),
-               'working_tree_dirty': bool(run(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=ROOT).strip()),
-               'harness_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-               'node_harness_sha256': hashlib.sha256((ROOT / 'scripts/bench-coverage-lines.mjs').read_bytes()).hexdigest(),
-               'time_tool': run(['/usr/bin/time', '--version']).splitlines()[0], 'budgets': vars(args) | {'output': str(destination)}, 'cases': []}
+    # Remove a prior success before anything that can fail during run setup.
+    (destination / 'results.json').unlink(missing_ok=True)
+    results = {'version': 1, 'passed': False, 'baseline_ref': args.baseline,
+               'budgets': vars(args) | {'output': str(destination)}, 'cases': []}
     try:
+        if sys.platform not in ('linux', 'android') or not Path('/usr/bin/time').is_file():
+            parser.error('requires Linux and GNU /usr/bin/time (install the time package)')
+        if args.pairs < 3 or args.pairs % 2 == 0 or args.time_ratio <= 1 or args.rss_ratio <= 1:
+            parser.error('use an odd pair count >=3 and ratios >1')
+        results.update({
+            'candidate_sha': run(['git', 'rev-parse', 'HEAD'], cwd=ROOT).strip(),
+            'rustc': run(['rustc', '--version']).strip(), 'node': run(['node', '--version']).strip(),
+            'platform': platform.platform(),
+            'working_tree_dirty': bool(run(['git', 'status', '--porcelain', '--untracked-files=no'], cwd=ROOT).strip()),
+            'harness_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            'node_harness_sha256': hashlib.sha256((ROOT / 'scripts/bench-coverage-lines.mjs').read_bytes()).hexdigest(),
+            'time_tool': run(['/usr/bin/time', '--version']).splitlines()[0],
+        })
         with tempfile.TemporaryDirectory(prefix='performance-', dir=destination) as temporary:
             workspace = Path(temporary)
             baseline = workspace / 'baseline'
@@ -284,11 +307,11 @@ def main():
                 case = fixture(name, workspace / name)
                 results['cases'].append(compare_case(case, binaries, modules, workspace, args))
         results['passed'] = not any(a['regressed'] for c in results['cases'] for a in c['assessment'].values())
-    except Exception as error:
+    except BaseException as error:
         results.update(passed=False, error=str(error))
         raise
     finally:
-        (destination / 'results.json').write_text(json.dumps(results, indent=2) + '\n')
+        publish_results(destination, results)
     if not results['passed']:
         raise SystemExit('Performance regression detected; inspect target/performance/results.json')
 

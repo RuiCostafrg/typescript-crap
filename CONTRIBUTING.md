@@ -72,7 +72,9 @@ cancelled. They require no publishing credentials or external coverage-service t
 
 - **`.github/workflows/ci.yml`**: push, PR, and manual runs; Rust 1.90/stable
   matrix; formatting, strict Clippy, debug/release tests, Python helper tests,
-  publishable-package content checks, rustdoc and Node syntax checks. Separate
+  publishable-package content checks, rustdoc and Node syntax checks. The required
+  Rust 1.90 job also checks paired runtime/RSS performance regressions against the
+  PR base (previous main commit on pushes); its artifacts retain all raw samples. Separate
   jobs run RustSec auditing and actionlint. macOS and Windows jobs run
   CLI/path/output, Git selection, report and real Node coverage behavior tests,
   including spaces, Unicode and native path separators. These jobs retain the
@@ -210,7 +212,11 @@ warms up once, then reports five samples (median/min/max). It includes selection
 file/coverage reads, parsing, scoring, and sorting—not JSON/HTML serialization.
 Use `TS_CRAP_BENCH_FUNCTIONS` to change the workload. Local wall-clock measurements
 are informational: mobile CPU throttling, concurrent compilation, filesystem
-caches, and proot affect results. There is no flaky timing assertion in CI.
+caches, and proot affect results. Ordinary tests have no timing assertions.
+The required Rust 1.90 CI job runs the paired performance guard described in
+[PERFORMANCE.md](docs/PERFORMANCE.md#continuous-performance-regression-checks).
+It compares base and candidate on the same runner after all builds finish,
+retains raw samples and fails only consistent regressions exceeding both budgets.
 
 
 ## Publishing releases

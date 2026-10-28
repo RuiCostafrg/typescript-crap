@@ -328,3 +328,81 @@ syntax checking and package listing passed. All 15 library tests also passed
 in the release profile, including the analyzer reference test. The complete
 hosted release/platform/coverage/mutation/audit checks remain merge requirements;
 a local benchmark is not a replacement for those gates.
+
+## Continuous performance regression checks
+
+The required `test (1.90)` job now runs `scripts/check-performance.py` after its
+ordinary tests and documentation checks. This supersedes the historical notes
+above saying CI has no performance gate. The stable Rust leg still runs its full
+correctness checks. Existing coverage, mutation and audit gates are unchanged.
+Because the guard is a step inside an existing required job, a failure blocks
+merging and the release workflow's successful-main-CI prerequisite.
+
+The baseline is the exact PR base SHA, the preceding main SHA on pushes, or
+`v2.0.1` on manual dispatch. A full checkout makes those sources available. The
+runner exports tracked baseline files, builds baseline and candidate sequentially
+with separate Cargo target directories, `--locked --release -j 1`, and the same
+Rust/Node tools. All builds finish before measurement. Untracked user files are
+never copied into the baseline. No previous runner's timings are used as a gate.
+
+Seven fixed, validated workloads protect important optimization boundaries:
+
+| Workload | Fixture | What it exercises |
+| --- | --- | --- |
+| Covered scan | 4,000 functions in 40 TS/TSX files | Source hashes, coverage lookup, parser reuse and scoring |
+| Unicode TSX | 4,000 arrows on one line with astral characters and JSX | UTF-16 columns and long-line scanning |
+| Nested functions | Depth 192 | Scope naming, child ownership and hashing |
+| SARIF | 4,000 failing functions | Complete finding serialization and fingerprints |
+| Git batch | 3,840 functions in 48 committed files, CRLF worktree snapshots | One batch verifier, pinned identities and newline equivalence |
+| Large Git blob | A 32 MiB comment and one function | Bounded blob verification memory without a second full blob copy |
+| Coverage conversion | 16,000 overlapping V8 ranges | Active-range heap scaling and conservative line evidence |
+
+Every scanner result must retain the known function count and exact fixture
+scores/coverage. SARIF must retain all 4,000 expected findings; the Node benchmark
+asserts its known line-hit result. Errors, malformed results, missing samples and
+process timeouts fail instead of being treated as speedups.
+
+Each side gets one validated warmup, then five fresh-process observations in
+alternating baseline/candidate order. Only the five paired observations count.
+This is a warm-filesystem benchmark and includes CLI startup, scan and output;
+it does not isolate parser instructions. The Node case includes process startup
+and its benchmark's warmup and five conversions. No compiler or other test runs
+concurrently on that job's runner during measurements.
+
+A metric fails only if its candidate median exceeds **both** the relative and
+absolute budget, and a majority of individual pairs also exceed both:
+
+| Metric | Relative limit | Absolute slack |
+| --- | ---: | ---: |
+| Process wall time | 1.5× baseline | 50 ms |
+| Peak RSS | 1.3× baseline | 16 MiB |
+
+These intentionally broad limits target substantial regressions on shared CI
+runners. They are not promises of stable latency or maximum performance. RSS is
+GNU time's per-run `%M` value in KiB, including kernel child accounting; it is
+neither summed process-tree memory nor a stage allocation measurement. Setup in
+the Python parent is outside the measured scanner/helper process. Each command
+has a 60-second watchdog that kills its process group on timeout.
+
+The `performance-regressions` artifact retains `results.json` for 14 days even
+when a budget fails: source SHAs, dirty-tree status, compiler/runtime versions,
+binary/module/harness hashes, every observation and budget decision. Inspect the
+raw pairs and reproduce before changing code or reviewing a budget adjustment;
+do not loosen a limit merely to make a failing change pass.
+
+```sh
+# Linux needs GNU time; local Android/proot can use its GNU /usr/bin/time too.
+python3 scripts/check-performance.py --baseline v2.0.1
+# Focused development run; CI always uses all seven workloads and five pairs.
+python3 scripts/check-performance.py --baseline HEAD --case unicode-tsx --pairs 3
+python3 -B -m unittest discover -s tests -p test_performance.py
+```
+
+Ordinary Rust regressions independently check a long Unicode/TSX line against
+full-prefix UTF-16 references, isolate one missing coverage statement among
+1,000 functions, reject stale evidence, and exercise seven-byte reads with
+interrupted reads and real I/O errors across the production 8192-byte boundary.
+Those tests assert behavior without wall-clock limits and run in debug, release,
+coverage and mutation CI. The Python guard tests reject known slowdowns and
+memory growth, tolerate isolated outliers, reject corrupt observations, verify
+per-process RSS isolation, and check command failures and timeout cleanup.

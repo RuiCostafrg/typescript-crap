@@ -6,9 +6,22 @@ pub(super) fn matches_committed(
     size: u64,
     source: &[u8],
 ) -> std::io::Result<bool> {
+    matches_committed_with_buffer::<8192>(reader, size, source)
+}
+
+// Const-generic buffer size lets bounded proofs exercise chunk transitions with
+// the same algorithm; the production entry point always uses 8192 bytes.
+pub(super) fn matches_committed_with_buffer<const N: usize>(
+    reader: &mut impl Read,
+    size: u64,
+    source: &[u8],
+) -> std::io::Result<bool> {
+    const {
+        assert!(N > 0);
+    };
     let mut committed = reader.take(size);
     let mut expected = without_crlf(source);
-    let mut buffer = [0; 8192];
+    let mut buffer = [0; N];
     let mut pending_cr = false;
     let mut matches = true;
     for offset in (0..size).step_by(buffer.len()) {

@@ -13,12 +13,16 @@ coverage, mutation and executable schema/CLI contracts remain in force.
 Git subprocess/parser dependencies. An independent specification removes CR only
 when immediately followed by LF. Every other byte, including lone CR, matters.
 
-Two Kani harnesses quantify over arbitrary bytes and lengths from zero through
-four. They assert that comparison agrees with the specification, consumes exactly
+Thirty Kani harnesses cover both properties over arbitrary bytes and every length
+combination from zero through four, using a two-byte buffer to cover transitions
+between chunks. The production
+entry point instantiates the same const-generic algorithm with 8192 bytes. They
+assert that comparison agrees with the specification, consumes exactly
 the declared blob without touching batch framing even on mismatch, and rejects a
 truncated blob. Unwinding assertions remain enabled; exceeding the harness unwind
 bound fails verification. These are bounded proofs, not proofs for arbitrary
-lengths, process cleanup, filesystem behavior, the parser, or the complete CLI.
+lengths or the 8192-byte instantiation, process cleanup, filesystem behavior, the
+parser, or the complete CLI.
 The ordinary tests exercise large blobs and CRLF split across the 8192-byte buffer.
 
 On a Kani-supported host, install and run the same pinned tool as CI:

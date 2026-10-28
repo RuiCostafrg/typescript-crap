@@ -23,7 +23,9 @@ truncated blob. Unwinding assertions remain enabled; exceeding the harness unwin
 bound fails verification. These are bounded proofs, not proofs for arbitrary
 lengths or the 8192-byte instantiation, process cleanup, filesystem behavior, the
 parser, or the complete CLI.
-The ordinary tests exercise large blobs and CRLF split across the 8192-byte buffer.
+The harnesses use an in-memory `Cursor`; OS I/O errors and short reads remain
+integration-test responsibilities. The ordinary tests exercise large blobs and
+CRLF split across the 8192-byte buffer.
 
 On a Kani-supported host, install and run the same pinned tool as CI:
 

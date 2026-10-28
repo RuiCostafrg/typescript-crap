@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.0.1
+
+### Added
+
+- Bounded Kani verification of committed-source comparison against an independent
+  CRLF specification, including framing and truncation properties.
+- Pinned Rust API compatibility checks against the released v2.0.0 API.
+- Documented verification contracts, proof limits, and comparator invariants.
+
+### Changed
+
+- Require successful main-branch verification alongside the existing quality
+  workflows before tag publication; verify upgrades from v2.0.0.
+
+Scoring, coverage schemas, fingerprints, CLI behavior, and the public Rust API
+remain compatible with v2.0.0. No coverage recollection or baseline migration is
+needed when upgrading from v2.0.0.
+
 ## 2.0.0
 
 ### Fixed

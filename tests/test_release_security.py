@@ -2,7 +2,9 @@
 import hashlib
 import importlib.util
 import io
+import os
 from pathlib import Path
+import subprocess
 import tarfile
 import tempfile
 import zipfile
@@ -21,6 +23,42 @@ installer = module('installer', ROOT / 'scripts/install-dist.py')
 release = module('release', ROOT / 'scripts/prepare-release.py')
 
 class ReleaseSecurityTests(unittest.TestCase):
+    def test_tag_publication_requires_every_exact_source_quality_workflow(self):
+        """Reject publication when any exact-source main quality workflow fails."""
+        workflow = (ROOT / '.github/workflows/release.yml').read_text()
+        preflight = workflow.split('          git merge-base --is-ancestor', 1)[1]
+        preflight = 'git merge-base --is-ancestor' + preflight.split('      - name:', 1)[0]
+        required = ['ci.yml', 'coverage.yml', 'mutation.yml',
+                    'installation.yml', 'verification.yml']
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            (directory / 'git').write_text('#!/bin/bash\nexit 0\n')
+            (directory / 'gh').write_text(
+                '#!/bin/bash\n'
+                'echo "$*" >> "$CALLS"\n'
+                'if [[ -n "$FAIL_WORKFLOW" && "$*" == *"/$FAIL_WORKFLOW/"* ]]; '
+                'then echo false; else echo true; fi\n')
+            for name in ['git', 'gh']:
+                (directory / name).chmod(0o755)
+            for failure in ['', *required]:
+                with self.subTest(failed_workflow=failure):
+                    calls = directory / 'calls'
+                    calls.write_text('')
+                    environment = dict(os.environ, PATH=f'{directory}:/usr/bin:/bin',
+                                       CALLS=str(calls), FAIL_WORKFLOW=failure,
+                                       EVENT='push', REF='refs/tags/v2.0.1',
+                                       GITHUB_SHA='exact-source-sha',
+                                       GITHUB_REPOSITORY='owner/repo')
+                    result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', preflight],
+                                            env=environment, capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, not failure, result.stderr)
+                    if not failure:
+                        commands = calls.read_text().splitlines()
+                        self.assertEqual(len(commands), len(required))
+                        for name, command in zip(required, commands):
+                            self.assertIn(f'/{name}/runs?head_sha=exact-source-sha&event=push', command)
+                            self.assertIn('head_branch == "main"', command)
+
     def test_tool_download_rejects_tampering_before_writing_executable(self):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary) / 'bin'

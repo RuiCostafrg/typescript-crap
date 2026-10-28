@@ -24,6 +24,7 @@ release = module('release', ROOT / 'scripts/prepare-release.py')
 
 class ReleaseSecurityTests(unittest.TestCase):
     def test_tag_publication_requires_every_exact_source_quality_workflow(self):
+        """Reject publication when any exact-source main quality workflow fails."""
         workflow = (ROOT / '.github/workflows/release.yml').read_text()
         preflight = workflow.split('          git merge-base --is-ancestor', 1)[1]
         preflight = 'git merge-base --is-ancestor' + preflight.split('      - name:', 1)[0]

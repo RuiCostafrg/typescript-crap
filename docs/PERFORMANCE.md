@@ -361,6 +361,11 @@ Every scanner result must retain the known function count and exact fixture
 scores/coverage. SARIF must retain all 4,000 expected findings; the Node benchmark
 asserts its known line-hit result. Errors, malformed results, missing samples and
 process timeouts fail instead of being treated as speedups.
+Unicode fixture locations must match independently encoded source prefixes,
+including exact byte and UTF-16 columns by function name. Every measured SARIF
+run must retain the baseline warmup's ordered `function/v1` identities; a hash of
+those fingerprints is retained with each observation. Distinct but incorrect
+columns or replacement fingerprints cannot pass as successful optimization.
 
 Each side gets one validated warmup, then five fresh-process observations in
 alternating baseline/candidate order. Only the five paired observations count.

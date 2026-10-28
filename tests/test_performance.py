@@ -70,6 +70,28 @@ class PerformanceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'scope ownership'):
                 performance.validate(case, bad)
 
+    def test_unicode_locations_require_exact_byte_and_utf16_columns(self):
+        """Reject distinct but wrong Unicode columns and names assigned another location."""
+        source = "const marker = '😀'; const f0=()=> '😀'; const f1=()=> 0;"
+        locations = performance.unicode_locations(source, 'source-000.tsx')
+        self.assertEqual(locations, {'f0': ('source-000.tsx', 1, 33, 31),
+                                     'f1': ('source-000.tsx', 1, 55, 51)})
+        case = {'name': 'unicode-tsx', 'count': 2, 'complexity': 2, 'coverage': 0.0,
+                'locations': locations}
+        good = {'failed': False, 'functions': [
+            {'name': name, 'path': path, 'line': line, 'column': byte, 'column_utf16': utf16,
+             'complexity': 2, 'coverage': 0.0, 'crap': 6, 'failed': False}
+            for name, (path, line, byte, utf16) in locations.items()]}
+        performance.validate(case, good)
+        for field, value in [('column_utf16', 32), ('column', 34), ('line', 2),
+                             ('path', 'wrong.tsx'), ('name', 'f1')]:
+            bad = json.loads(json.dumps(good))
+            bad['functions'][0][field] = value
+            if field == 'name':
+                bad['functions'][1]['name'] = 'f0'
+            with self.assertRaises(ValueError):
+                performance.validate(case, bad)
+
     def test_sarif_findings_require_complete_locations_and_fingerprints(self):
         """Reject faster reports that omit findings or their stable evidence."""
         case = {'name': 'sarif', 'count': 2}
@@ -81,7 +103,12 @@ class PerformanceTests(unittest.TestCase):
                  'artifactLocation': {'uri': 'source-000.ts'},
                  'region': {'startLine': i * 4 + 1}}}]}
             for i in range(2)]}]}
-        performance.validate(case, good)
+        baseline = performance.validate(case, good)
+        performance.validate(case, good, baseline)
+        bad = json.loads(json.dumps(good))
+        bad['runs'][0]['results'][1]['partialFingerprints'] = {'function/v1': 'f' * 64}
+        with self.assertRaisesRegex(ValueError, 'identities differ from baseline'):
+            performance.validate(case, bad, baseline)
         bad = json.loads(json.dumps(good))
         bad['runs'][0]['results'].pop()
         with self.assertRaises(ValueError):

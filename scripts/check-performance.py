@@ -67,10 +67,17 @@ def build(source, target):
     return target / 'release/ts-crap'
 
 
+def unicode_locations(source, path):
+    """Derive fixture arrow locations from independently encoded source prefixes."""
+    return {match.group(1): (path, 1, len(source[:match.end()].encode('utf-8')) + 1,
+                            len(source[:match.end()].encode('utf-16-le')) // 2 + 1)
+            for match in re.finditer(r'const (f\d+)=', source)}
+
+
 def fixture(name, root):
     """Create fixed workloads with known function counts, scores and coverage."""
     root.mkdir()
-    coverage, extra, count, complexity, fraction = {}, [], 0, 2, 0.0
+    coverage, extra, count, complexity, fraction, locations = {}, [], 0, 2, 0.0, {}
     if name == 'git-blob':
         (root / 'large.ts').write_text('/*' + 'x' * (32 * 1024 * 1024) + '*/\nfunction only(){return 1;}\n')
         count, complexity = 1, 1
@@ -94,6 +101,8 @@ def fixture(name, root):
                 else:
                     source += f'function f{index}(flag:boolean){{\nif(flag)return 1;\nreturn 0;\n}}\n'
             path.write_text(source)
+            if name == 'unicode-tsx':
+                locations.update(unicode_locations(source, path.name))
             if name == 'covered-scan':
                 coverage[path.name] = {'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
                                        'lines': {str(n): 1 for n in range(1, len(source.splitlines()) + 1)}}
@@ -114,10 +123,10 @@ def fixture(name, root):
                 path.write_bytes(path.read_bytes().replace(b'\n', b'\r\n'))
         extra += ['--diff', 'HEAD^']
     return {'name': name, 'root': root, 'count': count, 'complexity': complexity,
-            'coverage': fraction, 'args': extra}
+            'coverage': fraction, 'args': extra, 'locations': locations}
 
 
-def validate(case, output):
+def validate(case, output, expected_fingerprints=None):
     """Check independent fixture invariants so skipped work cannot look faster."""
     if case['name'] == 'coverage-ranges':
         if output['mode'] != 'dense-ranges' or output['size'] != case['count']:
@@ -140,7 +149,10 @@ def validate(case, output):
             fingerprints.append(fingerprint)
         if len(set(fingerprints)) != len(results):
             raise ValueError('SARIF duplicated fixture fingerprints')
-        return
+        digest = hashlib.sha256(json.dumps(fingerprints).encode()).hexdigest()
+        if expected_fingerprints is not None and digest != expected_fingerprints:
+            raise ValueError('SARIF function identities differ from baseline')
+        return digest
     functions = output['functions']
     expected_names = (['only'] if case['name'] == 'git-blob' else
                       ['::'.join(f'f{i}' for i in range(n + 1)) for n in range(case['count'])]
@@ -154,6 +166,9 @@ def validate(case, output):
     if len({(row['path'], row['line'], row['column']) for row in functions}) != len(functions):
         raise ValueError('duplicate function location')
     for row in functions:
+        if case['name'] == 'unicode-tsx' and (
+                row['path'], row['line'], row['column'], row['column_utf16']) != case['locations'][row['name']]:
+            raise ValueError('Unicode fixture location or UTF-16 column changed')
         if (row['complexity'], row['coverage'], row['crap'], row['failed']) != (cc, cov, score, False):
             raise ValueError('fixture score or coverage changed')
 
@@ -182,7 +197,7 @@ def measure(command, output, metrics, timeout=60, expected_status=0):
     return {'wall_ms': elapsed, 'peak_rss_kib': rss}
 
 
-def execute(case, scanner, module, directory, label):
+def execute(case, scanner, module, directory, label, expected_fingerprints=None):
     """Execute and validate one fresh-process observation outside compiler activity."""
     output, metrics = directory / f'{label}.json', directory / f'{label}.rss'
     if case['name'] == 'coverage-ranges':
@@ -192,10 +207,12 @@ def execute(case, scanner, module, directory, label):
                    '--format', 'sarif' if case['name'] == 'sarif' else 'json', *case['args']]
     try:
         result = measure(command, output, metrics, expected_status=1 if case['name'] == 'sarif' else 0)
-        validate(case, json.loads(output.read_text()))
+        fingerprints = validate(case, json.loads(output.read_text()), expected_fingerprints)
     except Exception as error:
         raise RuntimeError(f'{label}: {error}') from error
     result['output_sha256'] = hashlib.sha256(output.read_bytes()).hexdigest()
+    if case['name'] == 'sarif':
+        result['fingerprints_sha256'] = fingerprints
     output.unlink()  # Avoid retaining large repeated reports in the artifact.
     metrics.unlink()
     return result
@@ -205,13 +222,17 @@ def compare_case(case, binaries, modules, workspace, args):
     """Collect alternating complete pairs and assess both performance metrics."""
     observations = {'baseline': [], 'candidate': []}
     name = case['name']
+    expected_fingerprints = None
     for side in observations:
-        execute(case, binaries[side], modules[side], workspace, f'{name}-warmup-{side}')
+        warmup = execute(case, binaries[side], modules[side], workspace,
+                         f'{name}-warmup-{side}', expected_fingerprints)
+        if name == 'sarif' and side == 'baseline':
+            expected_fingerprints = warmup['fingerprints_sha256']
     for pair in range(args.pairs):
         order = ('baseline', 'candidate') if pair % 2 == 0 else ('candidate', 'baseline')
         for side in order:
             observations[side].append(execute(
-                case, binaries[side], modules[side], workspace, f'{name}-{pair}-{side}'))
+                case, binaries[side], modules[side], workspace, f'{name}-{pair}-{side}', expected_fingerprints))
     assessments = {}
     for metric, ratio, slack in [('wall_ms', args.time_ratio, args.time_slack_ms),
                                  ('peak_rss_kib', args.rss_ratio, args.rss_slack_kib)]:

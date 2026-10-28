@@ -96,10 +96,14 @@ fn many_covered_functions_keep_one_missing_statement_local_and_reject_staleness(
             assert!(!function.failed);
         }
     }
-    fs::write(
-        dir.path().join("source-09.ts"),
-        "function changed(){return 1;}",
-    )
-    .unwrap();
-    assert!(scan(&options).is_err());
+    let changed_path = dir.path().join("source-09.ts");
+    let original = fs::read_to_string(&changed_path).unwrap();
+    let changed = original.replacen("return 0;", "return 2;", 1);
+    assert_ne!(original, changed);
+    assert_eq!(original.lines().count(), changed.lines().count());
+    fs::write(changed_path, changed).unwrap();
+    assert_eq!(
+        scan(&options).unwrap_err().to_string(),
+        "coverage SHA256 mismatch for source-09.ts: source changed since coverage was collected"
+    );
 }

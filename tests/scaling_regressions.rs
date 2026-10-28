@@ -5,6 +5,7 @@ use std::{fmt::Write, fs};
 use ts_crap::{ScanOptions, scan};
 
 #[test]
+/// Check every long-line function against an independent full-prefix UTF-16 reference.
 fn long_unicode_tsx_line_preserves_every_function_and_utf16_column() {
     let dir = tempfile::tempdir().unwrap();
     let mut source = String::from("\u{feff}const marker = '😀'; ");
@@ -41,6 +42,7 @@ fn long_unicode_tsx_line_preserves_every_function_and_utf16_column() {
 }
 
 #[test]
+/// Localize missing coverage among many functions and reject evidence after a source edit.
 fn many_covered_functions_keep_one_missing_statement_local_and_reject_staleness() {
     let dir = tempfile::tempdir().unwrap();
     let mut files = serde_json::Map::new();

@@ -143,7 +143,7 @@ def validate(case, output):
         return
     functions = output['functions']
     expected_names = (['only'] if case['name'] == 'git-blob' else
-                      ['.'.join(f'f{i}' for i in range(n + 1)) for n in range(case['count'])]
+                      ['::'.join(f'f{i}' for i in range(n + 1)) for n in range(case['count'])]
                       if case['name'] == 'nested' else [f'f{i}' for i in range(case['count'])])
     if {f['name'] for f in functions} != set(expected_names):
         raise ValueError('scan changed function names or scope ownership')

@@ -243,6 +243,7 @@ fn dropping_a_reader_terminates_and_reaps_a_waiting_batch_process() {
 }
 
 #[test]
+/// Preserve blob boundaries through fragmented reads, interruptions and fatal I/O errors.
 fn short_reads_and_interruptions_preserve_normalization_and_framing() {
     use std::io::{self, Read};
     struct Fragmented {
@@ -251,6 +252,7 @@ fn short_reads_and_interruptions_preserve_normalization_and_framing() {
         fail_at: Option<u64>,
     }
     impl Read for Fragmented {
+        /// Limit reads and inject recoverable interruptions or a terminal permission error.
         fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
             self.calls += 1;
             if self.calls.is_multiple_of(3) {

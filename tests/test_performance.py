@@ -56,6 +56,20 @@ class PerformanceTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 performance.validate(case, bad)
 
+    def test_nested_functions_retain_qualified_scope_ownership(self):
+        """Accept the public :: names while rejecting flattened or reparented scopes."""
+        case = {'name': 'nested', 'count': 3, 'complexity': 1, 'coverage': 0.0}
+        good = {'failed': False, 'functions': [
+            {'name': name, 'path': 'nested.ts', 'line': i + 1, 'column': 1,
+             'complexity': 1, 'coverage': 0.0, 'crap': 2, 'failed': False}
+            for i, name in enumerate(['f0', 'f0::f1', 'f0::f1::f2'])]}
+        performance.validate(case, good)
+        for name in ['f2', 'f0::f2', 'f0.f1.f2']:
+            bad = json.loads(json.dumps(good))
+            bad['functions'][2]['name'] = name
+            with self.assertRaisesRegex(ValueError, 'scope ownership'):
+                performance.validate(case, bad)
+
     def test_sarif_findings_require_complete_locations_and_fingerprints(self):
         """Reject faster reports that omit findings or their stable evidence."""
         case = {'name': 'sarif', 'count': 2}

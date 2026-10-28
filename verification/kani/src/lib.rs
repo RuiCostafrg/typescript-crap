@@ -4,8 +4,10 @@
 #[allow(dead_code)]
 mod compare;
 
-// Deliberately independent specification: remove each CR in a CRLF pair,
-// retaining every other byte. This is not the production iterator/state machine.
+/// Normalize at most four bytes into a padded array and its meaningful length.
+///
+/// Remove CR only in CRLF pairs, retaining every other byte. This specification
+/// uses independent indexing rather than the production iterator/state machine.
 fn specification(input: &[u8]) -> ([u8; 4], usize) {
     let mut result = [0; 4];
     let mut length = 0;
@@ -21,8 +23,10 @@ fn specification(input: &[u8]) -> ([u8; 4], usize) {
     (result, length)
 }
 
-// Each length pair is a separate harness. Keeping lengths concrete avoids
-// spending solver resources on symbolic standard-library buffer bookkeeping.
+/// Check equivalence and framing consumption for fixed lengths at most four.
+///
+/// Every byte is arbitrary; a two-byte buffer exercises chunk transitions.
+/// Separate length-pair harnesses avoid symbolic standard-library bookkeeping.
 fn comparison<const B: usize, const S: usize>() {
     let blob: [u8; 4] = kani::any();
     let source: [u8; 4] = kani::any();
@@ -42,6 +46,7 @@ fn comparison<const B: usize, const S: usize>() {
 
 macro_rules! comparison_proof {
     ($name:ident, $blob:literal, $source:literal) => {
+        /// Prove comparison and framing for this fixed pair of input lengths.
         #[kani::proof]
         #[kani::unwind(6)]
         fn $name() {
@@ -52,6 +57,7 @@ macro_rules! comparison_proof {
 
 macro_rules! truncation_proof {
     ($name:ident, $length:literal) => {
+        /// Prove that a blob one byte shorter than declared returns an error.
         #[kani::proof]
         #[kani::unwind(6)]
         fn $name() {

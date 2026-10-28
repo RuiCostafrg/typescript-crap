@@ -1,6 +1,10 @@
 //! Exact Git-blob comparison; only CRLF/LF differences are equivalent.
 use std::io::Read;
 
+/// Compare one declared blob with source bytes using the production 8 KiB buffer.
+///
+/// CRLF and LF are equivalent. The complete blob is consumed even on mismatch;
+/// I/O errors propagate without reading beyond the declared size.
 pub(super) fn matches_committed(
     reader: &mut impl Read,
     size: u64,
@@ -9,8 +13,13 @@ pub(super) fn matches_committed(
     matches_committed_with_buffer::<8192>(reader, size, source)
 }
 
-// Const-generic buffer size lets bounded proofs exercise chunk transitions with
-// the same algorithm; the production entry point always uses 8192 bytes.
+/// Compare normalized bytes with a nonzero, fixed-size streaming buffer.
+///
+/// Return whether both normalized sequences match, including their lengths.
+/// Consume exactly `size` bytes on success (including a mismatch), preserving
+/// following protocol bytes; propagate read errors if the blob is truncated.
+/// Buffer size is const-generic so bounded proofs exercise chunk transitions
+/// with the same algorithm; the production entry point uses 8192 bytes.
 pub(super) fn matches_committed_with_buffer<const N: usize>(
     reader: &mut impl Read,
     size: u64,
@@ -44,8 +53,10 @@ pub(super) fn matches_committed_with_buffer<const N: usize>(
     Ok(matches && expected.next().is_none())
 }
 
-// Preserve lone CR bytes and all other content. Parsing and source hashes still
-// use the original worktree buffer; this equivalence applies only to HEAD checks.
+/// Iterate over bytes, removing CR only when immediately followed by LF.
+///
+/// Preserve lone CR and all other bytes. Parsing and source hashes still use the
+/// original worktree buffer; this equivalence applies only to HEAD checks.
 pub(super) fn without_crlf(bytes: &[u8]) -> impl Iterator<Item = u8> + '_ {
     bytes
         .iter()

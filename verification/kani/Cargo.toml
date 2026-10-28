@@ -1,0 +1,10 @@
+[package]
+name = "ts-crap-proofs"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }

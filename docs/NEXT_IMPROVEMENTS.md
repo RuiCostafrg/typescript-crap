@@ -4,7 +4,7 @@ Reviewed 2026-10-28. Items 1–3 were reproduced against code unchanged between
 `main` (`bd621ca9b7e10c1b80548f154e6d26535e9c7b48`, v2.0.1) and
 [PR #32](https://github.com/RuiCostafrg/typescript-crap/pull/32)
 (`06768012d18d9d80d4f2070dd5d16e7407371c36`). Item 4 concerns the performance
-harness introduced by that PR and depends on its merge.
+harness introduced by that PR; its changes are included in PR #34.
 
 All four items below are **implemented on the follow-up branch**, with regression
 tests; hosted checks and code-owner review remain merge requirements. The original
@@ -18,9 +18,10 @@ reproductions and acceptance scope are retained below. The previous five
 | 3 | Validate every record/metric before aggregation | [Coverage-summary tests](../tests/test_coverage_summary.py) reject cancellation, booleans and invalid mixed metrics |
 | 4 | Invalidate stale results before setup; stage/sync/replace complete evidence | [Performance tests](../tests/test_performance.py) cover metadata/build/run failures, budget rejection, reruns and write failures |
 
-The implementation is stacked on PR #32 while it waits for code-owner approval.
-The original sequencing recommendation below is superseded by that explicit
-dependency; neither PR's review requirement is bypassed.
+PR #34 targets `main` directly and includes all changes from the superseded
+PR #32. It does not depend on #32 merging. The original sequencing recommendation
+below is superseded by this combined merge path. Code-owner review remains a
+merge requirement; closing the superseded PR does not replace that review.
 
 P1 means the next correctness fix; P2 means subsequent evidence hardening.
 S estimates half to one engineer-day, M one to three days, including regressions
@@ -150,8 +151,9 @@ failure without modifying benchmark limits.
 
 ## Implementation order and validation
 
-Implement 1 and 2 independently first, followed by 3. Implement 4 after PR #32 is
-merged so its review and passing checks stay focused. Review changed behavior
+The original plan ordered 1 and 2 first, followed by 3, then 4 after PR #32.
+All four are now included with the performance harness in PR #34, targeting
+`main` together. Review changed behavior
 against [the compatibility policy](COMPATIBILITY.md), and choose a release version
 only after the final implementation scope is known. Existing releases remain
 immutable.

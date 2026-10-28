@@ -1,8 +1,10 @@
 """Regression tests for performance budgets, observations and fixture validity."""
 import importlib.util
+import os
 import json
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -14,6 +16,40 @@ spec.loader.exec_module(performance)
 
 
 class PerformanceTests(unittest.TestCase):
+    def test_workflow_baseline_handles_missing_zero_and_unavailable_refs(self):
+        """Execute the actual workflow guard with valid, missing and hostile-looking refs."""
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        start = workflow.index('          if [[ -z "${BASELINE_REF:-}"')
+        end = workflow.index('          if [[ ! -x /usr/bin/time ]]', start)
+        script = workflow[start:end] + '\nprintf "%s" "$BASELINE_REF"\n'
+        for reference, expected in [('HEAD', 'HEAD'), ('', 'v2.0.1'),
+                                    ('0' * 40, 'v2.0.1'), ('no-such-baseline-ref', 'v2.0.1'),
+                                    ('$(exit 99)', 'v2.0.1'), ('--help', 'v2.0.1')]:
+            with self.subTest(reference=reference):
+                result = subprocess.run(['bash', '-e', '-c', script], cwd=ROOT,
+                                        env=dict(os.environ, BASELINE_REF=reference),
+                                        capture_output=True, text=True, check=True)
+                self.assertEqual(result.stdout, expected)
+
+    def test_unicode_fixture_bytes_do_not_depend_on_locale(self):
+        """Generate the real fixture with ASCII locale and Python UTF-8 coercion disabled."""
+        code = '''
+import importlib.util,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('performance',sys.argv[1])
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+case=module.fixture('unicode-tsx',Path(sys.argv[2])/'fixture')
+source=(case['root']/'source-000.tsx').read_bytes().decode('utf-8')
+assert chr(0x1f600) in source
+assert len(case['locations'])==4000
+'''
+        with tempfile.TemporaryDirectory() as temporary:
+            result = subprocess.run([sys.executable, '-c', code,
+                                     str(ROOT / 'scripts/check-performance.py'), temporary],
+                                    env=dict(os.environ, LC_ALL='C', PYTHONUTF8='0', PYTHONCOERCECLOCALE='0'),
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     @unittest.skipUnless(sys.platform in ('linux', 'android') and Path('/usr/bin/time').exists(), 'Linux GNU time required')
     def test_metadata_failures_replace_previous_success_with_failure(self):
         """Missing Git/compiler/runtime/time metadata cannot leave old successful evidence."""

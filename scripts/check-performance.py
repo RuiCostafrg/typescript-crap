@@ -100,7 +100,7 @@ def fixture(name, root):
                     source += f'const f{index}=(flag:boolean)=>flag?<span>😀</span>:<span/>; '
                 else:
                     source += f'function f{index}(flag:boolean){{\nif(flag)return 1;\nreturn 0;\n}}\n'
-            path.write_text(source)
+            path.write_text(source, encoding='utf-8')
             if name == 'unicode-tsx':
                 locations.update(unicode_locations(source, path.name))
             if name == 'covered-scan':

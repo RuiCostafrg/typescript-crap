@@ -339,7 +339,9 @@ Because the guard is a step inside an existing required job, a failure blocks
 merging and the release workflow's successful-main-CI prerequisite.
 
 The baseline is the exact PR base SHA, the preceding main SHA on pushes, or
-`v2.0.1` on manual dispatch. A full checkout makes those sources available. The
+`v2.0.1` on manual dispatch. Empty, all-zero or locally unavailable event
+references fall back to `v2.0.1`; failure to resolve that tag still fails the job.
+A full checkout makes those sources available. The
 runner exports tracked baseline files, builds baseline and candidate sequentially
 with separate Cargo target directories, `--locked --release -j 1`, and the same
 Rust/Node tools. All builds finish before measurement. Untracked user files are

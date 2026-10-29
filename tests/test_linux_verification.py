@@ -1,4 +1,5 @@
 """Security boundaries and failure evidence for native Linux artifact verification."""
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -29,17 +30,27 @@ class LinuxVerificationTests(unittest.TestCase):
 
     def test_invalid_assets_publish_failure_report_before_running_tools(self):
         """Missing or corrupt artifacts cannot produce stale success or execute containers."""
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            report = root / 'report.json'
-            report.write_text('{"passed": true}')
-            with patch.object(verification.subprocess, 'run') as execute:
-                with self.assertRaisesRegex(ValueError, 'regular asset'):
-                    verification.verify(root, 'x86_64-unknown-linux-musl', '2.2.0', report)
-                execute.assert_not_called()
-            result = json.loads(report.read_text())
-            self.assertIs(result['passed'], False)
-            self.assertIn('error', result)
+        for scenario, error in [('missing', 'regular asset'), ('tampered', 'checksum')]:
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                if scenario == 'tampered':
+                    archive = root / 'ts-crap-x86_64-unknown-linux-musl.tar.xz'
+                    original = b'original archive bytes'
+                    archive.write_bytes(original)
+                    archive.with_name(archive.name + '.sha256').write_text(
+                        hashlib.sha256(original).hexdigest() + '  ' + archive.name + '\n')
+                    archive.write_bytes(b'tampered archive bytes')
+                report = root / 'report.json'
+                report.write_text('{"passed": true}')
+                with patch.object(verification.subprocess, 'run') as execute:
+                    with self.assertRaisesRegex(ValueError, error):
+                        verification.verify(root, 'x86_64-unknown-linux-musl', '2.2.0', report)
+                    execute.assert_not_called()
+                result = json.loads(report.read_text())
+                self.assertIs(result['passed'], False)
+                self.assertIn(error, result['error'])
+                self.assertEqual(result['images'], [])
+
 
 
 if __name__ == '__main__':

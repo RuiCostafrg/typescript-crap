@@ -6,10 +6,11 @@ Reviewed 2026-10-28. Items 1–3 were reproduced against code unchanged between
 (`06768012d18d9d80d4f2070dd5d16e7407371c36`). Item 4 concerns the performance
 harness introduced by that PR; its changes are included in PR #34.
 
-All four items below are **implemented on the follow-up branch**, with regression
-tests; hosted checks and code-owner review remain merge requirements. The original
-reproductions and acceptance scope are retained below. The previous five
-[post-v1 priorities](IMPROVEMENT_PRIORITIES.md) are already implemented.
+All four items below were implemented and merged in
+[PR #34](https://github.com/RuiCostafrg/typescript-crap/pull/34)
+(`e203c80d16324e4c27e7e99010891a19056c6feb`). The original reproductions and
+acceptance scope are retained below. The previous five
+[post-v1 priorities](IMPROVEMENT_PRIORITIES.md) are also implemented.
 
 | Item | Implementation | Regression evidence |
 | --- | --- | --- |
@@ -18,10 +19,8 @@ reproductions and acceptance scope are retained below. The previous five
 | 3 | Validate every record/metric before aggregation | [Coverage-summary tests](../tests/test_coverage_summary.py) reject cancellation, booleans and invalid mixed metrics |
 | 4 | Invalidate stale results before setup; stage/sync/replace complete evidence | [Performance tests](../tests/test_performance.py) cover metadata/build/run failures, budget rejection, reruns and write failures |
 
-PR #34 targets `main` directly and includes all changes from the superseded
-PR #32. It does not depend on #32 merging. The original sequencing recommendation
-below is superseded by this combined merge path. Code-owner review remains a
-merge requirement; closing the superseded PR does not replace that review.
+PR #34 targeted `main` directly and included the superseded PR #32. Both the
+performance work and follow-up fixes are included in the v2.1.0 release scope.
 
 P1 means the next correctness fix; P2 means subsequent evidence hardening.
 S estimates half to one engineer-day, M one to three days, including regressions

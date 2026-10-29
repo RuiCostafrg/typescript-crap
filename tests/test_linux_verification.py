@@ -28,6 +28,22 @@ class LinuxVerificationTests(unittest.TestCase):
             self.assertEqual(execute.call_args.args[0][2], argument)
             self.assertIs(execute.call_args.kwargs['shell'], False)
 
+    @unittest.skipUnless(Path('/bin/sh').is_file(), 'POSIX shell required')
+    def test_toolchain_checks_fail_for_each_present_tool(self):
+        """Execute the actual container guard under sh -e, including its success continuation."""
+        for tool in (None, 'node', 'rustc', 'cargo'):
+            with self.subTest(tool=tool):
+                # An empty PATH establishes absence; a shell function exposes
+                # exactly one tool without needing any installed toolchain.
+                prefix = f'{tool}() {{ :; }}\n' if tool else ''
+                result = subprocess.run(['/bin/sh', '-ec', prefix + verification.NO_TOOLCHAINS_SHELL
+                                         + '\nprintf reached'], env={'PATH': ''},
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 1 if tool else 0)
+                self.assertEqual(result.stdout, '' if tool else 'reached')
+                if tool:
+                    self.assertIn('unexpected runtime dependency: ' + tool, result.stderr)
+
     def test_invalid_assets_publish_failure_report_before_running_tools(self):
         """Missing or corrupt artifacts cannot produce stale success or execute containers."""
         for scenario, error in [('missing', 'regular asset'), ('tampered', 'checksum')]:

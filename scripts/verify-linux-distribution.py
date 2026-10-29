@@ -15,6 +15,14 @@ spec.loader.exec_module(packages)
 IMAGES = ('ubuntu:22.04', 'ubuntu:24.04', 'ubuntu:26.04', 'debian:12-slim',
           'debian:13-slim', 'alpine:3.22', 'fedora:43')
 DEBIAN_IMAGES = IMAGES[:5]
+NO_TOOLCHAINS_SHELL = '''
+for tool in node rustc cargo; do
+    if command -v "$tool" >/dev/null 2>&1; then
+        printf 'unexpected runtime dependency: %s\n' "$tool" >&2
+        exit 1
+    fi
+done
+'''
 
 
 def run(command, **kwargs):
@@ -74,10 +82,7 @@ def verify(assets, target, version, report, images=IMAGES):
                           '--mount', f'type=bind,src={project},dst=/project,readonly']
                 command = [*common, '--read-only', '--tmpfs', '/tmp',
                            '--mount', f'type=bind,src={scanner},dst=/usr/local/bin/ts-crap,readonly',
-                           image, '/bin/sh', '-ec', '''
-! command -v node
-! command -v rustc
-! command -v cargo
+                           image, '/bin/sh', '-ec', NO_TOOLCHAINS_SHELL + '''
 ts-crap --version
 ts-crap --root /project --format json --threshold 100
 ts-crap --root /project --coverage /project/coverage.json --require-coverage --threshold 2 >/dev/null
@@ -115,8 +120,7 @@ test "$(ts-crap --version)" = "ts-crap $UPSTREAM_VERSION"
 ts-crap --root /project --coverage /project/coverage.json --require-coverage --threshold 2 >/dev/null
 test -f /usr/share/ts-crap/coverage-helpers/version.json
 grep -q 'musl as a whole' /usr/share/doc/ts-crap/copyright
-! command -v node
-! command -v rustc
+''' + NO_TOOLCHAINS_SHELL + '''
 dpkg -i /candidate.deb
 dpkg --remove ts-crap
 test ! -e /usr/bin/ts-crap

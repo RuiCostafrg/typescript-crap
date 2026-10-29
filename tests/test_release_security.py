@@ -29,7 +29,7 @@ class ReleaseSecurityTests(unittest.TestCase):
         preflight = workflow.split('          git merge-base --is-ancestor', 1)[1]
         preflight = 'git merge-base --is-ancestor' + preflight.split('      - name:', 1)[0]
         required = ['ci.yml', 'coverage.yml', 'mutation.yml',
-                    'installation.yml', 'verification.yml']
+                    'installation.yml', 'verification.yml', 'linux-distribution.yml']
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             (directory / 'git').write_text('#!/bin/bash\nexit 0\n')
@@ -100,8 +100,7 @@ class ReleaseSecurityTests(unittest.TestCase):
             self.assertEqual(list((root / 'bin').iterdir()), [executable])
 
     def fixture(self, source):
-        names = [f"ts-crap-{target}.{'zip' if 'windows' in target else 'tar.xz'}"
-                 for target in release.TARGETS] + ['ts-crap-coverage-helpers.zip']
+        names = release.checksummed_assets()
         for name in names:
             (source / name).write_bytes(b'archive fixture')
             digest = hashlib.sha256(b'archive fixture').hexdigest()
@@ -112,8 +111,7 @@ class ReleaseSecurityTests(unittest.TestCase):
     def test_corrupted_archive_and_misbound_checksum_cannot_publish(self):
         for attack, name in [(attack, name)
                              for attack in ['corruption', 'filename']
-                             for name in ['ts-crap-aarch64-apple-darwin.tar.xz',
-                                          'ts-crap-coverage-helpers.zip']]:
+                             for name in release.checksummed_assets()]:
             with self.subTest(attack=attack, name=name), tempfile.TemporaryDirectory() as temporary:
                 source = Path(temporary)
                 self.fixture(source)
@@ -144,7 +142,7 @@ class ReleaseSecurityTests(unittest.TestCase):
             (source / 'unrelated-private-file').write_text('must stay local')
             output = source / 'out'
             release.prepare(source, output)
-            self.assertEqual(len(list(output.iterdir())), 17)
+            self.assertEqual(len(list(output.iterdir())), 25)
             self.assertFalse((output / 'unrelated-private-file').exists())
 
 if __name__ == '__main__':

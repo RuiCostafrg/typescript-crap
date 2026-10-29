@@ -19,6 +19,7 @@ include = [
     "/SECURITY.md",
     "/LICENSE*",
     "/assets/icon.svg",
+    "/packaging/**",
     "/docs/COVERAGE_HELPERS.md",
     "/docs/COMPATIBILITY.md",
     "/docs/VERIFICATION.md",

@@ -1,9 +1,11 @@
 # Changelog
 
-## Unreleased
+## 2.1.0 — 2026-10-29
 
 ### Added
 
+- Required paired time/RSS regression CI across seven validated workloads,
+  with exact baseline builds, retained observations and behavioral regressions.
 - Coverage helpers accept caller-relative `--config FILE` to protect an
   alternative project policy path alongside the always-reserved default config.
 

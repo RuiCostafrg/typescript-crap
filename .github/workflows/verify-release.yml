@@ -88,11 +88,11 @@ jobs:
         run: |
           installer=shell
           if [[ "$TARGET" == *windows* ]]; then installer=powershell; fi
-          gh release download v2.0.0 --repo "$GITHUB_REPOSITORY" \
+          gh release download v2.0.1 --repo "$GITHUB_REPOSITORY" \
             --pattern "ts-crap-$TARGET.*" --pattern ts-crap-installer.sh \
             --pattern ts-crap-installer.ps1 --dir previous-assets
           python3 scripts/verify-installation.py --assets artifacts --version "$VERSION" \
-            --previous-assets previous-assets --previous-version 2.0.0 \
+            --previous-assets previous-assets --previous-version 2.0.1 \
             --target "$TARGET" --installer "$installer"
   homebrew:
     name: Homebrew (${{ matrix.target }})
@@ -126,8 +126,8 @@ jobs:
           if [[ "$RUNNER_OS" == Linux ]]; then
             eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           fi
-          gh release download v2.0.0 --repo "$GITHUB_REPOSITORY" \
+          gh release download v2.0.1 --repo "$GITHUB_REPOSITORY" \
             --pattern "ts-crap-$TARGET.*" --pattern ts-crap.rb --dir previous-assets
           python3 scripts/verify-installation.py --assets artifacts --version "$VERSION" \
-            --previous-assets previous-assets --previous-version 2.0.0 \
+            --previous-assets previous-assets --previous-version 2.0.1 \
             --target "$TARGET" --installer homebrew

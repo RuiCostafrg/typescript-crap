@@ -114,6 +114,7 @@ test ! -e /usr/share/ts-crap/coverage-helpers/obsolete-upgrade-probe
 test "$(ts-crap --version)" = "ts-crap $UPSTREAM_VERSION"
 ts-crap --root /project --coverage /project/coverage.json --require-coverage --threshold 2 >/dev/null
 test -f /usr/share/ts-crap/coverage-helpers/version.json
+grep -q 'musl as a whole' /usr/share/doc/ts-crap/copyright
 ! command -v node
 ! command -v rustc
 dpkg -i /candidate.deb

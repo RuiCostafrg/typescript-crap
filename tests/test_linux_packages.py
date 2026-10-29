@@ -54,14 +54,30 @@ def archive(root, target, data, symlink=False):
 class LinuxPackagesTests(unittest.TestCase):
     def test_version_mapping_rejects_injection_and_orders_prerelease(self):
         """Debian prereleases sort before stable without accepting path/control injection."""
-        self.assertEqual(packages.debian_version('2.2.0-rc.1'), '2.2.0~rc.1-1')
+        self.assertEqual(packages.debian_version('2.2.0-rc.1'), '2.2.0~sekdv~n1~-1')
         self.assertEqual(packages.package_name('2.2.0', 'arm64'), 'ts-crap_2.2.0-1_arm64.deb')
-        for version in ['../2.2.0', '2.2.0\nDepends: bad', '2.2', '-1.2.3', '01.2.3', '2.2.0+meta']:
+        for version in ['../2.2.0', '2.2.0\nDepends: bad', '2.2', '-1.2.3', '01.2.3', '2.2.0+meta', '2.2.0-alpha..1', '2.2.0-alpha.01']:
             with self.subTest(version=version), self.assertRaises(ValueError):
                 packages.debian_version(version)
         if shutil.which('dpkg'):
             subprocess.run(['dpkg', '--compare-versions', packages.debian_version('2.2.0-rc.1'),
                             'lt', packages.debian_version('2.2.0')], check=True)
+
+    @unittest.skipUnless(shutil.which('dpkg'), 'dpkg required')
+    def test_prerelease_order_matches_semver_with_actual_dpkg(self):
+        """Cover numeric vs lexical identifiers, ASCII ordering, prefixes and stable promotion."""
+        for earlier, later in [('1', 'alpha'), ('2', '10'), ('alpha.2', 'alpha.10'),
+                               ('alpha10', 'alpha2'), ('alpha01', 'alpha1'), ('A', 'a'),
+                               ('alpha', 'alpha.1'), ('alpha.1', 'alpha-'),
+                               ('alpha-', 'alpha0'), ('rc.1', None)]:
+            a = '2.2.0-' + earlier
+            b = '2.2.0-' + later if later else '2.2.0'
+            with self.subTest(earlier=a, later=b):
+                subprocess.run(['dpkg', '--compare-versions', packages.debian_version(a),
+                                'lt', packages.debian_version(b)], check=True)
+                filename = packages.package_name(a, 'amd64')
+                self.assertEqual(filename, f'ts-crap_{a}-1_amd64.deb')
+                self.assertNotIn('~', filename)
 
     def test_elf_rejects_dynamic_wrong_architecture_and_truncated_headers(self):
         """Check architecture and both dynamic-linking mechanisms independently."""
@@ -104,7 +120,7 @@ class LinuxPackagesTests(unittest.TestCase):
                 combined = root / 'sha256.sum'
                 combined.write_text((root / f'ts-crap-{target}.tar.xz.sha256').read_text())
                 output, = packages.build(root, VERSION, 1700000000, [target])
-                self.assertEqual(output.name, f'ts-crap_{packages.debian_version(VERSION)}_{architecture}.deb')
+                self.assertEqual(output.name, f'ts-crap_{VERSION}-1_{architecture}.deb')
                 first = output.read_bytes()
                 previous_umask = os.umask(0o077)
                 try:
@@ -133,7 +149,10 @@ class LinuxPackagesTests(unittest.TestCase):
                 self.assertEqual(packages.verified(output), first)
                 checksums = combined.read_text().splitlines()
                 self.assertEqual(len(checksums), 2)
-                self.assertEqual(checksums[-1].split()[1], output.name)
+                self.assertEqual(checksums[-1].split(), [hashlib.sha256(first).hexdigest(), output.name])
+                if os.name != 'nt':
+                    for asset in (output, output.with_name(output.name + '.sha256'), combined):
+                        self.assertEqual(asset.stat().st_mode & 0o777, 0o644)
                 victim = root / 'victim.txt'
                 victim.write_text('preserve me')
                 checksum = output.with_name(output.name + '.sha256')
@@ -181,11 +200,13 @@ class LinuxPackagesTests(unittest.TestCase):
             installed = root / 'installed'
             installed.mkdir()
             command = ['dpkg', '--root=' + str(installed), '--force-not-root', '--force-bad-path',
-                       '--path-exclude=/usr/share/doc/*', '--install', str(output)]
+                       '--path-exclude=/usr/share/doc/*', '--path-include=/usr/share/doc/*/copyright', '--install', str(output)]
             subprocess.run(command, check=True, capture_output=True, text=True)
             self.assertTrue((installed / 'usr/share/ts-crap/coverage-helpers/version.json').is_file())
             self.assertFalse((installed / 'usr/share/doc/ts-crap/musl-COPYRIGHT').exists())
-            # The notice is present in the package, independent of installation policy.
+            self.assertIn(b'musl as a whole',
+                          (installed / 'usr/share/doc/ts-crap/copyright').read_bytes())
+            # The standalone notice is also present in the package.
             with tarfile.open(fileobj=io.BytesIO(subprocess.check_output(
                     ['dpkg-deb', '--fsys-tarfile', str(output)]))) as data:
                 self.assertTrue(any(m.name.endswith('/musl-COPYRIGHT') for m in data))

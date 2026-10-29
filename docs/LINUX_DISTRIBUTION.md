@@ -30,7 +30,14 @@ matrix explicitly tests manual archive execution, not every installer fallback.
 
 Choose `amd64` for x86-64 or `arm64` for ARM64. A stable upstream version `X.Y.Z`
 produces `ts-crap_X.Y.Z-1_amd64.deb` or `ts-crap_X.Y.Z-1_arm64.deb`. Prereleases
-use Debian's `~` ordering, for example `X.Y.Z~rc.1-1`.
+retain upstream SemVer in asset filenames, for example
+`ts-crap_X.Y.Z-rc.1-1_amd64.deb`. The internal Debian Version field uses an
+order-preserving encoding: numeric identifiers have an `n` prefix, nonnumeric
+identifiers have an `s` prefix with two lowercase letters per ASCII character,
+and `~` separates and terminates identifiers. Thus `X.Y.Z-rc.1` becomes
+`X.Y.Z~sekdv~n1~-1` internally, preserving SemVer ordering under dpkg, including
+numeric versus alphabetic and lexical versus numeric comparisons. Stable
+versions remain `X.Y.Z-1`. Build metadata is not accepted by release packaging.
 
 Set `package` to the downloaded filename, with its accompanying checksum in the
 same directory, then authenticate and install it:
@@ -88,8 +95,9 @@ the real `.deb`, checking obsolete package files disappear and user files remain
 Because no historical `.deb` exists yet, the upgrade fixture is explicitly a
 revision-zero package built from the same upstream binary with an extra obsolete
 owned helper file (outside documentation paths that minimal images can exclude).
-The package archive must contain the musl notice even when an image excludes
-documentation during installation. The fixture proves Debian package upgrade behavior, not compatibility with a
+The package archive must contain the musl notice, and its standard `copyright`
+file also includes the notice so minimal images retain it when excluding other
+documentation. The fixture proves Debian package upgrade behavior, not compatibility with a
 previous upstream binary.
 
 Containers share the runner kernel. Images are pulled before network-isolated

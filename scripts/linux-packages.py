@@ -23,17 +23,37 @@ spec.loader.exec_module(bundle)
 
 
 def debian_version(version):
-    """Keep prereleases ordered before stable releases and reserve packaging revision one."""
-    if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?', version):
+    """Encode SemVer precedence in dpkg ordering; reserve packaging revision one."""
+    if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?', version):
         raise ValueError('invalid release version')
-    return version.replace('-', '~', 1) + '-1'
+    core, separator, prerelease = version.partition('-')
+    if not separator:
+        return core + '-1'
+    identifiers = []
+    for identifier in prerelease.split('.'):
+        if identifier.isdigit():
+            if len(identifier) > 1 and identifier.startswith('0'):
+                raise ValueError('invalid release version: numeric prerelease leading zero')
+            identifiers.append('n' + identifier)
+        else:
+            # dpkg compares numeric runs numerically, whereas SemVer compares
+            # nonnumeric identifiers as ASCII. Two lowercase letters per ASCII
+            # character preserve lexical ordering without any numeric runs.
+            identifiers.append('s' + ''.join(chr(97 + ord(c) // 26) + chr(97 + ord(c) % 26)
+                                            for c in identifier))
+    # n < s gives numeric identifiers lower precedence. Tilde terminates each
+    # identifier below any continuation; a shorter identifier/list sorts first.
+    return core + '~' + '~'.join(identifiers) + '~-1'
 
 
 def package_name(version, architecture):
     """Name a versioned architecture-specific release asset without path components."""
     if architecture not in ('amd64', 'arm64'):
         raise ValueError('unsupported Debian architecture')
-    return f'ts-crap_{debian_version(version)}_{architecture}.deb'
+    debian_version(version)
+    # GitHub sanitizes tildes in release asset names; retain upstream SemVer
+    # in filenames independently of the encoded control-file Version field.
+    return f'ts-crap_{version}-1_{architecture}.deb'
 
 
 def verified(path):
@@ -111,6 +131,7 @@ def atomic_write(path, data):
             staging = Path(output.name)
             output.write(data)
             output.flush()
+            os.fchmod(output.fileno(), 0o644)
             os.fsync(output.fileno())
         os.replace(staging, path)
     finally:
@@ -143,7 +164,8 @@ def _build(assets, version, epoch, targets):
         with tempfile.TemporaryDirectory(prefix='linux-package-') as temporary:
             stage = Path(temporary) / 'root'
             files = {'usr/bin/ts-crap': (binary, 0o755),
-                     'usr/share/doc/ts-crap/copyright': ((ROOT / 'LICENSE').read_bytes(), 0o644),
+                     'usr/share/doc/ts-crap/copyright': ((ROOT / 'LICENSE').read_bytes() + b'\n\n' +
+                         (ROOT / 'packaging/licenses/musl-COPYRIGHT').read_bytes(), 0o644),
                      'usr/share/doc/ts-crap/musl-COPYRIGHT': ((ROOT / 'packaging/licenses/musl-COPYRIGHT').read_bytes(), 0o644)}
             files.update({f'usr/share/ts-crap/coverage-helpers/{n}': (data, 0o644) for n, data in contents.items()})
             installed_size = sum((len(data) + 1023) // 1024 for data, _ in files.values())

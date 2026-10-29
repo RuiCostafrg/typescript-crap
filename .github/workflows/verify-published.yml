@@ -144,7 +144,7 @@ jobs:
   portable-linux:
     if: inputs.verify-linux && github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -168,9 +168,9 @@ jobs:
           ARCHITECTURE: ${{ matrix.architecture }}
         run: |
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
-          deb_version=$(python3 -c 'import runpy,sys; print(runpy.run_path("scripts/linux-packages.py")["debian_version"](sys.argv[1]))' "$VERSION")
+          package=$(python3 -c 'import runpy,sys; print(runpy.run_path("scripts/linux-packages.py")["package_name"](*sys.argv[1:]))' "$VERSION" "$ARCHITECTURE")
           gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" \
-            --pattern "ts-crap-$TARGET.tar.xz*" --pattern "ts-crap_${deb_version}_${ARCHITECTURE}.deb*" --dir linux-assets
+            --pattern "ts-crap-$TARGET.tar.xz*" --pattern "$package*" --dir linux-assets
           for asset in linux-assets/*; do
             gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \

@@ -11,7 +11,7 @@ jobs:
   portable-linux:
     name: Portable Linux and Debian (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

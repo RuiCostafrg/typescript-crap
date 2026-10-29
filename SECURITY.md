@@ -80,4 +80,7 @@ when GitHub records a scheduling actor other than the owner. Dependabot updates
 require owner review and an owner-authored PR; see
 [the dependency update process](docs/DEPENDENCY_UPDATES.md). PR actor gates remain
 unchanged. Coverage and mutation checks are required alongside ordinary CI before
-merging or releasing.
+merging or releasing. New releases also require successful native Linux
+distribution CI on the exact main source commit. Candidate musl archives and
+Debian packages pass isolated runtime and package lifecycle checks before
+publication; their checksums and provenance use the existing release publisher.

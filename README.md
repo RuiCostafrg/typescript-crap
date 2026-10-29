@@ -19,6 +19,11 @@ prebuilt releases.** The new release verification workflow checks both Linux
 architectures in a clean Ubuntu 26.04 container before publication. Earlier releases have different requirements; see
 the archive notes below. Build from source for other environments.
 
+The next release adds static musl archives and Debian packages for both Linux
+architectures. See [Linux distribution](docs/LINUX_DISTRIBUTION.md) for package
+installation, verification, and the CI compatibility matrix. These assets are
+not present in v2.1.0 or earlier releases.
+
 ### macOS and Linux
 
 ```sh

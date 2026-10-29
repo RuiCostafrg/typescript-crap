@@ -1,5 +1,10 @@
 # Installation and platform verification
 
+The next release adds a separate static musl and Debian package matrix described
+in [Linux distribution](LINUX_DISTRIBUTION.md). The GNU archive baseline below
+continues to apply to existing releases and GNU artifacts. Musl/package checks
+are additional; they do not retroactively certify older archives.
+
 The supported Linux reference runtime for v0.4.0 and newer prebuilt archives is
 **Ubuntu 26.04**. Keep this minimum until a separately built and tested older
 runtime is introduced. A glibc version alone does not establish compatibility
@@ -10,7 +15,7 @@ The [installation workflow](../.github/workflows/installation.yml) verifies a
 pinned published upgrade pair, v0.3.0 to v0.4.0. The
 [release verification workflow](../.github/workflows/verify-release.yml) repeats
 installation and upgrades using the candidate release assets before publication.
-It upgrades v2 candidates from the published v1.0.0 release; update that fixture
+It currently upgrades candidates from the published v2.0.1 release; update that fixture
 explicitly if its supported upgrade range changes. Tagged publication requires
 successful installation CI on the source commit as well as the existing Rust,
 coverage, mutation, and release checks.

@@ -4,7 +4,6 @@ import argparse
 import hashlib
 import importlib.util
 import json
-import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -30,11 +29,11 @@ def run(command, **kwargs):
 def verify(assets, target, version, report, images=IMAGES):
     """Exercise real artifacts without compilers, Node, network or cross-architecture emulation."""
     architecture = packages.TARGETS[target][0]
-    binary = packages.executable(assets / f'ts-crap-{target}.tar.xz', target)
-    deb = assets / packages.package_name(version, architecture)
-    packages.verified(deb)
     results = {'target': target, 'version': version, 'passed': False, 'images': []}
     try:
+        binary = packages.executable(assets / f'ts-crap-{target}.tar.xz', target)
+        deb = assets / packages.package_name(version, architecture)
+        packages.verified(deb)
         with tempfile.TemporaryDirectory(prefix='linux-distribution-') as temporary:
             work = Path(temporary)
             scanner = work / 'ts-crap'
@@ -62,6 +61,7 @@ def verify(assets, target, version, report, images=IMAGES):
             run(['dpkg-deb', '--build', '--root-owner-group', old_root, previous])
             for image in images:
                 run(['docker', 'pull', image], timeout=300)
+                image_id = run(['docker', 'image', 'inspect', '--format', '{{.Id}}', image]).strip()
                 common = ['docker', 'run', '--rm', '--network', 'none',
                           '--mount', f'type=bind,src={project},dst=/project,readonly']
                 command = [*common, '--read-only', '--tmpfs', '/tmp',
@@ -115,7 +115,7 @@ test ! -e /usr/bin/ts-crap
 test ! -e /usr/share/ts-crap/coverage-helpers/version.json
 test "$(cat /root/user-project/keep)" = keep
 '''])
-                results['images'].append({'image': image, 'portable_scan': True, 'deb_lifecycle': lifecycle})
+                results['images'].append({'image': image, 'image_id': image_id, 'portable_scan': True, 'deb_lifecycle': lifecycle})
                 print(f'{target}: {image}: portable scan passed; Debian lifecycle={lifecycle}', flush=True)
         results['passed'] = True
     except BaseException as error:

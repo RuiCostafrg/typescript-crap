@@ -84,7 +84,9 @@ Node/Rust. Debian and Ubuntu additionally install, upgrade, reinstall and remove
 the real `.deb`, checking obsolete package files disappear and user files remain.
 Because no historical `.deb` exists yet, the upgrade fixture is explicitly a
 revision-zero package built from the same upstream binary with an extra obsolete
-owned file. It proves Debian package upgrade behavior, not compatibility with a
+owned helper file (outside documentation paths that minimal images can exclude).
+The package archive must contain the musl notice even when an image excludes
+documentation during installation. The fixture proves Debian package upgrade behavior, not compatibility with a
 previous upstream binary.
 
 Containers share the runner kernel. Images are pulled before network-isolated

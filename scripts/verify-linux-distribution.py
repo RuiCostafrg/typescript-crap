@@ -52,11 +52,13 @@ def verify(assets, target, version, report, images=IMAGES):
             # the binary as a different upstream release.
             old_root = work / 'previous-root'
             run(['dpkg-deb', '--raw-extract', deb, old_root])
+            if not (old_root / 'usr/share/doc/ts-crap/musl-COPYRIGHT').is_file():
+                raise ValueError('package is missing the musl license notice')
             control = old_root / 'DEBIAN/control'
             previous_version = packages.debian_version(version).removesuffix('-1') + '-0'
             control.write_text(control.read_text().replace(
                 f'Version: {packages.debian_version(version)}\n', f'Version: {previous_version}\n'))
-            (old_root / 'usr/share/doc/ts-crap/obsolete-upgrade-probe').write_text('old revision\n')
+            (old_root / 'usr/share/ts-crap/coverage-helpers/obsolete-upgrade-probe').write_text('old revision\n')
             previous = work / 'previous.deb'
             run(['dpkg-deb', '--build', '--root-owner-group', old_root, previous])
             for image in images:
@@ -94,19 +96,18 @@ test "$status" -eq 1
                          '--mount', f'type=bind,src={previous},dst=/previous.deb,readonly',
                          '-e', f'EXPECTED_VERSION={packages.debian_version(version)}',
                          '-e', f'PREVIOUS_VERSION={previous_version}', '-e', f'UPSTREAM_VERSION={version}',
-                         image, '/bin/sh', '-ec', '''
+                         image, '/bin/sh', '-exc', '''
 mkdir -p /root/user-project
 printf 'keep\n' > /root/user-project/keep
 dpkg -i /previous.deb
 test "$(dpkg-query -W -f='${Version}' ts-crap)" = "$PREVIOUS_VERSION"
-test -f /usr/share/doc/ts-crap/obsolete-upgrade-probe
+test -f /usr/share/ts-crap/coverage-helpers/obsolete-upgrade-probe
 dpkg -i /candidate.deb
 test "$(dpkg-query -W -f='${Version}' ts-crap)" = "$EXPECTED_VERSION"
-test ! -e /usr/share/doc/ts-crap/obsolete-upgrade-probe
+test ! -e /usr/share/ts-crap/coverage-helpers/obsolete-upgrade-probe
 test "$(ts-crap --version)" = "ts-crap $UPSTREAM_VERSION"
 ts-crap --root /project --coverage /project/coverage.json --require-coverage --threshold 2 >/dev/null
 test -f /usr/share/ts-crap/coverage-helpers/version.json
-test -f /usr/share/doc/ts-crap/musl-COPYRIGHT
 ! command -v node
 ! command -v rustc
 dpkg -i /candidate.deb

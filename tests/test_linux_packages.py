@@ -140,6 +140,31 @@ class LinuxPackagesTests(unittest.TestCase):
                 self.assertFalse(checksum.is_symlink())
                 self.assertEqual(packages.verified(output), first)
 
+    @unittest.skipUnless(shutil.which('dpkg') and shutil.which('dpkg-deb'), 'dpkg required')
+    def test_minimal_image_doc_filter_keeps_owned_helpers(self):
+        """A real dpkg install can exclude notices while retaining the upgrade probe's directory."""
+        architecture = subprocess.check_output(['dpkg', '--print-architecture'], text=True).strip()
+        matching = [(t, m) for t, (a, m) in packages.TARGETS.items() if a == architecture]
+        if not matching:
+            self.skipTest('unsupported native Debian architecture')
+        target, machine = matching[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            packages.bundle.build(root)
+            archive(root, target, elf(machine=machine))
+            output, = packages.build(root, VERSION, 1700000000, [target])
+            installed = root / 'installed'
+            installed.mkdir()
+            command = ['dpkg', '--root=' + str(installed), '--force-not-root', '--force-bad-path',
+                       '--path-exclude=/usr/share/doc/*', '--install', str(output)]
+            subprocess.run(command, check=True, capture_output=True, text=True)
+            self.assertTrue((installed / 'usr/share/ts-crap/coverage-helpers/version.json').is_file())
+            self.assertFalse((installed / 'usr/share/doc/ts-crap/musl-COPYRIGHT').exists())
+            # The notice is present in the package, independent of installation policy.
+            with tarfile.open(fileobj=io.BytesIO(subprocess.check_output(
+                    ['dpkg-deb', '--fsys-tarfile', str(output)]))) as data:
+                self.assertTrue(any(m.name.endswith('/musl-COPYRIGHT') for m in data))
+
     def test_bundle_rejects_version_mismatch_and_unlisted_files(self):
         """Optional installed helpers must still match the scanner and the strict bundle allowlist."""
         with tempfile.TemporaryDirectory() as temporary:

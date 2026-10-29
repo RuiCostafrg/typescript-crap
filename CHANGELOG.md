@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Static musl Linux archives and reproducible Debian packages for x86-64 and
+  ARM64, including coverage helpers and license notices.
+- Native container runtime checks on Ubuntu, Debian, Alpine and Fedora, with
+  Debian install, revision upgrade, reinstall and removal checks before release.
+- Optional provenance-verified published Linux package adoption checks.
+
 ## 2.1.0 — 2026-10-29
 
 ### Added

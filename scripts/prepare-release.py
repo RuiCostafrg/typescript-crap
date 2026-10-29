@@ -5,15 +5,27 @@ from pathlib import Path
 import shutil
 import sys
 import importlib.util
+import tomllib
 
 spec = importlib.util.spec_from_file_location("install_dist", Path(__file__).with_name("install-dist.py"))
 install_dist = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(install_dist)
-TARGETS = install_dist.ARCHIVES
+spec = importlib.util.spec_from_file_location("linux_packages", Path(__file__).with_name("linux-packages.py"))
+linux_packages = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(linux_packages)
+# Host cargo-dist downloads and application release targets are distinct lists.
+TARGETS = (*install_dist.ARCHIVES, *linux_packages.TARGETS)
+
+def checksummed_assets(version=None):
+    """Require every native archive, helper bundle and versioned Debian package."""
+    if version is None:
+        version = tomllib.loads((Path(__file__).resolve().parents[1] / 'Cargo.toml').read_text())['package']['version']
+    return ([f"ts-crap-{t}.{'zip' if 'windows' in t else 'tar.xz'}" for t in TARGETS]
+            + ['ts-crap-coverage-helpers.zip']
+            + [linux_packages.package_name(version, arch) for arch in ('amd64', 'arm64')])
 
 def prepare(source, destination):
-    archives = [f"ts-crap-{t}.{'zip' if 'windows' in t else 'tar.xz'}" for t in TARGETS]
-    archives.append('ts-crap-coverage-helpers.zip')
+    archives = checksummed_assets()
     names = archives + [a + ".sha256" for a in archives] + [
         "ts-crap-installer.sh", "ts-crap-installer.ps1", "ts-crap.rb", "sha256.sum", "dist-manifest.json"]
     for name in names:

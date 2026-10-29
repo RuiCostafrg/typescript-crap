@@ -10,6 +10,10 @@ on:
         description: Verify installed helpers (disable only for old releases predating helpers)
         type: boolean
         default: true
+      verify-linux:
+        description: Verify musl archives and Debian packages (enable for releases containing them)
+        type: boolean
+        default: false
       previous-version:
         description: Distinct previous published upgrade fixture without v
         type: string
@@ -136,3 +140,47 @@ jobs:
           done
           python3 scripts/verify-live-homebrew.py --assets "assets/$VERSION" --version "$VERSION" \
             --previous-assets "assets/$PREVIOUS" --previous-version "$PREVIOUS" --target "$TARGET"
+
+  portable-linux:
+    if: inputs.verify-linux && github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            target: x86_64-unknown-linux-musl
+            architecture: amd64
+          - runner: ubuntu-26.04-arm
+            target: aarch64-unknown-linux-musl
+            architecture: arm64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download and authenticate published Linux packages
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          TARGET: ${{ matrix.target }}
+          ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          package=$(python3 -c 'import runpy,sys; print(runpy.run_path("scripts/linux-packages.py")["package_name"](*sys.argv[1:]))' "$VERSION" "$ARCHITECTURE")
+          gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" \
+            --pattern "ts-crap-$TARGET.tar.xz*" --pattern "$package*" --dir linux-assets
+          for asset in linux-assets/*; do
+            gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-ref "refs/tags/v$VERSION" --deny-self-hosted-runners
+          done
+          python3 scripts/verify-linux-distribution.py --assets linux-assets --target "$TARGET" --version "$VERSION" --report linux-report.json
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: published-linux-${{ matrix.target }}
+          path: linux-report.json
+          if-no-files-found: warn
+          retention-days: 14

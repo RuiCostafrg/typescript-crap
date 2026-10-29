@@ -14,10 +14,15 @@ TypeScript. Available for macOS (Apple Silicon / Intel), Linux (ARM64 / x86-64),
 and Windows (x86-64). See the archive compatibility notes below for Linux runtime
 requirements.
 
-**Linux minimum: Ubuntu 26.04 or a compatible glibc runtime for v0.4.0 and newer
-prebuilt releases.** The new release verification workflow checks both Linux
+**GNU Linux archive minimum: Ubuntu 26.04 or a compatible glibc runtime for
+v0.4.0 and newer GNU builds.** The new release verification workflow checks both Linux
 architectures in a clean Ubuntu 26.04 container before publication. Earlier releases have different requirements; see
 the archive notes below. Build from source for other environments.
+
+The next release adds static musl archives and Debian packages for both Linux
+architectures. See [Linux distribution](docs/LINUX_DISTRIBUTION.md) for package
+installation, verification, and the CI compatibility matrix. These assets are
+not present in v2.1.0 or earlier releases.
 
 ### macOS and Linux
 
@@ -55,9 +60,10 @@ verify its SHA-256 using the accompanying `.sha256` file, extract it, and place
 `ts-crap` (or `ts-crap.exe`) in a directory on your PATH. Unix archives use
 `.tar.xz`; Windows archives use `.zip`. New release builds and archive smoke tests use
 Ubuntu 26.04 (ARM64 and x86-64) and macOS 26 (Apple Silicon and Intel).
-Linux binaries from these builds require Ubuntu 26.04 or a compatible glibc
-runtime; the v0.3.0 and earlier Linux archives retain their glibc 2.35+ baseline. Linux binaries target glibc distributions;
-Alpine/musl, Android/Termux, and Windows ARM64 do not have native release builds.
+GNU Linux archives from these builds require Ubuntu 26.04 or a compatible glibc
+runtime; the v0.3.0 and earlier Linux archives retain their glibc 2.35+ baseline.
+The next release adds separate static musl archives for Alpine and other Linux
+userlands. Android/Termux and Windows ARM64 have no native release builds.
 
 See [installation verification](docs/INSTALLATION_COMPATIBILITY.md) for tested
 install/upgrade paths, runtime boundaries, and outstanding release-time evidence.

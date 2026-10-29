@@ -1,5 +1,6 @@
 """Artifact-level regressions for portable Linux package construction."""
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 import io
 import os
@@ -93,7 +94,9 @@ class LinuxPackagesTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('dpkg-deb'), 'dpkg-deb required')
     def test_real_deb_is_reproducible_root_owned_script_free_and_version_bound(self):
         """Use dpkg itself to inspect packages; real runnable artifacts are exercised by CI."""
-        for target, (architecture, machine) in packages.TARGETS.items():
+        for target, architecture, machine in [
+                ('x86_64-unknown-linux-musl', 'amd64', 62),
+                ('aarch64-unknown-linux-musl', 'arm64', 183)]:
             with self.subTest(target=target), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 packages.bundle.build(root)
@@ -101,6 +104,7 @@ class LinuxPackagesTests(unittest.TestCase):
                 combined = root / 'sha256.sum'
                 combined.write_text((root / f'ts-crap-{target}.tar.xz.sha256').read_text())
                 output, = packages.build(root, VERSION, 1700000000, [target])
+                self.assertEqual(output.name, f'ts-crap_{packages.debian_version(VERSION)}_{architecture}.deb')
                 first = output.read_bytes()
                 previous_umask = os.umask(0o077)
                 try:
@@ -139,6 +143,27 @@ class LinuxPackagesTests(unittest.TestCase):
                 self.assertEqual(victim.read_text(), 'preserve me')
                 self.assertFalse(checksum.is_symlink())
                 self.assertEqual(packages.verified(output), first)
+
+    @unittest.skipUnless(shutil.which('dpkg-deb'), 'dpkg-deb required')
+    def test_concurrent_architecture_builds_keep_all_checksums(self):
+        """Concurrent real package builds must not lose the other architecture's manifest entry."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            packages.bundle.build(root)
+            combined = root / 'sha256.sum'
+            combined.write_text('')
+            targets = [('x86_64-unknown-linux-musl', 62), ('aarch64-unknown-linux-musl', 183)]
+            for target, machine in targets:
+                archive(root, target, elf(machine=machine))
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                builds = [executor.submit(packages.build, root, VERSION, 1700000000, [target])
+                          for target, _ in targets]
+                outputs = [task.result(timeout=30)[0] for task in builds]
+            fields = [line.split() for line in combined.read_text().splitlines()]
+            self.assertEqual(len(fields), 2)
+            self.assertEqual({name for _, name in fields}, {p.name for p in outputs})
+            for digest, name in fields:
+                self.assertEqual(digest, hashlib.sha256((root / name).read_bytes()).hexdigest())
 
     @unittest.skipUnless(shutil.which('dpkg') and shutil.which('dpkg-deb'), 'dpkg required')
     def test_minimal_image_doc_filter_keeps_owned_helpers(self):

@@ -73,6 +73,9 @@ There is no configured APT source, so `apt upgrade` cannot fetch newer releases.
 architectures natively with Rust 1.90 and musl. It rejects ELF interpreters and
 shared-library dependencies, checks package architecture, helper versions and
 asset checksums, and rebuilds each Debian package twice to compare exact bytes.
+Package builds sharing an assets directory hold a Linux advisory directory lock
+through package and aggregate-checksum publication, preventing concurrent
+architecture builds from losing checksum entries.
 Local unit tests also vary the umask and test malformed ELF, checksum binding,
 symlink outputs and unexpected helper archive entries. Structural ELF fixtures
 are not substitutes for executing actual release binaries.

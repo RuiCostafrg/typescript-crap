@@ -19,7 +19,13 @@ DEBIAN_IMAGES = IMAGES[:5]
 
 def run(command, **kwargs):
     """Run only argument vectors, with bounded time and captured diagnostics."""
-    result = subprocess.run([str(x) for x in command], capture_output=True, text=True,
+    arguments = [str(x) for x in command]
+    if not arguments or arguments[0] not in ('docker', 'dpkg-deb'):
+        raise ValueError('verification may execute only docker or dpkg-deb')
+    # Audited: fixed executable allowlist, argument vectors, no shell expansion.
+    # Dynamic paths and versions remain single arguments, never command text.
+    # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+    result = subprocess.run(arguments, shell=False, capture_output=True, text=True,
                             timeout=kwargs.pop('timeout', 180), **kwargs)
     if result.returncode:
         raise RuntimeError(f'{command!r}: {result.returncode}\n{result.stdout[-12000:]}\n{result.stderr[-12000:]}')

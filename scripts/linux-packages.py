@@ -119,6 +119,17 @@ def atomic_write(path, data):
 
 
 def build(assets, version, epoch, targets=TARGETS):
+    """Serialize shared-directory builds, including aggregate checksum publication (Linux only)."""
+    import fcntl
+    directory = os.open(assets, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(directory, fcntl.LOCK_EX)
+        return _build(assets, version, epoch, targets)
+    finally:
+        os.close(directory)
+
+
+def _build(assets, version, epoch, targets):
     """Build script-free packages with root ownership, stable timestamps and no runtime deps."""
     debian_version(version)
     if type(epoch) is not int or epoch < 0:

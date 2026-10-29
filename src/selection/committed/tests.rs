@@ -241,3 +241,56 @@ fn dropping_a_reader_terminates_and_reaps_a_waiting_batch_process() {
         "Git batch process survived reader cleanup"
     );
 }
+
+#[test]
+/// Preserve blob boundaries through fragmented reads, interruptions and fatal I/O errors.
+fn short_reads_and_interruptions_preserve_normalization_and_framing() {
+    use std::io::{self, Read};
+    struct Fragmented {
+        input: Cursor<Vec<u8>>,
+        calls: usize,
+        fail_at: Option<u64>,
+    }
+    impl Read for Fragmented {
+        /// Limit reads and inject recoverable interruptions or a terminal permission error.
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            self.calls += 1;
+            if self.calls.is_multiple_of(3) {
+                return Err(io::ErrorKind::Interrupted.into());
+            }
+            if self.fail_at.is_some_and(|at| self.input.position() >= at) {
+                return Err(io::ErrorKind::PermissionDenied.into());
+            }
+            let length = buffer.len().min(7);
+            self.input.read(&mut buffer[..length])
+        }
+    }
+    let committed = format!("{}\r\n😀\rX\r\n{}\r", "a".repeat(8191), "b".repeat(8192));
+    let normalized = committed.replace("\r\n", "\n");
+    let mut framed = committed.as_bytes().to_vec();
+    framed.extend_from_slice(b"\nnext response");
+    for source in [normalized.as_bytes(), b"mismatch".as_slice()] {
+        let mut reader = Fragmented {
+            input: Cursor::new(framed.clone()),
+            calls: 0,
+            fail_at: None,
+        };
+        assert_eq!(
+            matches_committed(&mut reader, committed.len() as u64, source).unwrap(),
+            source == normalized.as_bytes()
+        );
+        assert_eq!(reader.input.position(), committed.len() as u64);
+    }
+    let mut reader = Fragmented {
+        input: Cursor::new(framed),
+        calls: 0,
+        fail_at: Some(8),
+    };
+    assert_eq!(
+        matches_committed(&mut reader, committed.len() as u64, normalized.as_bytes())
+            .unwrap_err()
+            .kind(),
+        io::ErrorKind::PermissionDenied
+    );
+    assert!(reader.input.position() < committed.len() as u64);
+}

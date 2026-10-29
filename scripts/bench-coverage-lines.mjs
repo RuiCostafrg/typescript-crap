@@ -2,7 +2,11 @@
 // Isolated conversion benchmark: node scripts/bench-coverage-lines.mjs 500
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
-import { lineHits } from './coverage-lines.mjs';
+import { pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
+const { lineHits } = await import(process.argv[3]
+  ? pathToFileURL(resolve(process.argv[3])).href
+  : new URL('./coverage-lines.mjs', import.meta.url).href);
 
 const size = Number(process.argv[2]);
 assert.ok(Number.isSafeInteger(size) && size > 0);

@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Coverage helpers accept caller-relative `--config FILE` to protect an
+  alternative project policy path alongside the always-reserved default config.
+
+### Fixed
+
+- Prevent native coverage publication from replacing project configuration;
+  reserve absent config paths for both importer input and output as well.
+- Reject dangling default-config links instead of silently weakening gate policy
+  with built-in settings; preserve working links and absent-config defaults.
+- Validate each LLVM coverage record before summing, rejecting invalid counts
+  and boolean values that could otherwise hide in apparently valid totals.
+- Invalidate old performance evidence before metadata setup and atomically
+  publish complete success/failure reports without retaining stale success.
+
+These changes preserve scoring, fingerprints, coverage document versions, and
+the public Rust API. No coverage recollection or baseline migration is required.
+Use a regular generated-report path instead of a protected configuration path,
+and repair or remove a dangling config link before scanning.
+
 ## 2.0.1
 
 ### Added

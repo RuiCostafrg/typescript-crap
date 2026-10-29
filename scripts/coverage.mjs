@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * Raw Node TypeScript coverage (no transpiler/source-map remapping).
- * Usage: node scripts/coverage.mjs --root ROOT --output coverage.json --
+ * Usage: node scripts/coverage.mjs --root ROOT --output coverage.json [--config FILE] --
  *          node --experimental-strip-types test.mjs
  * The child runs in ROOT. Requires a Node version supporting the supplied TS.
  * V8 offsets and JS string indices are UTF-16 code units, NOT UTF-8 bytes.
  * Every non-whitespace segment on a line must be covered to mark it covered.
  */
 import { lineHits, mergeLineHits } from './coverage-lines.mjs';
-import { publishReport } from './coverage-publish.mjs';
+import { protectConfigDestinations, publishReport } from './coverage-publish.mjs';
 import { snapshot } from './coverage-snapshot.mjs';
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
@@ -36,8 +36,8 @@ function argumentsFor(argv) {
   const options = {};
   let i = 0;
   for (; i < argv.length && argv[i] !== '--'; i += 2) {
-    if (!['--root', '--output'].includes(argv[i]) || !argv[i + 1] || argv[i + 1] === '--') {
-      throw new Error('Usage: node scripts/coverage.mjs --root ROOT --output coverage.json -- node --experimental-strip-types test.mjs');
+    if (!['--root', '--output', '--config'].includes(argv[i]) || !argv[i + 1] || argv[i + 1] === '--') {
+      throw new Error('Usage: node scripts/coverage.mjs --root ROOT --output coverage.json [--config FILE] -- node --experimental-strip-types test.mjs');
     }
     if (options[argv[i]]) throw new Error(`Duplicate option ${argv[i]}`);
     options[argv[i]] = argv[i + 1];
@@ -46,12 +46,14 @@ function argumentsFor(argv) {
   if (!options['--root'] || !options['--output'] || argv[i] !== '--' || !command.length) {
     throw new Error('Required: --root ROOT --output FILE -- COMMAND [ARGS...]');
   }
-  return { root: options['--root'], output: path.resolve(options['--output']), command };
+  return { root: options['--root'], output: path.resolve(options['--output']), config: options['--config'], command };
 }
 
 async function main() {
   const args = argumentsFor(process.argv.slice(2));
   const root = await fs.realpath(args.root);
+  const protectConfig = () => protectConfigDestinations(root, [args.output], args.config);
+  await protectConfig();
   await validateOutput(args.output);
   // Native V8 collection includes declarations and retains pre-execution text;
   // the loader hook enforces load-time hashes. Never reread source after execution.
@@ -102,7 +104,7 @@ async function main() {
     await publishReport(args.output, JSON.stringify(result, null, 2) + '\n', {
       replace: true,
       createParent: true,
-      validate: () => validateOutput(args.output),
+      validate: async () => { await protectConfig(); await validateOutput(args.output); },
     });
   } finally {
     await fs.rm(temporary, { recursive: true, force: true });

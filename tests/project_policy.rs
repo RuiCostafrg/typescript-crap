@@ -10,6 +10,80 @@ use ts_crap::{ScanOptions, scan};
 const SOURCE: &str =
     "export function choose(value: boolean) {\n  if (value) return 1;\n  return 0;\n}\n";
 
+#[cfg(any(unix, windows))]
+#[test]
+/// A present broken policy link must never relax any configured gate or publish outputs.
+fn dangling_default_policy_links_fail_closed_in_library_and_cli() {
+    for policy in [
+        json!({"version":1,"threshold":0}),
+        json!({"version":1,"threshold":100,"require_coverage":true}),
+        json!({"version":1,"exclude":["**"],"fail_on_empty":true}),
+    ] {
+        let project = common::project(&[("a.ts", SOURCE)]);
+        let root = project.path();
+        let target = root.join("policy.json");
+        let link = root.join("ts-crap.json");
+        let options = ScanOptions {
+            root: root.into(),
+            ..Default::default()
+        };
+        assert!(!scan(&options).unwrap().failed);
+        fs::write(&target, policy.to_string()).unwrap();
+        #[cfg(unix)]
+        let created = std::os::unix::fs::symlink(&target, &link);
+        #[cfg(windows)]
+        let created = std::os::windows::fs::symlink_file(&target, &link);
+        if let Err(error) = created {
+            assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+            eprintln!("config symlink creation unavailable: {error}");
+            return;
+        }
+        assert!(scan(&options).unwrap().failed);
+        cli(root, &[], 1);
+        fs::remove_file(&target).unwrap();
+        assert_eq!(
+            scan(&options).unwrap_err().to_string(),
+            "cannot read project configuration"
+        );
+        let report = root.join("report.json");
+        let baseline = root.join("baseline.json");
+        fs::write(&report, "old report").unwrap();
+        fs::write(&baseline, "old baseline").unwrap();
+        let output = Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+            .arg("--root")
+            .arg(root)
+            .arg("--output")
+            .arg(&report)
+            .arg("--write-baseline")
+            .arg(&baseline)
+            .args([
+                "--threshold",
+                "100",
+                "--require-coverage=false",
+                "--fail-on-empty=false",
+            ])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("cannot read project configuration")
+        );
+        assert_eq!(fs::read_to_string(report).unwrap(), "old report");
+        assert_eq!(fs::read_to_string(baseline).unwrap(), "old baseline");
+        fs::remove_file(link).unwrap();
+        assert!(!scan(&options).unwrap().failed);
+        let explicit = ScanOptions {
+            config: Some(target),
+            ..options
+        };
+        assert_eq!(
+            scan(&explicit).unwrap_err().to_string(),
+            "cannot read project configuration"
+        );
+    }
+}
+
 fn config(root: &Path, value: Value) {
     fs::write(root.join("ts-crap.json"), value.to_string()).unwrap();
 }

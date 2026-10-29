@@ -9,6 +9,7 @@ fn pure_node_conversion_and_report_filter_tests_pass() {
             "--test",
             "tests/coverage-lines.test.mjs",
             "tests/coverage-publication.test.mjs",
+            "tests/coverage-config.test.mjs",
             "tests/coverage-snapshot.test.mjs",
             "tests/report-filter.test.mjs",
             "tests/strict-json.test.mjs",

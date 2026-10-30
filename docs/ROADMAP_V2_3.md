@@ -69,7 +69,9 @@ by hand and must pick fresh directories themselves (`README.md:488-493`).
   Node 24 across Linux, macOS and Windows.
 - Publish a supported-versions table in `docs/COMPATIBILITY.md`. Failures name
   the framework and version.
-- **Acceptance:** the matrix runs on every PR and on `main` before a release.
+- **Acceptance:** the matrix runs on every owner-authored PR and eligible
+  `main` run before a release, preserving the existing numeric actor gate
+  (`docs/DEPENDENCY_UPDATES.md`).
 
 ### 1.4 Transformers and providers (M)
 

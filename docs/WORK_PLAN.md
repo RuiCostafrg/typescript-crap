@@ -41,7 +41,12 @@ when a stream changes state.
 | Distribution A (npm) | npm package with per-platform binaries and bundled helpers | — | — | blocked on npm account |
 | Docs PR | This file and the two plans | this coordinating thread | `docs/roadmap-v2.3` | open |
 
-Thread links are in T3: search thread titles above with `t3_thread_search`.
+Thread links are in T3: search thread titles above with `t3_thread_search`,
+or read them directly:
+
+- Roadmap v2.3 implementation: `mcp:ecf1739a-81f4-4e1a-b561-53a302c3631c`
+- Distribution B + C: `mcp:9b58b187-2382-4b93-aea8-74d63bedeabc`
+- Coordinating thread: `ba940b2c-0972-4bf6-a59a-1bf729c38653`
 
 ## Conventions for every stream
 

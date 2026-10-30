@@ -111,7 +111,7 @@ matrix before protected publication. All 25 published files are allowlisted;
 archive and package checksums and release provenance use the existing hardened
 publisher. Musl's copyright notice accompanies the static executables.
 
-After a future release containing these assets, run published adoption with
+After v2.2.0 or a later release containing these assets, run published adoption with
 `verify-linux=true`, alongside the normal guide and Homebrew verification:
 
 ```sh

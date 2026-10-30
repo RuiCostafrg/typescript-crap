@@ -115,9 +115,11 @@ installer matrix exercises the hosted runner's standard Homebrew prefix.
 
 After each new release, run that workflow with its version and an explicitly
 selected, distinct previous published upgrade fixture. There is no default
-previous version: use `version=2.2.0`, `previous-version=2.1.0` for v2.2.0
-verification. Historical rechecks use `version=2.0.0`, `previous-version=1.0.0`
-for v2.0.0, or `version=1.0.0`, `previous-version=0.4.0` for v1.
+previous version: use `version=2.2.0`, `previous-version=2.1.0` and
+`verify-linux=true` for v2.2.0 verification, so its musl and Debian assets are
+checked. Historical rechecks keep `verify-linux=false` and use `version=2.0.0`,
+`previous-version=1.0.0` for v2.0.0, or `version=1.0.0`, `previous-version=0.4.0`
+for v1.
 Leave guide verification enabled for releases containing helpers.
 For the legacy v0.4.0 tap check only, disable guide verification and select v0.3.0
 as the previous version. A green candidate run remains distinct from a green

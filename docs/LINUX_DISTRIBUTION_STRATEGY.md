@@ -72,8 +72,9 @@ fields.
   It also works with pnpm, which blocks install scripts by default, and behind
   corporate registry mirrors.
 - **The static musl build removes the glibc/musl split on Linux.** There is one
-  package per CPU and no `libc` field. It covers Ubuntu, Debian, RHEL and
-  Alpine, including old LTS releases.
+  package per CPU and no `libc` field. It is verified on Ubuntu, Debian,
+  Alpine and Fedora containers and is expected to work on other distributions,
+  including older LTS releases, without being verified there.
 - **The main package bundles the Node coverage helpers.** The scanner and
   helpers must be the exact same version (`docs/COVERAGE_HELPERS.md:24`). One
   npm package guarantees that. It also gives the Vitest/Jest one-step command
@@ -86,8 +87,9 @@ fields.
   - Every platform binary is byte-identical to the attested GitHub release
     archive, and CI checks this before publishing.
   - Trade-off: npm packages can't be made immutable like GitHub releases. A
-    published version can't be republished, but it can be deprecated, and
-    within 72 hours unpublished.
+    published version can't be republished, but it can be deprecated.
+    Unpublishing within 72 hours is possible only when npm's eligibility
+    rules allow it, for example when no other public package depends on it.
 - **Name:** `ts-crap` is taken.
   - Free options found on 2026-10-30: `typescript-crap` (matches the
     repository), `@ruicostafrg/ts-crap` (needs an npm user or organization
@@ -103,7 +105,10 @@ fields.
 
 ### B. Shell installer from the release tag — keep and harden
 
-This already exists and works on any distro. Improvements:
+This already exists. The verified Linux boundary is the release container
+matrix: Ubuntu, Debian, Alpine and Fedora, on x86-64 and ARM64. Other
+distributions, and kernels older than the hosted runners', are expected to work
+with the static musl build but are not verified. Improvements:
 
 - Document version-pinned installs for CI:
   `…/releases/download/v2.2.1/ts-crap-installer.sh`. Today's documented `latest`
@@ -176,7 +181,8 @@ repository would build from source on Fedora's infrastructure.
 ### I. Snap / Flatpak — not recommended
 
 They're designed for desktop apps. Sandboxing gets in the way of a CLI that
-reads project files and runs Git and Node, and they add a store account and
+reads project files and runs Git (and, for the optional coverage helpers,
+Node), and they add a store account and
 review for little benefit.
 
 ## Recommendation
@@ -184,16 +190,19 @@ review for little benefit.
 | Priority | Channel | Why |
 | --- | --- | --- |
 | 1 | **npm package** (A) | Fits how TypeScript users install and pin dev tools, and works in CI with no extra setup. It also keeps the helpers and scanner on the same version and is the home for the Vitest/Jest one-step command. |
-| 2 | **Shell installer hardening** (B) | Cheap. Version-pinned and verifiable installs on any distro. |
+| 2 | **Shell installer hardening** (B) | Cheap. Version-pinned and verifiable installs within the verified Linux matrix. |
 | 3 | **GitHub Action** (C) | One-line, verified CI setup for non-Node pipelines. |
 | 4 | **crates.io** (D) | Already on the roadmap; cheap. |
 | Later | GHCR image (H), AUR/Nix (G), RPM (F), APT repository (E) | Add when users ask for them. |
 | No | Snap/Flatpak (I) | Poor fit for a CLI. |
 
-Release suggestion: ship npm (A) and installer hardening (B) in **v2.3.0**,
-next to the Vitest/Jest work. The one-step coverage command then reaches
-users as `npx typescript-crap coverage --framework vitest`. Add C and D in
-v2.4.0.
+Schedule (owner decision, 2026-10-30; see [WORK_PLAN.md](WORK_PLAN.md)):
+
+- B and C are being implemented now and ship in the first release after they
+  merge.
+- A waits for the owner's npm account. The Vitest/Jest one-step command then
+  becomes `npx typescript-crap coverage --framework vitest`.
+- D stays in v2.4.0.
 
 ## Decisions needed from the owner
 

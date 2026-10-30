@@ -37,7 +37,7 @@ estimate (S ≈ ½–1 day, M ≈ 1–3 days, L ≈ 3+ days, including tests and
 ### 1.1 One-step coverage command (M)
 
 Today users assemble
-`node import-coverage.mjs --root … --format … --input … --output … -- npx vitest …`
+`node scripts/import-coverage.mjs --root … --format … --input … --output … -- npx vitest …`
 by hand and must pick fresh directories themselves (`README.md:488-493`).
 
 - Add `coverage-run.mjs --framework vitest|jest|auto [--provider istanbul|v8] [--format json|lcov] [--root .] [-- extra args]`.
@@ -124,16 +124,22 @@ by hand and must pick fresh directories themselves (`README.md:488-493`).
 
 - Merge or close the open PRs #36 (Dependabot `taiki-e/install-action` bump)
   and #28 (obsolete docs cleanup).
-- `docs/SECURITY_RUST_PERFORMANCE_REVIEW_2026-10-24.md` (untracked). 8 of its 9
-  findings are fixed. Commit it with a status table, or delete it.
+- The 2026-10-24 security and performance review (kept outside the repository)
+  has 8 of 9 findings fixed in current code. The remaining one, resource
+  limits, is item 2.7 above.
 
 ## Distribution
 
 Linux and npm distribution options are evaluated separately in
-[LINUX_DISTRIBUTION_STRATEGY.md](LINUX_DISTRIBUTION_STRATEGY.md). Its
-recommended npm package and installer hardening are proposed for v2.3.0, so the
-Vitest/Jest one-step command ships through `npx`. The GitHub Action and
-crates.io (2.6) are proposed for v2.4.0.
+[LINUX_DISTRIBUTION_STRATEGY.md](LINUX_DISTRIBUTION_STRATEGY.md). The schedule
+follows [WORK_PLAN.md](WORK_PLAN.md):
+
+- Installer hardening and the GitHub Action are in progress now, and each ships
+  in the first release after it merges.
+- The npm package waits for the owner's npm account. Until then, the Vitest/Jest
+  one-step command (1.1) ships in the coverage helper bundle. It moves to `npx`
+  once the npm package exists.
+- crates.io (2.6) stays in v2.4.0.
 
 ## Proposed release grouping
 

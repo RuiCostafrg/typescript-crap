@@ -21,7 +21,9 @@ when a stream changes state.
   - Rust keeps `cargo fmt`, `clippy -D warnings` and cargo-mutants (≥ 90 %).
 - **Distribution now:**
   - B (shell installer hardening) and C (GitHub Action) start now, in parallel
-    with the roadmap.
+    with the roadmap. Each ships in the first release after it merges.
+  - Until npm exists, the Vitest/Jest one-step command ships in the coverage
+    helper bundle (`ts-crap-coverage-helpers.zip`), not through `npx`.
 - **Distribution later:**
   - A (npm package) is **deferred until the owner creates the npm account**,
     enables 2FA and sets up trusted publishing.
@@ -86,22 +88,51 @@ or read them directly:
    `verification` and `linux-distribution` all succeed on `main`.
 3. Tag on the merge commit: `git tag -a vX.Y.Z -m "ts-crap vX.Y.Z"`, then push
    the tag. This works through the owner-only tag ruleset bypass.
-4. Approve the `release` environment.
-   - The REST pending-deployments call reports no approvable request.
-   - Use GraphQL instead:
-     `approveDeployments(input:{workflowRunId, environmentIds:[release env node id]})`.
-5. After publishing, verify the assets:
-   - Checksums: `sha256sum -c`.
-   - Provenance: `gh attestation verify`.
-   - Run `verify-published.yml` with `verify-guide=true` and
-     `verify-linux=true`.
+4. Approve the `release` environment. The REST pending-deployments call
+   reports no approvable request, so use GraphQL (`RUN_ID` is the release
+   workflow run):
+
+   ```sh
+   run=$(gh api repos/RuiCostafrg/typescript-crap/actions/runs/$RUN_ID --jq .node_id)
+   env=$(gh api repos/RuiCostafrg/typescript-crap/environments/release --jq .node_id)
+   gh api graphql -f r="$run" -f e="$env" -f query='
+     mutation($r: ID!, $e: ID!) {
+       approveDeployments(input: {workflowRunId: $r, environmentIds: [$e],
+                                  comment: "Approve release"}) {
+         deployments { environment }
+       }
+     }'
+   ```
+
+5. After publishing, verify the downloaded assets in a fresh empty directory:
+
+   ```sh
+   gh release download vX.Y.Z --repo RuiCostafrg/typescript-crap --dir assets
+   cd assets && sha256sum -c sha256.sum && for f in *.sha256; do sha256sum -c "$f"; done
+   for f in *.tar.xz *.zip *.deb; do
+     gh attestation verify "$f" --repo RuiCostafrg/typescript-crap \
+       --signer-workflow RuiCostafrg/typescript-crap/.github/workflows/release.yml \
+       --source-ref refs/tags/vX.Y.Z
+   done
+   ```
+
 6. Update the Homebrew tap:
    - Dispatch `RuiCostafrg/homebrew-tap` "Sync verified release".
-   - Approve its `homebrew` environment the same way as the release.
-   - Approve PR #N, then close and reopen it as the owner so the PR CI runs.
-     Bot-triggered runs skip.
-   - Squash-merge it, then rerun the failed live-Homebrew jobs.
-7. Release tags are immutable, so a failed release needs a new patch version.
+   - Approve its `homebrew` environment with the same mutation, using that
+     repository's run and `homebrew` environment node IDs.
+   - Approve the tap's update PR, then close and reopen it as the owner so
+     the PR CI runs. Bot-triggered runs skip.
+   - Squash-merge it.
+7. Only after the tap merge, run the published-release check once:
+
+   ```sh
+   gh workflow run verify-published.yml --repo RuiCostafrg/typescript-crap \
+     -f version=X.Y.Z -f previous-version=PREVIOUS -f verify-guide=true -f verify-linux=true
+   ```
+
+   Running it before the tap update fails the live-Homebrew jobs on the stale
+   formula.
+8. Release tags are immutable, so a failed release needs a new patch version.
    v2.2.0 was burned this way.
 
 ## Resume checklist

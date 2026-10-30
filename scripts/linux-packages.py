@@ -206,6 +206,9 @@ def _build(assets, version, epoch, targets):
         names = {p.name for p in outputs}
         lines = []
         for line in combined.read_text(encoding='utf-8').splitlines():
+            # cargo-dist terminates its aggregate with a blank line; drop only empty lines.
+            if not line:
+                continue
             fields = line.split()
             if len(fields) != 2 or not re.fullmatch('[0-9a-f]{64}', fields[0]):
                 raise ValueError('invalid combined checksum entry')

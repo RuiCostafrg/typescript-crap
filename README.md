@@ -19,7 +19,7 @@ v0.4.0 and newer GNU builds.** The new release verification workflow checks both
 architectures in a clean Ubuntu 26.04 container before publication. Earlier releases have different requirements; see
 the archive notes below. Build from source for other environments.
 
-v2.2.0 adds static musl archives and Debian packages for both Linux
+v2.2.1 adds static musl archives and Debian packages for both Linux
 architectures. See [Linux distribution](docs/LINUX_DISTRIBUTION.md) for package
 installation, verification, and the CI compatibility matrix. These assets are
 not present in v2.1.0 or earlier releases.
@@ -62,7 +62,7 @@ verify its SHA-256 using the accompanying `.sha256` file, extract it, and place
 Ubuntu 26.04 (ARM64 and x86-64) and macOS 26 (Apple Silicon and Intel).
 GNU Linux archives from these builds require Ubuntu 26.04 or a compatible glibc
 runtime; the v0.3.0 and earlier Linux archives retain their glibc 2.35+ baseline.
-v2.2.0 adds separate static musl archives for Alpine and other Linux
+v2.2.1 adds separate static musl archives for Alpine and other Linux
 userlands. Android/Termux and Windows ARM64 have no native release builds.
 
 See [installation verification](docs/INSTALLATION_COMPATIBILITY.md) for tested

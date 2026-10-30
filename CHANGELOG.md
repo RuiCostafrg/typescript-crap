@@ -1,6 +1,18 @@
 # Changelog
 
-## 2.2.0 — 2026-10-30
+## 2.2.1 — 2026-10-30
+
+First published release containing the 2.2.0 changes below.
+
+### Fixed
+
+- Release assembly accepts cargo-dist's aggregate `sha256.sum`, which ends with
+  a blank line, when adding Debian package checksums.
+
+## 2.2.0 — 2026-10-30 (not published)
+
+The v2.2.0 tag exists, but release assembly failed before publication; it has
+no release assets. Use v2.2.1.
 
 ### Added
 

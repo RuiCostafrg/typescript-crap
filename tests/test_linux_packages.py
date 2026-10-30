@@ -184,6 +184,31 @@ class LinuxPackagesTests(unittest.TestCase):
             for digest, name in fields:
                 self.assertEqual(digest, hashlib.sha256((root / name).read_bytes()).hexdigest())
 
+    @unittest.skipUnless(shutil.which('dpkg-deb'), 'dpkg-deb required')
+    def test_cargo_dist_aggregate_with_binary_markers_and_trailing_blank_line(self):
+        """Merge into cargo-dist's real sha256.sum shape, replacing stale package entries."""
+        target = 'x86_64-unknown-linux-musl'
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            packages.bundle.build(root)
+            archive(root, target, elf())
+            stale = packages.package_name(VERSION, 'amd64')
+            existing = [f'{"a" * 64} *ts-crap-x86_64-apple-darwin.tar.xz',
+                        f'{"b" * 64} *ts-crap-{target}.tar.xz']
+            combined = root / 'sha256.sum'
+            combined.write_text('\n'.join(existing + [f'{"c" * 64} *{stale}']) + '\n\n')
+            output, = packages.build(root, VERSION, 1700000000, [target])
+            digest = hashlib.sha256(output.read_bytes()).hexdigest()
+            self.assertEqual(combined.read_text(), '\n'.join(existing + [f'{digest}  {output.name}']) + '\n')
+            for malformed in [' \t\n', f'{"d" * 64}\n', f'{"D" * 64} *x\n', f'{"e" * 64} *a b\n']:
+                with self.subTest(malformed=malformed):
+                    combined.write_text(existing[0] + '\n' + malformed)
+                    if malformed.strip():
+                        with self.assertRaisesRegex(ValueError, 'invalid combined checksum entry'):
+                            packages.build(root, VERSION, 1700000000, [target])
+                    else:
+                        packages.build(root, VERSION, 1700000000, [target])
+
     @unittest.skipUnless(shutil.which('dpkg') and shutil.which('dpkg-deb'), 'dpkg required')
     def test_minimal_image_doc_filter_keeps_owned_helpers(self):
         """A real dpkg install can exclude notices while retaining the upgrade probe's directory."""

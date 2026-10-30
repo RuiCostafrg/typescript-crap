@@ -84,8 +84,9 @@ fields.
   - Publishing uses npm trusted publishing (OIDC) from the existing release
     workflow, with provenance and no npm token stored anywhere.
   - Publishing happens behind the same owner-approved `release` environment.
-  - Every platform binary is byte-identical to the attested GitHub release
-    archive, and CI checks this before publishing.
+  - Before publishing, CI verifies the attested GitHub release archive,
+    extracts its executable and checks that the npm package's binary has
+    identical bytes.
   - Trade-off: npm packages can't be made immutable like GitHub releases. A
     published version can't be republished, but it can be deprecated.
     Unpublishing within 72 hours is possible only when npm's eligibility
@@ -106,7 +107,10 @@ fields.
 ### B. Shell installer from the release tag — keep and harden
 
 This already exists. The verified Linux boundary is the release container
-matrix: Ubuntu, Debian, Alpine and Fedora, on x86-64 and ARM64. Other
+matrix: Ubuntu, Debian, Alpine and Fedora, on x86-64 and ARM64. That matrix
+tests the static musl archives and `.deb` packages directly. The installer
+itself is tested on Ubuntu 26.04 (GNU path), so its glibc-version fallback to
+musl is cargo-dist behaviour that isn't yet exercised in CI. Other
 distributions, and kernels older than the hosted runners', are expected to work
 with the static musl build but are not verified. Improvements:
 
@@ -122,7 +126,13 @@ with the static musl build but are not verified. Improvements:
 
 ### C. GitHub Action — recommended for CI
 
-`uses: RuiCostafrg/typescript-crap@v2` with `version:` input.
+`uses: RuiCostafrg/typescript-crap@<ref>` with a `version:` input.
+
+The ref scheme is an open owner decision. Release tags must be SemVer and can't
+move (tag rulesets), so a floating `@v2` alias can't follow later releases
+without a separate, deliberately unprotected tag pattern. The alternatives are
+pinning a full commit SHA, which is the safest and is what this repository does
+for its own actions, or pinning an immutable release tag such as `@v2.3.0`.
 
 - It downloads the release archive, verifies its checksum and attestation, and
   adds the binary to `PATH`.
@@ -134,8 +144,11 @@ with the static musl build but are not verified. Improvements:
 ### D. crates.io and cargo-binstall
 
 This is roadmap item 2.6. It serves Rust users and source builds.
-`cargo binstall ts-crap` can fetch the attested release archives. Publishing
-would use crates.io trusted publishing, with no token.
+`cargo binstall ts-crap` can fetch the release archives. cargo-binstall checks
+download checksums but not GitHub attestations, so security-sensitive users
+should still run `gh attestation verify` on the archive, or build from the
+crates.io source with `cargo install --locked`. Publishing would use crates.io
+trusted publishing, with no token.
 
 - **Effort:** S.
 
@@ -171,9 +184,15 @@ repository would build from source on Fedora's infrastructure.
 
 ### H. Container image (GHCR) — optional
 
-- `ghcr.io/ruicostafrg/ts-crap:2.2.1` built `FROM scratch` with the static musl
-  binary.
-- Publishing would use the workflow `GITHUB_TOKEN` and attach provenance.
+- `ghcr.io/ruicostafrg/ts-crap:2.2.1` with the static musl binary.
+  - `FROM scratch` gives the smallest image, but without Git, so `--diff`,
+    `--pr` and committed-source features don't work in it.
+  - A small base image with Git supports every feature.
+  - Either way, the supported feature set must be stated and tested.
+- Publishing would happen in a dedicated job with only `packages: write`,
+  `id-token: write` and `attestations: write`, using the workflow
+  `GITHUB_TOKEN`, and would attach provenance. The current publish job has no
+  package permission.
 - It is useful for container-native CI. Coverage helpers would need a Node
   variant.
 - **Effort:** S–M.
@@ -201,7 +220,8 @@ Schedule (owner decision, 2026-10-30; see [WORK_PLAN.md](WORK_PLAN.md)):
 - B and C are being implemented now and ship in the first release after they
   merge.
 - A waits for the owner's npm account. The Vitest/Jest one-step command then
-  becomes `npx typescript-crap coverage --framework vitest`.
+  becomes `npx <package> coverage --framework vitest`, where `<package>` is the
+  npm name the owner chooses.
 - D stays in v2.4.0.
 
 ## Decisions needed from the owner

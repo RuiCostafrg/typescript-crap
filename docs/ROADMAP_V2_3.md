@@ -12,9 +12,9 @@ estimate (S ≈ ½–1 day, M ≈ 1–3 days, L ≈ 3+ days, including tests and
 - **Vitest and Jest are the priority frameworks.** Both already work through the
   coverage importer, but only one pinned version each, one Jest transformer and
   no one-step command. Phase 1 makes them first-class.
-- **Lint/format tooling.** The repo maintains 16 JavaScript (`.mjs`) files,
-  about 1,600 lines: 10 helper scripts, ~900 lines, and 6 `node:test` suites,
-  ~680 lines. They currently have no lint or format check; CI only runs
+- **Lint/format tooling.** The repo maintains 19 JavaScript (`.mjs`) files,
+  about 1,650 lines: 10 helper scripts, ~900 lines; 6 `node:test` suites,
+  ~680 lines; and 3 example tests, ~55 lines. They currently have no lint or format check; CI only runs
   `node --check` on 4 of them (`.github/workflows/ci.yml:57`). That warrants
   oxlint and oxfmt (Phase 3). Rust keeps `cargo fmt`, `clippy -D warnings` and
   cargo-mutants (≥ 90 % kill rate) unchanged.
@@ -40,9 +40,11 @@ Today users assemble
 `node scripts/import-coverage.mjs --root … --format … --input … --output … -- npx vitest …`
 by hand and must pick fresh directories themselves (`README.md:488-493`).
 
-- Add `coverage-run.mjs --framework vitest|jest|auto [--provider istanbul|v8] [--format json|lcov] [--root .] [-- extra args]`.
-- `auto` detects `vitest.config.*`, `jest.config.*` or the `jest` key in
-  `package.json`. It never evaluates config files itself.
+- Add `coverage-run.mjs --framework vitest|jest|auto [--provider istanbul|v8] [--format json|lcov] [--root .] [--scan] [-- extra args]`.
+- `auto` detects `vitest.config.*`, `vite.config.*` (which Vitest also loads),
+  `jest.config.*` or the `jest` key in `package.json`. It never evaluates config
+  files itself. Ambiguous projects that have both Vitest and Jest signals must
+  name `--framework`. Tests cover each signal, including Vite-only projects.
 - It creates a fresh private run directory and adds the correct reporter and
   directory flags. It then imports the results and writes native coverage.
   Finally it prints the matching `ts-crap --coverage … --require-coverage`
@@ -98,7 +100,10 @@ by hand and must pick fresh directories themselves (`README.md:488-493`).
 - Documented and tested recipes for:
   - Vitest `projects`
   - Jest `projects`
-  - Sharded runs: `vitest --shard` with `--merge-reports`, and `jest --shard`
+  - Sharded Vitest runs: each shard runs `vitest run --shard=i/n --reporter=blob`,
+    then `vitest --merge-reports` merges the blob reports, with coverage enabled.
+  - Sharded Jest runs: each shard runs `jest --shard=i/n`, and the importer
+    merges the shards' coverage files.
 - **Acceptance:** a fixture with two or more projects proves the merged counts.
 
 ## Phase 2: scanner gaps

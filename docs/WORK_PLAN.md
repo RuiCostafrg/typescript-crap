@@ -107,12 +107,15 @@ or read them directly:
 5. After publishing, verify the downloaded assets in a fresh empty directory:
 
    ```sh
+   set -euo pipefail
    gh release download vX.Y.Z --repo RuiCostafrg/typescript-crap --dir assets
-   cd assets && sha256sum -c sha256.sum && for f in *.sha256; do sha256sum -c "$f"; done
-   for f in *.tar.xz *.zip *.deb; do
+   cd assets
+   sha256sum -c sha256.sum
+   for f in *.sha256; do sha256sum -c "$f"; done
+   for f in *.tar.xz *.zip *.deb ts-crap-installer.sh ts-crap-installer.ps1 ts-crap.rb; do
      gh attestation verify "$f" --repo RuiCostafrg/typescript-crap \
        --signer-workflow RuiCostafrg/typescript-crap/.github/workflows/release.yml \
-       --source-ref refs/tags/vX.Y.Z
+       --source-ref refs/tags/vX.Y.Z --deny-self-hosted-runners
    done
    ```
 

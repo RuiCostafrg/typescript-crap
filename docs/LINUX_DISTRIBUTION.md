@@ -1,6 +1,6 @@
 # Linux distribution
 
-The next release adds static musl archives and Debian packages for x86-64 and
+v2.2.0 adds static musl archives and Debian packages for x86-64 and
 ARM64. v2.1.0 and earlier contain only the existing GNU Linux archives; their
 Ubuntu 26.04 runtime boundary remains unchanged. Check a release's asset list
 before using the commands below. No signed APT repository or RPM is provided.
@@ -111,7 +111,7 @@ matrix before protected publication. All 25 published files are allowlisted;
 archive and package checksums and release provenance use the existing hardened
 publisher. Musl's copyright notice accompanies the static executables.
 
-After a future release containing these assets, run published adoption with
+After v2.2.0 or a later release containing these assets, run published adoption with
 `verify-linux=true`, alongside the normal guide and Homebrew verification:
 
 ```sh

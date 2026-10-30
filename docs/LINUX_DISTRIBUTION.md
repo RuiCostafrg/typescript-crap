@@ -1,6 +1,6 @@
 # Linux distribution
 
-The next release adds static musl archives and Debian packages for x86-64 and
+v2.2.0 adds static musl archives and Debian packages for x86-64 and
 ARM64. v2.1.0 and earlier contain only the existing GNU Linux archives; their
 Ubuntu 26.04 runtime boundary remains unchanged. Check a release's asset list
 before using the commands below. No signed APT repository or RPM is provided.

@@ -1,6 +1,6 @@
 # Installation and platform verification
 
-The next release adds a separate static musl and Debian package matrix described
+v2.2.0 adds a separate static musl and Debian package matrix described
 in [Linux distribution](LINUX_DISTRIBUTION.md). The GNU archive baseline below
 continues to apply to existing releases and GNU artifacts. Musl/package checks
 are additional; they do not retroactively certify older archives.
@@ -9,14 +9,14 @@ The supported Linux reference runtime for v0.4.0 and newer prebuilt archives is
 **Ubuntu 26.04**. Keep this minimum until a separately built and tested older
 runtime is introduced. A glibc version alone does not establish compatibility
 with every distribution. Releases through v2.1.0 have no Alpine/musl archive;
-the next release adds separate musl builds. Android/Termux has no native release
+v2.2.0 adds separate musl builds. Android/Termux has no native release
 archive. Older v0.3.0 archives retain their earlier glibc 2.35+ baseline.
 
 The [installation workflow](../.github/workflows/installation.yml) verifies a
 pinned published upgrade pair, v0.3.0 to v0.4.0. The
 [release verification workflow](../.github/workflows/verify-release.yml) repeats
 installation and upgrades using the candidate release assets before publication.
-The installer and Homebrew checks upgrade candidates from the published v2.0.1
+The installer and Homebrew checks upgrade candidates from the published v2.1.0
 release; Debian package checks use the synthetic revision-zero fixture described
 in the Linux distribution guide. Update the published-version fixture
 explicitly if its supported upgrade range changes. Tagged publication requires

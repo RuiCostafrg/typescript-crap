@@ -200,13 +200,13 @@ class LinuxPackagesTests(unittest.TestCase):
             output, = packages.build(root, VERSION, 1700000000, [target])
             digest = hashlib.sha256(output.read_bytes()).hexdigest()
             self.assertEqual(combined.read_text(), '\n'.join(existing + [f'{digest}  {output.name}']) + '\n')
+            combined.write_text(existing[0] + '\n\n' + existing[1] + '\n')
+            packages.build(root, VERSION, 1700000000, [target])
+            self.assertEqual(combined.read_text().splitlines()[:2], existing)
             for malformed in [' \t\n', f'{"d" * 64}\n', f'{"D" * 64} *x\n', f'{"e" * 64} *a b\n']:
                 with self.subTest(malformed=malformed):
                     combined.write_text(existing[0] + '\n' + malformed)
-                    if malformed.strip():
-                        with self.assertRaisesRegex(ValueError, 'invalid combined checksum entry'):
-                            packages.build(root, VERSION, 1700000000, [target])
-                    else:
+                    with self.assertRaisesRegex(ValueError, 'invalid combined checksum entry'):
                         packages.build(root, VERSION, 1700000000, [target])
 
     @unittest.skipUnless(shutil.which('dpkg') and shutil.which('dpkg-deb'), 'dpkg required')

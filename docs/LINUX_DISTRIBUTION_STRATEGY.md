@@ -187,7 +187,8 @@ repository would build from source on Fedora's infrastructure.
 - `ghcr.io/ruicostafrg/ts-crap:2.2.1` with the static musl binary.
   - `FROM scratch` gives the smallest image, but without Git, so `--diff`,
     `--pr` and committed-source features don't work in it.
-  - A small base image with Git supports every feature.
+  - A small base image with Git supports diff and committed-source features.
+    `--pr` also needs an authenticated GitHub CLI (`gh`).
   - Either way, the supported feature set must be stated and tested.
 - Publishing would happen in a dedicated job with only `packages: write`,
   `id-token: write` and `attestations: write`, using the workflow

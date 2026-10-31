@@ -3,8 +3,8 @@
 Status on 2026-10-27: all v1.0.0 implementation and release acceptance steps
 complete, including protected publication, Homebrew synchronization, and
 published-tool verification. The immutable `v1.0.0` tag selects
-`4ce57b9aa3b9979166965aebbf15e16eabb6ccac`. Every item in the
-[roadmap](RELEASE_ROADMAP.md) has implementation and hosted release evidence.
+`4ce57b9aa3b9979166965aebbf15e16eabb6ccac`. This ledger records the implementation
+and hosted evidence for all completed v1.0.0 release requirements.
 
 ## Completed implementation evidence
 
@@ -142,8 +142,7 @@ existing icon present and the real published ARM64 CLI/helpers.
 - [x] `Verify published adoption` with version `1.0.0`, previous version `0.4.0`,
   and guide verification enabled: all five installed-guide targets, actual Vitest
   on Linux x86-64, and all three live-tap targets.
-- [x] Record the final tag/commit and workflow URLs, then close the roadmap's
-  published-guide item.
+- [x] Record the final tag/commit, workflow URLs, and published-guide evidence.
 
 Publish through the existing protected workflow described in [SECURITY.md](../SECURITY.md).
 Manual Release dispatch is a dry run and cannot publish. Existing release assets

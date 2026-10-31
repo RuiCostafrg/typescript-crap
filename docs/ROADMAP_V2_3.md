@@ -40,7 +40,10 @@ Today users assemble
 `node scripts/import-coverage.mjs --root … --format … --input … --output … -- npx vitest …`
 by hand and must pick fresh directories themselves (`README.md:488-493`).
 
-- Add `coverage-run.mjs --framework vitest|jest|auto [--provider istanbul|v8] [--format json|lcov] [--root .] [--scan] [-- extra args]`.
+- Add `coverage-run.mjs --framework vitest|jest|auto [--provider PROVIDER] [--format json|lcov] [--root .] [--scan] [-- extra args]`.
+  `PROVIDER` follows each framework's own names: `istanbul` or `v8` for Vitest,
+  `babel` or `v8` for Jest. Any other combination is rejected with a clear
+  error, and tests cover that.
 - `auto` detects `vitest.config.*`, `vite.config.*` (which Vitest also loads),
   `jest.config.*` or the `jest` key in `package.json`. It never evaluates config
   files itself. Ambiguous projects that have both Vitest and Jest signals must
@@ -53,7 +56,9 @@ by hand and must pick fresh directories themselves (`README.md:488-493`).
   helper and scanner versions must match exactly, and the project config is
   never overwritten.
 - **Acceptance:** all fixture combinations pass through the new command in CI.
-  Each existing manual command still works.
+  Each existing manual command still works. `coverage-run.mjs` is added to the
+  helper bundle allowlist (`scripts/bundle-coverage.py`), and
+  `scripts/verify-coverage-bundle.py` runs it from the extracted bundle.
 
 ### 1.2 Actionable diagnostics (S)
 
@@ -102,7 +107,7 @@ by hand and must pick fresh directories themselves (`README.md:488-493`).
   - Jest `projects`
   - Sharded Vitest runs: each shard runs `vitest run --shard=i/n --reporter=blob`,
     then `vitest --merge-reports` merges the blob reports, with coverage enabled.
-  - Sharded Jest runs: each shard runs `jest --shard=i/n`, and the importer
+  - Sharded Jest runs: each shard runs `jest --shard=i/n --coverage`, and the importer
     merges the shards' coverage files.
 - **Acceptance:** a fixture with two or more projects proves the merged counts.
 

@@ -86,7 +86,9 @@ fields.
   - Publishing happens behind the same owner-approved `release` environment.
   - Before publishing, CI verifies the attested GitHub release archive,
     extracts its executable and checks that the npm package's binary has
-    identical bytes.
+    identical bytes. It also runs `scripts/verify-coverage-bundle.py` on
+    the helpers bundled in the main package, so they match the scanner
+    version.
   - Trade-off: npm packages can't be made immutable like GitHub releases. A
     published version can't be republished, but it can be deprecated.
     Unpublishing within 72 hours is possible only when npm's eligibility
@@ -144,7 +146,10 @@ for its own actions, or pinning an immutable release tag such as `@v2.3.0`.
 ### D. crates.io and cargo-binstall
 
 This is roadmap item 2.6. It serves Rust users and source builds.
-`cargo binstall ts-crap` can fetch the release archives. cargo-binstall checks
+`cargo binstall ts-crap` can fetch the release archives only once
+`Cargo.toml` has `[package.metadata.binstall]` metadata (`pkg-url`,
+`bin-dir`, `pkg-fmt`) matching the cargo-dist archive names and layout; the
+defaults don't match them. cargo-binstall checks
 download checksums but not GitHub attestations, so security-sensitive users
 should still run `gh attestation verify` on the archive, or build from the
 crates.io source with `cargo install --locked`. Publishing would use crates.io
@@ -190,8 +195,8 @@ repository would build from source on Fedora's infrastructure.
   - A small base image with Git supports diff and committed-source features.
     `--pr` also needs an authenticated GitHub CLI (`gh`).
   - Either way, the supported feature set must be stated and tested.
-- Publishing would happen in a dedicated job with only `packages: write`,
-  `id-token: write` and `attestations: write`, using the workflow
+- Publishing would happen in a dedicated job with only `contents: read`,
+  `packages: write`, `id-token: write` and `attestations: write`, using the workflow
   `GITHUB_TOKEN`, and would attach provenance. The current publish job has no
   package permission.
 - It is useful for container-native CI. Coverage helpers would need a Node
@@ -210,7 +215,7 @@ review for little benefit.
 | Priority | Channel | Why |
 | --- | --- | --- |
 | 1 | **npm package** (A) | Fits how TypeScript users install and pin dev tools, and works in CI with no extra setup. It also keeps the helpers and scanner on the same version and is the home for the Vitest/Jest one-step command. |
-| 2 | **Shell installer hardening** (B) | Cheap. Version-pinned and verifiable installs within the verified Linux matrix. |
+| 2 | **Shell installer hardening** (B) | Cheap. Version-pinned and verifiable installs. The installer is tested on Ubuntu 26.04; the musl archives it falls back to are tested across the container matrix. |
 | 3 | **GitHub Action** (C) | One-line, verified CI setup for non-Node pipelines. |
 | 4 | **crates.io** (D) | Already on the roadmap; cheap. |
 | Later | GHCR image (H), AUR/Nix (G), RPM (F), APT repository (E) | Add when users ask for them. |

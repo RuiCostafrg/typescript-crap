@@ -107,12 +107,14 @@ or read them directly:
 5. After publishing, verify the downloaded assets in a fresh empty directory:
 
    ```sh
-   set -euo pipefail
+   set -eu
    gh release download vX.Y.Z --repo RuiCostafrg/typescript-crap --dir assets
    cd assets
-   sha256sum -c sha256.sum
-   for f in *.sha256; do sha256sum -c "$f"; done
-   for f in *.tar.xz *.zip *.deb ts-crap-installer.sh ts-crap-installer.ps1 ts-crap.rb; do
+   if command -v sha256sum >/dev/null; then sum="sha256sum"; else sum="shasum -a 256"; fi
+   $sum -c sha256.sum
+   for f in *.sha256; do $sum -c "$f"; done
+   # Every published asset is attested, including sums and the manifest.
+   for f in *; do
      gh attestation verify "$f" --repo RuiCostafrg/typescript-crap \
        --signer-workflow RuiCostafrg/typescript-crap/.github/workflows/release.yml \
        --source-ref refs/tags/vX.Y.Z --deny-self-hosted-runners

@@ -13,7 +13,9 @@ fn pure_node_conversion_and_report_filter_tests_pass() {
             "tests/coverage-snapshot.test.mjs",
             "tests/report-filter.test.mjs",
             "tests/strict-json.test.mjs",
+            "tests/coverage-run.test.mjs",
         ])
+        .env("TS_CRAP_SCANNER", env!("CARGO_BIN_EXE_ts-crap"))
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output()
         .unwrap();

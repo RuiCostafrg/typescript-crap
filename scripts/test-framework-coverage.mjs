@@ -6,6 +6,7 @@ import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { formatCommand, scannerArguments } from './coverage-run.mjs';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const scanner = path.resolve(process.argv[2] ?? 'target/debug/ts-crap');
@@ -52,6 +53,13 @@ try {
     if (result.status === 0) appendFileSync(process.env.FIXTURE_MUTATE_SOURCE, '// changed during collection\\n');
     process.exitCode = result.status ?? 2;
   `);
+
+  // The fixture has both configurations, so detection must refuse to guess.
+  const ambiguous = run(process.execPath, [path.join(repository, 'scripts/coverage-run.mjs'), '--root', root], 2);
+  assert.match(ambiguous.stderr, /Both Vitest and Jest configuration found.*pass --framework/);
+  const mismatched = run(process.execPath, [path.join(repository, 'scripts/coverage-run.mjs'), '--root', root,
+    '--framework', 'jest', '--provider', 'istanbul'], 2);
+  assert.match(mismatched.stderr, /not a Jest coverage provider; use babel or v8/);
 
   for (const [framework, provider] of [['jest', 'babel'], ['vitest', 'istanbul'], ['vitest', 'v8']]) {
     const mutationSource = framework === 'jest'
@@ -112,6 +120,16 @@ try {
       const price = fullReport.functions.find(f => f.name === 'price');
       assert.equal(price.complexity, 4, label);
       assert.equal(price.crap, 4, label);
+
+      // The one-step command must produce byte-identical native coverage.
+      const oneStep = path.join(await fs.mkdtemp(path.join(root, 'coverage', `${framework}-one-step-`)), 'native.json');
+      const runResult = run(process.execPath, [path.join(repository, 'scripts/coverage-run.mjs'),
+        '--framework', framework, '--provider', provider,
+        '--format', format === 'istanbul' ? 'json' : 'lcov', '--root', root, '--output', oneStep, '--',
+        ...(framework === 'jest' ? ['--config', 'jest.config.cjs', '--runInBand'] : ['--config', 'vitest.config.mjs'])],
+      0, { FIXTURE_COVERAGE_PROVIDER: provider });
+      assert(runResult.stdout.endsWith(`${formatCommand(['ts-crap', ...scannerArguments({ root, output: oneStep })])}\n`), label);
+      assert.deepEqual(await fs.readFile(oneStep), await fs.readFile(full.output), `${label}: one-step command`);
 
       const partial = await collect('partial', true);
       const partialReport = JSON.parse(scan(partial.output, 1).stdout);

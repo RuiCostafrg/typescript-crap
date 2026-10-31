@@ -94,6 +94,140 @@ executes trusted project commands with the runner's permissions, so use normal P
 isolation and read-only permissions for untrusted contributions. Rust/compiler
 installation is unnecessary for the downloaded CLI.
 
+## GitHub Action
+
+The repository root contains a composite [setup action](../action.yml). It
+replaces the manual install step in the example workflow. It installs the
+`version` you choose (2.2.1 or newer, no `latest`) for the runner:
+
+| Runner | Release archive |
+| --- | --- |
+| Linux x86-64 / ARM64 | static musl (`*-unknown-linux-musl`), so any glibc version works |
+| macOS Apple Silicon / Intel | `*-apple-darwin` |
+| Windows x86-64 | `x86_64-pc-windows-msvc` |
+
+Before anything downloaded runs, the action:
+
+1. Downloads the archive and its `.sha256` with `gh` into a fresh directory
+   under `RUNNER_TEMP`.
+2. Runs `gh attestation verify` with an exact `--cert-identity` for this
+   repository's `release.yml` at `refs/tags/vVERSION`, plus `--source-ref` and
+   `--deny-self-hosted-runners`. An exact identity is used because `gh`
+   2.101.0 and older match `--signer-workflow` only as a prefix
+   ([GHSA-wjmr-j3rp-mh2g](https://github.com/cli/cli/security/advisories/GHSA-wjmr-j3rp-mh2g))
+   and compare `--source-ref` case-insensitively
+   ([GHSA-4mq3-hpgx-9cx8](https://github.com/cli/cli/security/advisories/GHSA-4mq3-hpgx-9cx8)).
+   Some hosted images still ship such versions, for example 2.98.0 on
+   `macos-26` Intel.
+3. Checks the SHA-256, and that the checksum file names that exact archive.
+4. Requires exactly one executable that reports `ts-crap VERSION`, then adds
+   its directory to `PATH`.
+
+With `helpers: true` it verifies and extracts the matching
+`ts-crap-coverage-helpers.zip` the same way and sets `TS_CRAP_HELPERS`.
+The release repository and signer workflow are fixed in the action and are
+not inputs. No remote script is piped into a shell. The action needs `gh` (preinstalled on
+GitHub-hosted runners) and only read access through the default `token`.
+
+```yaml
+permissions:
+  contents: read
+steps:
+  - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    with:
+      ref: ${{ github.event.pull_request.head.sha }}
+      fetch-depth: 0
+      persist-credentials: false
+  - uses: RuiCostafrg/typescript-crap@<full commit SHA> # vX.Y.Z
+    with:
+      version: 2.2.1
+      helpers: true
+  # ts-crap and $TS_CRAP_HELPERS are now available to later steps.
+```
+
+To run the gate in the action, set `scan: true` and give the arguments in
+`args`, one per line. Each line is passed as one argument and never evaluated by a
+shell, so paths with spaces need no quoting. With `sarif: true` the scan
+runs once with `--format sarif --output` placed before your `args`, so the
+report and the gate result always come from the same run. When `--root`
+is a subdirectory of the checkout, the action rewrites the report's paths to be
+relative to the checkout so code scanning can find the files (this needs
+`python3`, which hosted runners have). It then prints a one-line summary per
+SARIF result. Scan output is printed with workflow commands suspended, so
+paths or function names in a PR cannot forge annotations. In that mode, `--format`,
+`--output`, `-o` and the text-only `--only-failing`, `--sort` and `--top`
+are rejected before `--`. `upload-sarif: true` uploads the report to code
+scanning with a pinned `github/codeql-action/upload-sarif`; only that job needs
+`security-events: write`:
+
+```yaml
+jobs:
+  crap:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: RuiCostafrg/typescript-crap@<full commit SHA> # vX.Y.Z
+        with:
+          version: 2.2.1
+          scan: true
+          sarif: true
+          upload-sarif: true
+          args: |
+            --threshold
+            15
+            src
+```
+
+The scan's exit code is the `exit-code` output (0 pass, 1 gate failure, 2
+invalid input). When a report is produced, the action uploads it before
+failing on a non-zero result, so gate failures still reach code scanning.
+Invalid input can stop the scan before any report exists, and then nothing is
+uploaded. Use `continue-on-error`
+on the step to report without blocking. Other outputs: `version`, `target`,
+`bin-dir`, `executable`, `helpers-dir` and `sarif-file`. For coverage-gated
+PRs, install with the action and keep the collection and gate commands from
+the example workflow.
+
+`sarif-category` defaults to upload-sarif's own category for the workflow
+and job. Set distinct categories when one job uploads more than one scan,
+otherwise later uploads replace earlier ones. `sarif` requires `scan`, and
+`upload-sarif` requires `sarif`. Inconsistent or non-boolean inputs fail
+before anything is downloaded. The `token` is passed only to `gh`; the
+downloaded binary runs without it.
+
+### Choosing the action ref
+
+The action ref (after `@`) and the `version` input are independent. The ref
+selects the action's own scripts, which do the verification. `version` selects
+the ts-crap release they install. There are three ways to reference the action:
+
+| Ref | Example | Changes when | Trade-off |
+| --- | --- | --- | --- |
+| Full commit SHA (**recommended**) | `@<full commit SHA> # vX.Y.Z` | Never | Most secure: the code you reviewed is the code that runs, even if a tag or branch moved. It is the only form accepted where SHA pinning is enforced, as it is in this repository. Dependabot can update it, and the comment records the release it came from. |
+| Release tag | `@vX.Y.Z` | Never here | Readable and immutable in this repository, where release tags cannot move or be deleted. You still trust that rule; a SHA does not. Works from the first release that contains the action. |
+| Floating major | `@v2` | With every 2.x release | Picks up fixes automatically, but the code that verifies your downloads can change without review. Rejected where SHA pinning is enforced. **Not offered yet:** release tags matching `v*` are immutable, so a moving `v2` would need a separate ref scheme. |
+
+Use the full commit SHA of a release commit with a `# vX.Y.Z` comment, as the
+examples above do. Until a release contains the action, use a commit on `main`. Get it with
+`git ls-remote https://github.com/RuiCostafrg/typescript-crap 'refs/tags/vX.Y.Z^{}'`.
+Release tags are annotated, and the `^{}` suffix returns the commit rather
+than the tag object.
+
+For the owner's commits and PRs, [Action CI](../.github/workflows/github-action.yml)
+runs the action against the published v2.2.1 release on Ubuntu 26.04 and 24.04
+(x86-64 and ARM64), macOS Apple Silicon and Intel, and Windows x86-64. It
+checks the Linux binary is static, scans with SARIF, uploads to code scanning
+(on pushes to `main` and manual runs only, so PR runs keep read-only tokens),
+and checks that gate failures, invalid input, `latest`, unsupported and
+unpublished versions fail. Like the other workflows, it skips jobs for other
+actors. Unit tests in `tests/test_github_action.py` cover
+tampered, misbound and unattested assets with a fake `gh`.
+
 ## Executable verification and release evidence
 
 `verify-ci-guide.py` creates a separate clean Git checkout, extracts installed

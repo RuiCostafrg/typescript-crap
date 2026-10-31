@@ -1,6 +1,6 @@
 # Work plan and handoff (post-v2.2.1)
 
-Last updated 2026-10-30. This file preserves decisions and the parallel work
+Last updated 2026-10-31. This file preserves decisions and the parallel work
 split so any session can resume after a context reset. Update the status table
 when a stream changes state.
 
@@ -36,7 +36,9 @@ when a stream changes state.
     immutable `@vX.Y.Z`, floating `@v2`) and recommend the full commit SHA as
     the most secure. Offering `@v2` needs a separate tag pattern and owner
     approval of any ruleset change.
-  - The owner will create the npm account; npm work starts once it exists.
+  - The owner will create the npm account. npm work starts once the account
+    exists with 2FA and trusted publishing configured, matching the
+    Distribution A gate above.
 - **Still open:**
   - Whether to add an APT repository (recommendation: no, keep `.deb` assets
     as direct downloads).

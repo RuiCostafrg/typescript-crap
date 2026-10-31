@@ -7,6 +7,8 @@ set -euo pipefail
 
 fail() {
   echo "::error title=ts-crap scan::$*" >&2
+  # Invalid input still publishes the documented exit-code output.
+  if [[ -n "${GITHUB_OUTPUT:-}" ]]; then echo "exit-code=2" >> "$GITHUB_OUTPUT"; fi
   exit 2
 }
 

@@ -433,6 +433,7 @@ class ActionScripts(unittest.TestCase):
     def test_validation_errors_are_reported_before_commands_stop(self):
         result = self.scan('--top\n3', 'true')
         self.assertEqual(result.returncode, 2)
+        self.assertEqual(self.outputs(), {'exit-code': '2'})
         self.assertNotIn('stop-commands', result.stdout + result.stderr)
         self.assertIn('::error title=ts-crap scan::', result.stderr)
 

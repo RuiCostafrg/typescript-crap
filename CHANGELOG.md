@@ -22,6 +22,9 @@
   and waits for it to stop, so cancelling an import also stops the tests. A
   cancelled import never publishes, even if the test command then exits 0. The
   exit code stays 2.
+- The shell installer installs the static musl build on every Linux system,
+  instead of the GNU build when glibc is 2.43 or newer. GNU archives are still
+  published, and the Homebrew formula is unchanged.
 
 ## 2.2.1 — 2026-10-30
 

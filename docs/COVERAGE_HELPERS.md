@@ -73,11 +73,11 @@ bundle's `version.json` exactly.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--framework vitest\|jest\|auto` | `auto` | `auto` looks for `vitest.config.*`, `jest.config.*` or a `jest` key in `package.json`. It never evaluates config files. If both frameworks match it stops and asks for `--framework`. |
-| `--provider istanbul\|v8` | see below | Vitest `--coverage.provider`; Jest `--coverageProvider` (`istanbul` means Jest's `babel`). |
+| `--framework vitest\|jest\|auto` | `auto` | `auto` looks for `vitest.config.*`, `vite.config.*` (which Vitest also loads), `jest.config.*` or a `jest` key in `package.json`. It never evaluates config files. If both frameworks match it stops and asks for `--framework`. |
+| `--provider PROVIDER` | see below | Each framework's own names: `istanbul` or `v8` for Vitest (`--coverage.provider`), `babel` or `v8` for Jest (`--coverageProvider`). Other combinations are rejected. |
 | `--format json\|lcov` | `json` | Reporter: Istanbul `json` or `lcovonly`. JSON keeps default-argument evidence. |
 | `--root DIR` | `.` | Project root; the framework runs here. |
-| `--output FILE` | inside the run directory | Native coverage path. It must not exist yet; missing parent directories are created before tests run, and the run directory is removed after success. |
+| `--output FILE` | inside the run directory | Native coverage path. It must not exist yet, and missing parent directories are created before tests run. With `--output` the run directory is removed after success. Without it, the report stays in the run directory (kept, so the printed command works) until you delete it. |
 | `--config FILE` | — | Alternative ts-crap policy path. It is protected from publication and passed to the scanner. |
 | `--scan`, `--scanner PATH` | off, `ts-crap` | Run the scanner after a successful import. |
 | `-- ARGS` | — | Extra framework arguments, for example `-- --config vitest.ci.ts` or `-- --runInBand`. Arguments that change the coverage reporter, directory, provider or coverage switch are rejected. |

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  checkExtraArguments, detectFramework, findPackage, formatCommand, frameworkArguments, frameworkBinary,
+  checkExtraArguments, checkProvider, detectFramework, findPackage, formatCommand, frameworkArguments, frameworkBinary,
   helperVersion, parseArguments, reportName, scannerArguments, shellQuote, UsageError, vitestProvider,
 } from '../scripts/coverage-run.mjs';
 
@@ -70,7 +70,7 @@ test('arguments default to auto JSON in the current directory and keep extra fra
     '--scanner', 'x', '--', '--runInBand', '--scan']), {
     framework: 'jest', provider: 'v8', format: 'lcov', root: '.', scan: true, scanner: 'x', extra: ['--runInBand', '--scan'],
   });
-  for (const argv of [['--framework', 'mocha'], ['--provider', 'babel'], ['--format', 'istanbul'], ['--root'],
+  for (const argv of [['--framework', 'mocha'], ['--provider', 'nyc'], ['--format', 'istanbul'], ['--root'],
     ['--root', ''], ['--bogus'], ['--scan', '--scan'], ['--root', 'a', '--root', 'b'], ['--scanner', 'x'], ['--root', '--scan']]) {
     assert.throws(() => parseArguments(argv), UsageError, JSON.stringify(argv));
   }
@@ -79,6 +79,11 @@ test('arguments default to auto JSON in the current directory and keep extra fra
 test('framework detection reads filenames and package.json without evaluating config', async t => {
   const vitest = await project(t, { 'vitest.config.ts': 'throw new Error("never evaluated")' });
   assert.equal(detectFramework(vitest), 'vitest');
+  for (const name of ['vite.config.ts', 'vite.config.mjs']) {
+    assert.equal(detectFramework(await project(t, { [name]: 'throw 1' })), 'vitest', `Vite-only project: ${name}`);
+  }
+  const viteJest = await project(t, { 'vite.config.js': '', 'jest.config.ts': '' });
+  assert.throws(() => detectFramework(viteJest), /Both Vitest and Jest.*vite\.config\.js.*jest\.config\.ts/);
   for (const name of ['jest.config.cjs', 'jest.config.json']) {
     assert.equal(detectFramework(await project(t, { [name]: 'throw 1' })), 'jest');
   }
@@ -96,12 +101,20 @@ test('reporter and directory flags match each framework, provider and format', (
     ['run', '--coverage', '--coverage.reporter=json', '--coverage.reportsDirectory=/d', '-t', 'x']);
   assert.deepEqual(frameworkArguments('vitest', { provider: 'v8', format: 'lcov', directory: '/d' }),
     ['run', '--coverage', '--coverage.reporter=lcovonly', '--coverage.reportsDirectory=/d', '--coverage.provider=v8']);
-  assert.deepEqual(frameworkArguments('jest', { provider: 'istanbul', format: 'json', directory: '/d' }),
+  assert.deepEqual(frameworkArguments('jest', { provider: 'babel', format: 'json', directory: '/d' }),
     ['--coverage', '--coverageReporters=json', '--coverageDirectory=/d', '--coverageProvider=babel']);
   assert.deepEqual(frameworkArguments('jest', { provider: 'v8', format: 'lcov', directory: '/d', extra: ['--ci'] }),
     ['--coverage', '--coverageReporters=lcovonly', '--coverageDirectory=/d', '--coverageProvider=v8', '--ci']);
   assert.equal(reportName('json'), 'coverage-final.json');
   assert.throws(() => frameworkArguments('jest', { format: 'json', directory: '/d', extra: ['--coverageDirectory=/x'] }), UsageError);
+});
+
+test('providers use each framework\'s own names and other combinations are rejected', () => {
+  for (const provider of ['istanbul', 'v8', undefined]) checkProvider('vitest', provider);
+  for (const provider of ['babel', 'v8', undefined]) checkProvider('jest', provider);
+  assert.throws(() => checkProvider('vitest', 'babel'), /--provider babel is not a Vitest coverage provider; use istanbul or v8/);
+  assert.throws(() => checkProvider('jest', 'istanbul'), /--provider istanbul is not a Jest coverage provider; use babel or v8/);
+  assert.throws(() => frameworkArguments('jest', { provider: 'istanbul', format: 'json', directory: '/d' }), UsageError);
 });
 
 test('extra arguments cannot redirect, replace or disable the private reporter', () => {
@@ -153,6 +166,9 @@ test('scanner command and quoting are copy-paste safe', () => {
   assert.equal(shellQuote('C:\\tmp\\x.json', 'win32'), 'C:\\tmp\\x.json');
   assert.equal(formatCommand(['ts-crap', '--root', 'C:\\Users\\Jane Doe\\app'], 'win32'), 'ts-crap --root "C:\\Users\\Jane Doe\\app"');
   assert.equal(formatCommand(['ts-crap', '--root', '/home/Jane Doe'], 'linux'), "ts-crap --root '/home/Jane Doe'");
+  assert.equal(shellQuote('/tmp/a\\b', 'linux'), "'/tmp/a\\b'", 'POSIX shells consume unquoted backslashes');
+  assert.equal(shellQuote('C:\\%TEMP%\\x', 'win32'), '"C:\\%TEMP%\\x"');
+  assert.equal(shellQuote('C:\\$x', 'win32'), '"C:\\$x"');
   assert.deepEqual(scannerArguments({ root: '/r', output: '/o.json' }), ['--root', '/r', '--coverage', '/o.json', '--require-coverage']);
   assert.deepEqual(scannerArguments({ root: '/r', output: '/o', config: '/c.json' }).slice(-2), ['--config', '/c.json']);
 });

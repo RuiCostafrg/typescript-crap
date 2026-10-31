@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * One-step Vitest/Jest coverage for ts-crap.
- * Usage: node coverage-run.mjs [--framework vitest|jest|auto] [--provider istanbul|v8]
+ * Usage: node coverage-run.mjs [--framework vitest|jest|auto] [--provider PROVIDER]
  *          [--format json|lcov] [--root .] [--output FILE] [--config FILE]
  *          [--scan] [--scanner ts-crap] [-- EXTRA FRAMEWORK ARGS]
  * Runs the framework inside ROOT through import-coverage.mjs with a fresh private
@@ -17,20 +17,21 @@ import { fileURLToPath } from 'node:url';
 import { parseUniqueJson } from './strict-json.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const USAGE = 'Usage: node coverage-run.mjs [--framework vitest|jest|auto] [--provider istanbul|v8] '
+const USAGE = 'Usage: node coverage-run.mjs [--framework vitest|jest|auto] [--provider istanbul|v8 (Vitest), babel|v8 (Jest)] '
   + '[--format json|lcov] [--root DIR] [--output FILE] [--config FILE] [--scan] [--scanner PATH] '
   + '[-- EXTRA FRAMEWORK ARGS]';
 const VALUES = {
   '--framework': ['vitest', 'jest', 'auto'],
-  '--provider': ['istanbul', 'v8'],
+  '--provider': ['istanbul', 'babel', 'v8'],
   '--format': ['json', 'lcov'],
 };
 const FLAGS = ['--scan'];
 const OPTIONS = ['--framework', '--provider', '--format', '--root', '--output', '--config', '--scanner'];
 
+const EXTENSIONS = ['ts', 'mts', 'cts', 'js', 'mjs', 'cjs'];
+// Vitest also loads vite.config.* when it has no vitest.config.*.
 export const CONFIG_NAMES = {
-  vitest: ['vitest.config.ts', 'vitest.config.mts', 'vitest.config.cts',
-    'vitest.config.js', 'vitest.config.mjs', 'vitest.config.cjs'],
+  vitest: ['vitest', 'vite'].flatMap(name => EXTENSIONS.map(extension => `${name}.config.${extension}`)),
   jest: ['jest.config.ts', 'jest.config.mts', 'jest.config.cts', 'jest.config.js',
     'jest.config.mjs', 'jest.config.cjs', 'jest.config.json'],
 };
@@ -82,7 +83,7 @@ export function detectFramework(root) {
   if (found.size > 1) {
     throw new UsageError(`Both Vitest and Jest configuration found (${files.join(', ')}); pass --framework vitest or --framework jest`);
   }
-  throw new UsageError(`No Vitest or Jest configuration found in ${root} (looked for vitest.config.*, jest.config.* and a "jest" key in package.json); pass --framework vitest or --framework jest`);
+  throw new UsageError(`No Vitest or Jest configuration found in ${root} (looked for vitest.config.*, vite.config.*, jest.config.* and a "jest" key in package.json); pass --framework vitest or --framework jest`);
 }
 
 /** Find an installed package from ROOT upwards, as Node resolution would for hoisted workspaces. */
@@ -133,6 +134,15 @@ const RESERVED = {
   jest: ['coverage', 'nocoverage', 'collectcoverage', 'nocollectcoverage', 'coveragereporters', 'coveragedirectory', 'coverageprovider'],
 };
 
+// Each framework's own provider names.
+export const PROVIDERS = { vitest: ['istanbul', 'v8'], jest: ['babel', 'v8'] };
+
+export function checkProvider(framework, provider) {
+  if (provider !== undefined && !PROVIDERS[framework].includes(provider)) {
+    throw new UsageError(`--provider ${provider} is not a ${framework === 'vitest' ? 'Vitest' : 'Jest'} coverage provider; use ${PROVIDERS[framework].join(' or ')}`);
+  }
+}
+
 /** Reject extra framework arguments that would override the private reporter flags. */
 export function checkExtraArguments(framework, extra) {
   for (const argument of extra) {
@@ -146,6 +156,7 @@ export function checkExtraArguments(framework, extra) {
 
 /** Framework arguments that select the reporter and its fresh directory. */
 export function frameworkArguments(framework, { provider, format, directory, extra = [] }) {
+  checkProvider(framework, provider);
   checkExtraArguments(framework, extra);
   if (framework === 'vitest') {
     return ['run', '--coverage', `--coverage.reporter=${format === 'json' ? 'json' : 'lcovonly'}`,
@@ -154,7 +165,7 @@ export function frameworkArguments(framework, { provider, format, directory, ext
   }
   return ['--coverage', `--coverageReporters=${format === 'json' ? 'json' : 'lcovonly'}`,
     `--coverageDirectory=${directory}`,
-    ...(provider ? [`--coverageProvider=${provider === 'istanbul' ? 'babel' : 'v8'}`] : []), ...extra];
+    ...(provider ? [`--coverageProvider=${provider}`] : []), ...extra];
 }
 
 export const reportName = format => format === 'json' ? 'coverage-final.json' : 'lcov.info';
@@ -175,10 +186,14 @@ export function helperVersion(directory = here) {
   return null;
 }
 
-/** Quote for the platform's usual shell: POSIX sh, or cmd.exe/PowerShell on Windows. */
+/**
+ * Quote for the platform's usual shell: POSIX sh, or cmd.exe/PowerShell on Windows.
+ * Backslashes are only literal unquoted on Windows; `%` and `$` expand there, so
+ * they are quoted (double quotes stop PowerShell expansion; cmd.exe paths rarely use %).
+ */
 export function shellQuote(value, platform = process.platform) {
-  if (/^[\w@%+=:,./\\-]+$/.test(value)) return value;
-  return platform === 'win32' ? `"${value}"` : `'${value.replaceAll("'", "'\\''")}'`;
+  if (platform === 'win32') return /^[\w@+=:,./\\-]+$/.test(value) ? value : `"${value}"`;
+  return /^[\w@%+=:,./-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 export function formatCommand(args, platform = process.platform) {
@@ -237,6 +252,7 @@ async function main() {
   });
   const framework = options.framework === 'auto' ? detectFramework(root) : options.framework;
   const binary = frameworkBinary(root, framework);
+  checkProvider(framework, options.provider);
   checkExtraArguments(framework, options.extra);
   let provider = options.provider;
   if (framework === 'vitest') provider = vitestProvider(root, provider, binary.version);

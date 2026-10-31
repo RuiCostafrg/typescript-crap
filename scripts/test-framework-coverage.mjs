@@ -57,6 +57,9 @@ try {
   // The fixture has both configurations, so detection must refuse to guess.
   const ambiguous = run(process.execPath, [path.join(repository, 'scripts/coverage-run.mjs'), '--root', root], 2);
   assert.match(ambiguous.stderr, /Both Vitest and Jest configuration found.*pass --framework/);
+  const mismatched = run(process.execPath, [path.join(repository, 'scripts/coverage-run.mjs'), '--root', root,
+    '--framework', 'jest', '--provider', 'istanbul'], 2);
+  assert.match(mismatched.stderr, /not a Jest coverage provider; use babel or v8/);
 
   for (const [framework, provider] of [['jest', 'babel'], ['vitest', 'istanbul'], ['vitest', 'v8']]) {
     const mutationSource = framework === 'jest'
@@ -121,7 +124,7 @@ try {
       // The one-step command must produce byte-identical native coverage.
       const oneStep = path.join(await fs.mkdtemp(path.join(root, 'coverage', `${framework}-one-step-`)), 'native.json');
       const runResult = run(process.execPath, [path.join(repository, 'scripts/coverage-run.mjs'),
-        '--framework', framework, '--provider', provider === 'babel' ? 'istanbul' : provider,
+        '--framework', framework, '--provider', provider,
         '--format', format === 'istanbul' ? 'json' : 'lcov', '--root', root, '--output', oneStep, '--',
         ...(framework === 'jest' ? ['--config', 'jest.config.cjs', '--runInBand'] : ['--config', 'vitest.config.mjs'])],
       0, { FIXTURE_COVERAGE_PROVIDER: provider });

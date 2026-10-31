@@ -6,8 +6,9 @@
 
 - `coverage-run.mjs`, a one-step Vitest/Jest coverage command in the helper
   bundle. It detects the framework from config filenames, uses a fresh private
-  run directory, imports the result, and prints or runs (`--scan`) the matching
-  `ts-crap` command after an exact helper/scanner version check.
+  run directory, imports the result, and prints the matching `ts-crap`
+  command. With `--scan` it checks that the helper and scanner versions match
+  exactly, then runs that command.
 
 ## 2.2.1 — 2026-10-30
 

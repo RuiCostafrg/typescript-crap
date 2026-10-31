@@ -88,6 +88,9 @@ test('source-mapped sources outside the snapshot say whether they are outside th
   assert.equal(outside.status, 2);
   assert.match(outside.stderr, /Unmappable source outside collected TypeScript snapshot: \.\.\/elsewhere\/b\.ts; /);
   assert.match(outside.stderr, OUTSIDE);
+  const dotted = collect(root, { raw: statement('gen.js', { inputSourceMap: map(['..dotted/b.js']) }) });
+  assert.equal(dotted.status, 2);
+  assert.match(dotted.stderr, EXCLUDED, 'a directory named ..dotted is still under --root');
   const excluded = collect(root, { raw: statement('gen.js', { inputSourceMap: map(['dist/b.ts']) }) });
   assert.equal(excluded.status, 2);
   assert.match(excluded.stderr, EXCLUDED);
@@ -119,11 +122,12 @@ test('locations without a mapping keep the remapping hint', async t => {
 test('TypeScript files absent from coverage produce a warning without changing success', async t => {
   const files = { ...source, 'src/b.ts': 'export const b = 1;\n', 'src/c.mts': 'export const c = 1;\n',
     'src/a.test.ts': '', 'src/a.spec.tsx': '', 'src/__mocks__/m.ts': '', 'vitest.config.ts': '', 'types.d.ts': '',
-    'app.config.tsx': '', 'tests/fixtures/helper.ts': '', 'test/setup.ts': '', 'src/mocks/api.ts': '', 'fixtures/data.mts': '' };
+    'app.config.tsx': '', 'tests/fixtures/helper.ts': '', 'test/setup.ts': '', 'src/mocks/api.ts': '', 'fixtures/data.mts': '',
+    'src/api.mock.ts': '', 'src/api.fixture.tsx': '', 'src/data.fixtures.ts': '', 'src/..notparent/inside.ts': 'export const i = 1;\n' };
   const root = await project(t, files);
   const result = collect(root, { raw: covered });
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stderr, /Warning: 2 TypeScript source files have no coverage records and will count as missing coverage if scanned: src\/b\.ts, src\/c\.mts\. If they should be measured, add them to Vitest coverage\.include or Jest collectCoverageFrom/);
+  assert.match(result.stderr, /Warning: 3 TypeScript source files have no coverage records and will count as missing coverage if scanned: src\/\.\.notparent\/inside\.ts, src\/b\.ts, src\/c\.mts\. If they should be measured, add them to Vitest coverage\.include or Jest collectCoverageFrom/);
   assert.deepEqual(Object.keys(JSON.parse(await fs.readFile(result.output, 'utf8')).files), ['src/a.ts']);
 });
 

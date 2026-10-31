@@ -150,7 +150,8 @@ Import failures exit with status 2, publish nothing, and name the likely fix.
 | `Unmappable source outside collected TypeScript snapshot` | The report names a file outside `--root`, or one under it that is not collected: in an excluded directory (`node_modules`, `.git`, `target`, `dist`, `build`, `coverage`) or not `.ts`/`.tsx`/`.mts`/`.cts`. | The message says which. Pass the project root that contains your sources, or limit coverage to collected TypeScript sources. |
 
 After a successful import, a warning lists TypeScript files under the root that
-have no coverage records. It leaves out `*.test.*`/`*.spec.*` files, `*.config.*`
+have no coverage records. It leaves out `*.test.*`, `*.spec.*`, `*.mock.*` and
+`*.fixture.*` files (plural forms too), `*.config.*`
 files, and anything under `__tests__`, `__mocks__`, `__fixtures__`, `test`,
 `tests`, `mocks` or `fixtures` directories. Names are shown with control
 characters escaped.

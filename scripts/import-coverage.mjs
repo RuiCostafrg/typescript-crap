@@ -12,13 +12,13 @@ const REMAP_HINT = 'Use a coverage setup that remaps to TypeScript (Vitest istan
 // Tests, mocks, fixtures and tool configuration are rarely meant to be measured.
 const notMeasured = relative =>
   /(^|\/)(__tests__|__mocks__|__fixtures__|tests?|mocks|fixtures)\//.test(relative)
-  || /\.(test|spec)\.[cm]?tsx?$|(^|\/)[^/]+\.config\.[cm]?tsx?$/.test(relative);
+  || /\.(test|spec|mocks?|fixtures?)\.[cm]?tsx?$|(^|\/)[^/]+\.config\.[cm]?tsx?$/.test(relative);
 // Paths come from the checkout; never let a filename emit terminal controls.
 const display = text => text.replace(/[\u0000-\u001f\u007f-\u009f]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
 /** Explain why a source named by coverage is absent from the collected snapshot. */
 function snapshotHint(root, absolute) {
   const relative = path.relative(root, absolute);
-  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     return `it is outside --root ${root}. Pass the project root that contains your sources`;
   }
   return 'it is under --root but in an excluded directory (node_modules, .git, target, dist, build, coverage) or is not a .ts/.tsx/.mts/.cts source. Limit coverage to TypeScript sources outside those directories';

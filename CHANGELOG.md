@@ -5,7 +5,8 @@
 ### Added
 
 - `coverage-run.mjs`, a one-step Vitest/Jest coverage command in the helper
-  bundle. It detects the framework from config filenames, uses a fresh private
+  bundle. It detects the framework from config filenames or the `jest` key in
+  `package.json`, without evaluating them. It uses a fresh private
   run directory, imports the result, and prints the matching `ts-crap`
   command. With `--scan` it checks that the helper and scanner versions match
   exactly, then runs that command.

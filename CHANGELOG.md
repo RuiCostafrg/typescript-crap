@@ -10,6 +10,12 @@
   checks its GNU/musl archive selection on Ubuntu 26.04 and 24.04 runners and in
   Debian 12 and Alpine 3.22 containers.
 
+### Changed
+
+- The shell installer installs the static musl build on every Linux system,
+  instead of the GNU build when glibc is 2.43 or newer. GNU archives are still
+  published, and the Homebrew formula is unchanged.
+
 ## 2.2.1 — 2026-10-30
 
 First published release containing the 2.2.0 changes below.

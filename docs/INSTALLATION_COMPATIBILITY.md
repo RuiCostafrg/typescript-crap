@@ -31,8 +31,13 @@ coverage, mutation, and release checks.
   and 24.04 ARM64/x86-64 and macOS 26 Apple Silicon, plus inside stock
   `debian:12-slim` and `alpine:3.22` containers on both architectures. It
   asserts which archive the installer selected by comparing installed bytes
-  with the attested archive: on Linux, GNU on glibc 2.43 and static musl
-  otherwise; on macOS, the Darwin archive.
+  with the attested archive: on Linux, GNU on glibc 2.43 or newer and static
+  musl otherwise; on macOS, the Darwin archive. It fails if the installer reports
+  that it skipped its checksum check because `sha256sum` is missing. Further
+  jobs on Ubuntu 26.04 and in both containers apply the release-time
+  [static-musl rewrite](LINUX_DISTRIBUTION.md#shell-installer-selection) first
+  and expect static musl. Candidate release verification runs Linux installers
+  with `--archive-target` set to the musl archive.
 - PowerShell: Windows Server 2022 x86-64, both Windows PowerShell and PowerShell
   Core in published-pair CI; candidate release verification uses Windows PowerShell.
 - Homebrew: macOS 26 Apple Silicon/Intel and Ubuntu 26.04 x86-64. Linux ARM64

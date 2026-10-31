@@ -68,8 +68,9 @@ when `sha256sum` is available: without it, the installer prints
 `command -v sha256sum` step stops the sequence in that case. On macOS without
 `sha256sum`, use Homebrew or the manual archive download instead. In CI, set `TS_CRAP_UNMANAGED_INSTALL` to a directory to install there
 without editing shell profiles or writing an install receipt, then add that
-directory to `PATH`. On Linux the installer uses the GNU build when the system
-glibc is 2.43 or newer (Ubuntu 26.04), and otherwise the static musl build.
+directory to `PATH`. On Linux, installers for releases after v2.2.1 always
+install the static musl build. The v2.2.1 installer uses the GNU build when the
+system glibc is 2.43 or newer (Ubuntu 26.04), and otherwise the static musl build.
 
 ### Homebrew (macOS and Linux)
 

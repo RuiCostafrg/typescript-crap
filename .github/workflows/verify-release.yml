@@ -119,13 +119,16 @@ jobs:
           VERSION: ${{ fromJson(inputs.plan).releases[0].app_version }}
         run: |
           installer=shell
+          archive_target=$TARGET
           if [[ "$TARGET" == *windows* ]]; then installer=powershell; fi
+          # The candidate installer selects static musl on Linux; v2.1.0 selected GNU.
+          if [[ "$TARGET" == *-linux-gnu ]]; then archive_target=${TARGET%-gnu}-musl; fi
           gh release download v2.1.0 --repo "$GITHUB_REPOSITORY" \
             --pattern "ts-crap-$TARGET.*" --pattern ts-crap-installer.sh \
             --pattern ts-crap-installer.ps1 --dir previous-assets
           python3 scripts/verify-installation.py --assets artifacts --version "$VERSION" \
             --previous-assets previous-assets --previous-version 2.1.0 \
-            --target "$TARGET" --installer "$installer"
+            --target "$TARGET" --installer "$installer" --archive-target "$archive_target"
   homebrew:
     name: Homebrew (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}

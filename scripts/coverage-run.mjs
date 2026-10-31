@@ -187,12 +187,12 @@ export function helperVersion(directory = here) {
 }
 
 /**
- * Quote for the platform's usual shell: POSIX sh, or cmd.exe/PowerShell on Windows.
- * Backslashes are only literal unquoted on Windows; `%` and `$` expand there, so
- * they are quoted (double quotes stop PowerShell expansion; cmd.exe paths rarely use %).
+ * Quote for POSIX sh, or for PowerShell on Windows (the Windows Actions default).
+ * Single quotes keep `$`, `%` and backslashes literal in both; cmd.exe has no
+ * literal quoting, so its users should prefer --scan for unusual paths.
  */
 export function shellQuote(value, platform = process.platform) {
-  if (platform === 'win32') return /^[\w@+=:,./\\-]+$/.test(value) ? value : `"${value}"`;
+  if (platform === 'win32') return /^[\w@+=:,./\\-]+$/.test(value) ? value : `'${value.replaceAll("'", "''")}'`;
   return /^[\w@%+=:,./-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
 
@@ -210,9 +210,9 @@ const FORWARDED = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 export function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: 'inherit', ...options });
-    const forward = signal => { child.kill(signal); };
-    const stop = () => { for (const signal of FORWARDED) process.off(signal, forward); };
-    for (const signal of FORWARDED) process.on(signal, forward);
+    const forwards = FORWARDED.map(signal => [signal, () => { child.kill(signal); }]);
+    for (const [signal, forward] of forwards) process.on(signal, forward);
+    const stop = () => { for (const [signal, forward] of forwards) process.off(signal, forward); };
     child.on('error', error => { stop(); reject(error); });
     child.on('exit', (code, signal) => { stop(); resolve(signal ? 2 : code); });
   });

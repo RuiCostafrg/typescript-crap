@@ -202,8 +202,15 @@ async function main() {
   }
   const status = await new Promise((resolve, reject) => {
     const child = spawn(argv[separator + 1], argv.slice(separator + 2), { cwd: root, stdio: 'inherit' });
-    child.on('error', reject);
-    child.on('exit', (code, signal) => signal ? reject(new Error(`Coverage command terminated: ${signal}`)) : resolve(code));
+    // Pass termination to the test command and wait for it; nothing is published.
+    const forwards = ['SIGINT', 'SIGTERM', 'SIGHUP'].map(signal => [signal, () => { child.kill(signal); }]);
+    for (const [signal, forward] of forwards) process.on(signal, forward);
+    const stop = () => { for (const [signal, forward] of forwards) process.off(signal, forward); };
+    child.on('error', error => { stop(); reject(error); });
+    child.on('exit', (code, signal) => {
+      stop();
+      if (signal) reject(new Error(`Coverage command terminated: ${signal}`)); else resolve(code);
+    });
   });
   if (status !== 0) throw new Error(`Coverage command failed: ${status}`);
   const raw = await fs.readFile(input, 'utf8');

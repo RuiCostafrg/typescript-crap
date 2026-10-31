@@ -91,8 +91,12 @@ both are installed the configured provider is used.
 The importer's guarantees still apply. Every run uses fresh reporter and native
 paths, source is hashed before the tests and checked after them, failing tests
 publish nothing, and the project configuration is never overwritten. SIGINT,
-SIGTERM and SIGHUP are forwarded to the collection, so a cancelled run never
-publishes later. On failure
+SIGTERM and SIGHUP are forwarded through the importer to the test command, and
+the helper waits for it to stop, so a cancelled run never publishes later.
+
+The printed command is quoted for POSIX shells, and on Windows for PowerShell.
+`cmd.exe` cannot quote `%` literally, so use `--scan` there for paths with
+unusual characters. On failure
 the run directory is kept and its path is printed for inspection.
 
 ## Collect Istanbul or LCOV

@@ -33,7 +33,13 @@ import path from 'node:path';
 const args = process.argv.slice(2);
 fs.writeFileSync('framework-args.json', JSON.stringify(args));
 if (process.env.FAKE_EXIT) process.exit(Number(process.env.FAKE_EXIT));
-if (process.env.FAKE_SLEEP) await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_SLEEP)));
+if (process.env.FAKE_SLEEP) {
+  fs.writeFileSync('framework-pid', String(process.pid));
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(signal, () => { fs.writeFileSync('framework-signal', signal); process.exit(1); });
+  }
+  await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_SLEEP)));
+}
 const value = prefix => args.find(arg => arg.startsWith(prefix))?.slice(prefix.length);
 const directory = value('--coverage.reportsDirectory=') ?? value('--coverageDirectory=');
 const reporter = value('--coverage.reporter=') ?? value('--coverageReporters=');
@@ -162,13 +168,14 @@ test('installed frameworks resolve from hoisted ancestors and report clear insta
 test('scanner command and quoting are copy-paste safe', () => {
   assert.equal(shellQuote('/a/b-c_d.json'), '/a/b-c_d.json');
   assert.equal(shellQuote("/tmp/it's here", 'linux'), `'/tmp/it'\\''s here'`);
-  assert.equal(shellQuote('C:\\Users\\a b\\x.json', 'win32'), '"C:\\Users\\a b\\x.json"');
+  assert.equal(shellQuote('C:\\Users\\a b\\x.json', 'win32'), "'C:\\Users\\a b\\x.json'");
+  assert.equal(shellQuote("C:\\it's", 'win32'), "'C:\\it''s'");
   assert.equal(shellQuote('C:\\tmp\\x.json', 'win32'), 'C:\\tmp\\x.json');
-  assert.equal(formatCommand(['ts-crap', '--root', 'C:\\Users\\Jane Doe\\app'], 'win32'), 'ts-crap --root "C:\\Users\\Jane Doe\\app"');
+  assert.equal(formatCommand(['ts-crap', '--root', 'C:\\Users\\Jane Doe\\app'], 'win32'), "ts-crap --root 'C:\\Users\\Jane Doe\\app'");
   assert.equal(formatCommand(['ts-crap', '--root', '/home/Jane Doe'], 'linux'), "ts-crap --root '/home/Jane Doe'");
   assert.equal(shellQuote('/tmp/a\\b', 'linux'), "'/tmp/a\\b'", 'POSIX shells consume unquoted backslashes');
-  assert.equal(shellQuote('C:\\%TEMP%\\x', 'win32'), '"C:\\%TEMP%\\x"');
-  assert.equal(shellQuote('C:\\$x', 'win32'), '"C:\\$x"');
+  assert.equal(shellQuote('C:\\%TEMP%\\x', 'win32'), "'C:\\%TEMP%\\x'");
+  assert.equal(shellQuote('C:\\$(x)\\$y', 'win32'), "'C:\\$(x)\\$y'", 'PowerShell keeps single-quoted text literal');
   assert.deepEqual(scannerArguments({ root: '/r', output: '/o.json' }), ['--root', '/r', '--coverage', '/o.json', '--require-coverage']);
   assert.deepEqual(scannerArguments({ root: '/r', output: '/o', config: '/c.json' }).slice(-2), ['--config', '/c.json']);
 });
@@ -328,20 +335,24 @@ test('extra arguments that would redirect the reporter fail before tests run', a
   await assert.rejects(fs.access(path.join(root, 'framework-args.json')), { code: 'ENOENT' });
 });
 
-test('termination is forwarded so a cancelled run never publishes', { skip: process.platform === 'win32' && 'POSIX signals' }, async t => {
-  const root = await withFramework(t, 'jest');
-  const output = path.join(root, 'native.json');
-  const child = spawn(process.execPath, [helper, '--root', root, '--framework', 'jest', '--output', output], {
-    cwd: root, env: { ...process.env, FAKE_SLEEP: '2000' }, stdio: 'ignore',
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  test(`${signal} reaches the framework, which stops, and nothing is published`, { skip: process.platform === 'win32' && 'POSIX signals' }, async t => {
+    const root = await withFramework(t, 'jest');
+    const output = path.join(root, 'native.json');
+    const child = spawn(process.execPath, [helper, '--root', root, '--framework', 'jest', '--output', output], {
+      cwd: root, env: { ...process.env, FAKE_SLEEP: '5000' }, stdio: 'ignore',
+    });
+    const exited = new Promise(resolve => child.on('exit', code => resolve(code)));
+    // Wait until the framework is running inside the importer, then cancel the wrapper only.
+    for (let i = 0; i < 400; i++) {
+      try { await fs.access(path.join(root, 'framework-pid')); break; }
+      catch { await new Promise(resolve => setTimeout(resolve, 25)); }
+    }
+    const pid = Number(await fs.readFile(path.join(root, 'framework-pid'), 'utf8'));
+    child.kill(signal);
+    assert.equal(await exited, 2);
+    assert.equal(await fs.readFile(path.join(root, 'framework-signal'), 'utf8'), signal);
+    assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, 'the framework process has stopped');
+    await assert.rejects(fs.access(output), { code: 'ENOENT' });
   });
-  const exited = new Promise(resolve => child.on('exit', code => resolve(code)));
-  // Wait until the framework is running inside the importer, then cancel the wrapper.
-  for (let i = 0; i < 200; i++) {
-    try { await fs.access(path.join(root, 'framework-args.json')); break; }
-    catch { await new Promise(resolve => setTimeout(resolve, 25)); }
-  }
-  child.kill('SIGTERM');
-  assert.equal(await exited, 2);
-  await new Promise(resolve => setTimeout(resolve, 3000));
-  await assert.rejects(fs.access(output), { code: 'ENOENT' });
-});
+}

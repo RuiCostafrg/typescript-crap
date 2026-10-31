@@ -10,6 +10,12 @@
   command. With `--scan` it checks that the helper and scanner versions match
   exactly, then runs that command.
 
+### Changed
+
+- `import-coverage.mjs` forwards SIGINT, SIGTERM and SIGHUP to the test command
+  and waits for it to stop, so cancelling an import also stops the tests. Exit
+  codes are unchanged (2), and nothing is published.
+
 ## 2.2.1 — 2026-10-30
 
 First published release containing the 2.2.0 changes below.

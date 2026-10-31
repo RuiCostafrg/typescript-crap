@@ -124,19 +124,30 @@ with the static musl build but are not verified. Improvements:
 - Document a verify-before-run flow: download the installer, check it with
   `gh attestation verify`, then run it. Piping a URL into `sh` remains the quick
   path.
-- Consider making Linux always prefer the static musl build. That gives one
-  tested Linux binary and removes the glibc-2.43 GNU path.
+- Owner decision (2026-10-31): Linux will use the static musl build. Once the
+  installer and CI switch to that policy, it gives one tested Linux binary per
+  CPU and removes the glibc-2.43 GNU path from the installer. Until then the
+  v2.2.1 installer behaviour described above applies: GNU when glibc ≥ 2.43,
+  otherwise the static musl build. v2.1.0 and earlier installers have no musl
+  archives and install the GNU build only.
 - **Effort:** S.
 
 ### C. GitHub Action — recommended for CI
 
 `uses: RuiCostafrg/typescript-crap@<ref>` with a `version:` input.
 
-The ref scheme is an open owner decision. Release tags must be SemVer and can't
-move (tag rulesets), so a floating `@v2` alias can't follow later releases
-without a separate, deliberately unprotected tag pattern. The alternatives are
-pinning a full commit SHA, which is the safest and is what this repository does
-for its own actions, or pinning an immutable release tag such as `@v2.3.0`.
+Owner decision (2026-10-31): document all three ways to reference the Action,
+and **recommend the full commit SHA** because it is the most secure.
+
+| Reference | Example | Trade-off |
+| --- | --- | --- |
+| **Full commit SHA (recommended)** | `@<40-char SHA> # v2.3.0` | Immutable; a compromised or moved tag can't change what runs. Matches how this repository pins its own actions. Dependabot can update it. |
+| Immutable release tag | `@v2.3.0` | Readable and protected from moving by the tag rulesets, but a tag is still a mutable Git reference in principle. |
+| Floating major tag | `@v2` | Convenient: follows 2.x automatically. It needs a separate tag pattern that is deliberately left out of the release-tag rulesets, so it is the least secure option. |
+
+Release tags must be SemVer and can't move, so offering `@v2` requires a new,
+separately documented tag pattern. Any ruleset change for it needs the owner's
+approval.
 
 - It downloads the release archive, verifies its checksum and attestation, and
   adds the binary to `PATH`.
@@ -234,14 +245,19 @@ Schedule (owner decision, 2026-10-30; see [WORK_PLAN.md](WORK_PLAN.md)):
 
 ## Decisions needed from the owner
 
+Decided on 2026-10-31:
+
+- **npm account:** the owner will create it, enable 2FA and configure trusted
+  publishing for `release.yml` and the `release` environment.
+- **Linux default binary:** static musl in every channel.
+- **GitHub Action reference:** document SHA, release tag and `@v2`; recommend
+  the full commit SHA.
+
+Still open:
+
 1. **npm package name:**
    - `typescript-crap` (recommended: free and matches the repository)
    - `@ruicostafrg/ts-crap` (needs an npm user or organization `ruicostafrg`)
    - another name
-2. **npm account setup.** Create or confirm the npm account or organization,
-   enable 2FA, and configure trusted publishing for this repository's
-   `release.yml` and the `release` environment. Only the owner can do this.
-3. **Linux default binary.** Should every channel use the static musl build on
-   Linux (recommended), or keep GNU where glibc ≥ 2.43?
-4. **Whether to pursue an APT repository** despite the signing-key requirement,
+2. **Whether to pursue an APT repository** despite the signing-key requirement,
    or keep `.deb` assets as direct downloads only (recommended for now).

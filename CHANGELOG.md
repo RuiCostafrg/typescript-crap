@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Documented version-pinned shell installer URLs for CI and a verify-before-run
+  flow (`gh attestation verify` before running the downloaded installer).
+- Installation CI runs that flow against the published v2.2.1 installer and
+  checks its GNU/musl archive selection on Ubuntu 26.04 and 24.04 runners and in
+  Debian 12 and Alpine 3.22 containers.
+
 ## 2.2.1 — 2026-10-30
 
 First published release containing the 2.2.0 changes below.

@@ -26,6 +26,13 @@ coverage, mutation, and release checks.
 ## Matrix and assertions
 
 - Shell: macOS 26 Apple Silicon/Intel and Ubuntu 26.04 ARM64/x86-64.
+- Pinned published installer: the README's verify-before-run flow for v2.2.1
+  (real GitHub URLs, `gh attestation verify`, unmanaged install) on Ubuntu 26.04
+  and 24.04 ARM64/x86-64 and macOS 26 Apple Silicon, plus inside stock
+  `debian:12-slim` and `alpine:3.22` containers on both architectures. It
+  asserts which archive the installer selected by comparing installed bytes
+  with the attested archive: on Linux, GNU on glibc 2.43 and static musl
+  otherwise; on macOS, the Darwin archive.
 - PowerShell: Windows Server 2022 x86-64, both Windows PowerShell and PowerShell
   Core in published-pair CI; candidate release verification uses Windows PowerShell.
 - Homebrew: macOS 26 Apple Silicon/Intel and Ubuntu 26.04 x86-64. Linux ARM64

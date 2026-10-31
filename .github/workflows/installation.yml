@@ -89,6 +89,112 @@ jobs:
             --mount "type=bind,src=$GITHUB_WORKSPACE/examples/shop,dst=/project,readonly" \
             ubuntu:26.04 /bin/sh -ec \
             'getconf GNU_LIBC_VERSION; ts-crap --version; ts-crap --help >/dev/null; ts-crap --root /project --threshold 20'
+  pinned-installer:
+    # Runs the README's version-pinned, verify-before-run flow against real
+    # GitHub release URLs and checks which archive the installer selected.
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    timeout-minutes: 10
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # glibc 2.43: the installer selects the GNU build.
+          - runner: ubuntu-26.04
+            expected: x86_64-unknown-linux-gnu
+          - runner: ubuntu-26.04-arm
+            expected: aarch64-unknown-linux-gnu
+          # glibc 2.39: the installer falls back to the static musl build.
+          - runner: ubuntu-24.04
+            expected: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            expected: aarch64-unknown-linux-musl
+          - runner: macos-26
+            expected: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download, authenticate, then run the pinned installer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED: ${{ matrix.expected }}
+        run: |
+          version=2.2.1
+          installer_dir=$(mktemp -d "$RUNNER_TEMP/ts-crap-installer.XXXXXX")
+          curl --proto '=https' --tlsv1.2 -LsSf -o "$installer_dir/ts-crap-installer.sh" \
+            "https://github.com/RuiCostafrg/typescript-crap/releases/download/v$version/ts-crap-installer.sh"
+          gh attestation verify "$installer_dir/ts-crap-installer.sh" --repo RuiCostafrg/typescript-crap \
+            --signer-workflow RuiCostafrg/typescript-crap/.github/workflows/release.yml \
+            --source-ref "refs/tags/v$version" --deny-self-hosted-runners
+          install_dir="$RUNNER_TEMP/ts crap pinned/bin"
+          TS_CRAP_UNMANAGED_INSTALL="$install_dir" sh "$installer_dir/ts-crap-installer.sh"
+          test "$("$install_dir/ts-crap" --version)" = "ts-crap $version"
+          "$install_dir/ts-crap" --root examples/shop --threshold 20
+          # The installed bytes must be the attested archive for the expected target.
+          expected_dir=$(mktemp -d "$RUNNER_TEMP/ts-crap-expected.XXXXXX")
+          gh release download "v$version" --repo RuiCostafrg/typescript-crap \
+            --pattern "ts-crap-$EXPECTED.tar.xz" --dir "$expected_dir"
+          gh attestation verify "$expected_dir/ts-crap-$EXPECTED.tar.xz" --repo RuiCostafrg/typescript-crap \
+            --signer-workflow RuiCostafrg/typescript-crap/.github/workflows/release.yml \
+            --source-ref "refs/tags/v$version" --deny-self-hosted-runners
+          tar -xf "$expected_dir/ts-crap-$EXPECTED.tar.xz" -C "$expected_dir"
+          cmp "$expected_dir/ts-crap-$EXPECTED/ts-crap" "$install_dir/ts-crap"
+          test ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/ts-crap/ts-crap-receipt.json"
+  pinned-installer-containers:
+    # The attested installer runs inside stock images whose libc differs from
+    # the runner: Debian 12 (glibc 2.36) and Alpine (musl) must both select
+    # the static musl build.
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    timeout-minutes: 10
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-26.04, ubuntu-26.04-arm]
+        image: ['debian:12-slim', 'alpine:3.22']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Authenticate the pinned installer, then run it in the container
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ matrix.image }}
+        run: |
+          version=2.2.1
+          case "$RUNNER_ARCH" in
+            X64) expected=x86_64-unknown-linux-musl ;;
+            ARM64) expected=aarch64-unknown-linux-musl ;;
+          esac
+          work=$(mktemp -d "$RUNNER_TEMP/ts-crap-container.XXXXXX")
+          mkdir "$work/installer" "$work/bin" "$work/expected"
+          curl --proto '=https' --tlsv1.2 -LsSf -o "$work/installer/ts-crap-installer.sh" \
+            "https://github.com/RuiCostafrg/typescript-crap/releases/download/v$version/ts-crap-installer.sh"
+          gh release download "v$version" --repo RuiCostafrg/typescript-crap \
+            --pattern "ts-crap-$expected.tar.xz" --dir "$work/expected"
+          for asset in "$work/installer/ts-crap-installer.sh" "$work/expected/ts-crap-$expected.tar.xz"; do
+            gh attestation verify "$asset" --repo RuiCostafrg/typescript-crap \
+              --signer-workflow RuiCostafrg/typescript-crap/.github/workflows/release.yml \
+              --source-ref "refs/tags/v$version" --deny-self-hosted-runners
+          done
+          docker run --rm \
+            --mount "type=bind,src=$work/installer,dst=/installer,readonly" \
+            --mount "type=bind,src=$work/bin,dst=/install" \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/examples/shop,dst=/project,readonly" \
+            "$IMAGE" /bin/sh -ec '
+              if command -v apk >/dev/null; then
+                apk add --no-cache curl xz >/dev/null
+              else
+                apt-get update -qq && apt-get install -qq -y --no-install-recommends ca-certificates curl xz-utils >/dev/null
+              fi
+              TS_CRAP_UNMANAGED_INSTALL=/install sh /installer/ts-crap-installer.sh
+              /install/ts-crap --version
+              /install/ts-crap --root /project --threshold 20'
+          tar -xf "$work/expected/ts-crap-$expected.tar.xz" -C "$work/expected"
+          cmp "$work/expected/ts-crap-$expected/ts-crap" "$work/bin/ts-crap"
   live-homebrew:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     runs-on: ${{ matrix.runner }}

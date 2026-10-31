@@ -73,7 +73,7 @@ bundle's `version.json` exactly.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--framework vitest\|jest\|auto` | `auto` | `auto` looks for `vitest.config.*`, `vite.config.*` (which Vitest also loads), `jest.config.*` or a `jest` key in `package.json`. It never evaluates config files. If both frameworks match it stops and asks for `--framework`. |
+| `--framework vitest\|jest\|auto` | `auto` | `auto` looks for `vitest.config.*`, `vite.config.*` when Vitest is installed (Vitest also loads it, but plain Vite apps have one too), `jest.config.*` or a `jest` key in `package.json`. It never evaluates config files. If both frameworks match it stops and asks for `--framework`. |
 | `--provider PROVIDER` | see below | Each framework's own names: `istanbul` or `v8` for Vitest (`--coverage.provider`), `babel` or `v8` for Jest (`--coverageProvider`). Other combinations are rejected. |
 | `--format json\|lcov` | `json` | Reporter: Istanbul `json` or `lcovonly`. JSON keeps default-argument evidence. |
 | `--root DIR` | `.` | Project root; the framework runs here. |

@@ -93,11 +93,19 @@ test('arguments default to auto JSON in the current directory and keep extra fra
 test('framework detection reads filenames and package.json without evaluating config', async t => {
   const vitest = await project(t, { 'vitest.config.ts': 'throw new Error("never evaluated")' });
   assert.equal(detectFramework(vitest), 'vitest');
+  const installed = { 'node_modules/vitest/package.json': '{"name":"vitest"}' };
   for (const name of ['vite.config.ts', 'vite.config.mjs']) {
-    assert.equal(detectFramework(await project(t, { [name]: 'throw 1' })), 'vitest', `Vite-only project: ${name}`);
+    assert.equal(detectFramework(await project(t, { [name]: 'throw 1', ...installed })), 'vitest', `Vite config with Vitest: ${name}`);
+    // A plain Vite app (no Vitest installed) is not a Vitest signal.
+    const plain = await project(t, { [name]: 'throw 1' });
+    assert.throws(() => detectFramework(plain), /No Vitest or Jest configuration/);
   }
-  const viteJest = await project(t, { 'vite.config.js': '', 'jest.config.ts': '' });
-  assert.throws(() => detectFramework(viteJest), /Both Vitest and Jest.*vite\.config\.js.*jest\.config\.ts/);
+  const viteApp = await project(t, { 'vite.config.ts': '', 'package.json': '{"jest":{}}' });
+  assert.equal(detectFramework(viteApp), 'jest', 'Vite app tested with Jest');
+  const hoisted = await project(t, { 'node_modules/vitest/package.json': '{}', 'packages/web/vite.config.ts': '' });
+  assert.equal(detectFramework(path.join(hoisted, 'packages/web')), 'vitest', 'hoisted Vitest counts as installed');
+  const viteJest = await project(t, { 'vite.config.js': '', 'jest.config.ts': '', ...installed });
+  assert.throws(() => detectFramework(viteJest), /Both Vitest and Jest.*jest\.config\.ts.*vite\.config\.js with vitest installed/);
   for (const name of ['jest.config.cjs', 'jest.config.json']) {
     assert.equal(detectFramework(await project(t, { [name]: 'throw 1' })), 'jest');
   }

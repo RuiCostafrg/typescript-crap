@@ -29,12 +29,13 @@ const FLAGS = ['--scan'];
 const OPTIONS = ['--framework', '--provider', '--format', '--root', '--output', '--config', '--scanner'];
 
 const EXTENSIONS = ['ts', 'mts', 'cts', 'js', 'mjs', 'cjs'];
-// Vitest also loads vite.config.* when it has no vitest.config.*.
 export const CONFIG_NAMES = {
-  vitest: ['vitest', 'vite'].flatMap(name => EXTENSIONS.map(extension => `${name}.config.${extension}`)),
+  vitest: EXTENSIONS.map(extension => `vitest.config.${extension}`),
   jest: ['jest.config.ts', 'jest.config.mts', 'jest.config.cts', 'jest.config.js',
     'jest.config.mjs', 'jest.config.cjs', 'jest.config.json'],
 };
+
+export const VITE_CONFIG_NAMES = EXTENSIONS.map(extension => `vite.config.${extension}`);
 
 export class UsageError extends Error {}
 
@@ -70,6 +71,12 @@ export function detectFramework(root) {
       if (existsSync(path.join(root, name))) { found.add(framework); files.push(name); }
     }
   }
+  // Vitest also loads vite.config.*, but plain Vite apps have one too (possibly
+  // tested with Jest), so it signals Vitest only when Vitest is installed.
+  if (!found.has('vitest') && findPackage(root, 'vitest')) {
+    const vite = VITE_CONFIG_NAMES.find(name => existsSync(path.join(root, name)));
+    if (vite) { found.add('vitest'); files.push(`${vite} with vitest installed`); }
+  }
   const manifest = path.join(root, 'package.json');
   if (existsSync(manifest)) {
     let json;
@@ -83,7 +90,7 @@ export function detectFramework(root) {
   if (found.size > 1) {
     throw new UsageError(`Both Vitest and Jest configuration found (${files.join(', ')}); pass --framework vitest or --framework jest`);
   }
-  throw new UsageError(`No Vitest or Jest configuration found in ${root} (looked for vitest.config.*, vite.config.*, jest.config.* and a "jest" key in package.json); pass --framework vitest or --framework jest`);
+  throw new UsageError(`No Vitest or Jest configuration found in ${root} (looked for vitest.config.*, vite.config.* with vitest installed, jest.config.* and a "jest" key in package.json); pass --framework vitest or --framework jest`);
 }
 
 /** Find an installed package from ROOT upwards, as Node resolution would for hoisted workspaces. */

@@ -136,3 +136,20 @@ approximation, not branch coverage. Istanbul JSON also maps direct `default-arg`
 initializer counters; LCOV can omit that declaration-line evidence. Use JSON for
 complete default-argument evidence. Missing evidence is never treated as covered.
 These helpers run trusted test commands with your permissions; they are not a sandbox.
+
+## Troubleshooting imports
+
+Import failures exit with status 2, publish nothing, and name the likely fix.
+
+| Message starts with | Likely cause | Fix |
+| --- | --- | --- |
+| `Coverage command failed: N` | Tests failed, or a coverage threshold failed. | Fix the tests or thresholds, then rerun with fresh paths. |
+| `Coverage command succeeded but wrote no report` | Coverage is off, the reporter is wrong, or the report went elsewhere. | Pass `--coverage`; use the `json` (Istanbul) or `lcovonly` reporter; point the reports directory at `--input`. |
+| `Empty imported coverage` | No tests ran, or the coverage include misses your sources. | Set Vitest `coverage.include` or Jest `collectCoverageFrom`, for example `src/**/*.ts`. |
+| `No source map for generated input`, `could not be source-mapped` | The report covers generated JavaScript. | Use a provider that remaps to TypeScript (Vitest `istanbul`/`v8`; Jest `babel`/`v8` with source maps). Do not import raw `NODE_V8_COVERAGE` output. |
+| `Unmappable source outside collected TypeScript snapshot` | The report names a file outside `--root`. | Pass the project root that contains your sources. |
+
+After a successful import, a warning lists TypeScript files under the root that
+have no coverage records (test, spec, mock and `*.config.*` files are left out).
+Those files count as missing coverage if the scanner selects them. The warning
+never changes the exit status.

@@ -17,12 +17,15 @@ const scanner = process.env.TS_CRAP_SCANNER;
 // Lookup intentionally walks up for hoisted installs, so "not installed" cases only
 // hold when nothing above the temporary directory already provides Vitest.
 const temporaryRoot = await fs.realpath(os.tmpdir());
-const ancestorVitest = ['vitest', '@vitest/coverage-v8', '@vitest/coverage-istanbul']
-  .map(name => findPackage(temporaryRoot, name)?.directory).find(Boolean);
-function unlessAncestorVitest(t) {
-  if (ancestorVitest) t.diagnostic(`skipping not-installed assertions: ${ancestorVitest} is above the temporary directory`);
-  return !ancestorVitest;
+const ancestor = names => names.map(name => findPackage(temporaryRoot, name)?.directory).find(Boolean);
+// Skip only assertions that the ambient package would change, and say why.
+function unlessAncestor(t, names) {
+  const found = ancestor(names);
+  if (found) t.diagnostic(`skipping not-installed assertions: ${found} is above the temporary directory`);
+  return !found;
 }
+const unlessAncestorVitest = t => unlessAncestor(t, ['vitest']);
+const unlessAncestorProvider = t => unlessAncestor(t, ['@vitest/coverage-v8', '@vitest/coverage-istanbul']);
 
 async function project(t, files = {}) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'ts-crap run ü-')));
@@ -164,7 +167,7 @@ test('extra arguments cannot redirect, replace or disable the private reporter',
 });
 
 test('the Vitest provider is always one that is installed', async t => {
-  if (!unlessAncestorVitest(t)) return;
+  if (!unlessAncestorProvider(t)) return;
   const none = await project(t);
   assert.throws(() => vitestProvider(none, undefined, '5.0.0'), /needs @vitest\/coverage-v8 or @vitest\/coverage-istanbul.*@vitest\/coverage-v8@5\.0\.0/);
   assert.throws(() => vitestProvider(none, 'istanbul'), /--provider istanbul needs @vitest\/coverage-istanbul; install it with npm install --save-dev @vitest\/coverage-istanbul$/);
@@ -235,9 +238,12 @@ for (const [framework, configName] of [['vitest', 'vitest.config.mts'], ['jest',
       assert.equal(args.at(-1), '--extra-flag');
       assert(args.includes(format === 'json' ? (framework === 'vitest' ? '--coverage.reporter=json' : '--coverageReporters=json')
         : (framework === 'vitest' ? '--coverage.reporter=lcovonly' : '--coverageReporters=lcovonly')));
-      const provider = framework === 'vitest' ? 'istanbul' : 'configured provider';
-      assert.match(result.stderr, new RegExp(`${framework} 9\\.9\\.9 \\(${provider}, ${format}\\)`));
-      assert.equal(args.includes('--coverage.provider=istanbul'), framework === 'vitest', 'the only installed Vitest provider is explicit');
+      // An ambient @vitest/coverage-v8 would make two providers installed.
+      if (framework === 'jest' || unlessAncestor(t, ['@vitest/coverage-v8'])) {
+        const provider = framework === 'vitest' ? 'istanbul' : 'configured provider';
+        assert.match(result.stderr, new RegExp(`${framework} 9\\.9\\.9 \\(${provider}, ${format}\\)`));
+        assert.equal(args.includes('--coverage.provider=istanbul'), framework === 'vitest', 'the only installed Vitest provider is explicit');
+      }
       await fs.rm(path.dirname(output), { recursive: true });
     });
   }
@@ -292,15 +298,17 @@ test('missing frameworks, providers, roots and ambiguous projects fail before te
     assert.match(missing.stderr, /Cannot find vitest installed/);
   }
   const vitest = await withFramework(t, 'vitest');
-  const provider = runHelper(vitest, ['--framework', 'vitest', '--provider', 'v8']);
-  assert.equal(provider.status, 2);
-  assert.match(provider.stderr, /--provider v8 needs @vitest\/coverage-v8.*@vitest\/coverage-v8@9\.9\.9/);
-  await assert.rejects(fs.access(path.join(vitest, 'framework-args.json')), { code: 'ENOENT' });
+  if (unlessAncestor(t, ['@vitest/coverage-v8'])) {
+    const provider = runHelper(vitest, ['--framework', 'vitest', '--provider', 'v8']);
+    assert.equal(provider.status, 2);
+    assert.match(provider.stderr, /--provider v8 needs @vitest\/coverage-v8.*@vitest\/coverage-v8@9\.9\.9/);
+    await assert.rejects(fs.access(path.join(vitest, 'framework-args.json')), { code: 'ENOENT' });
+  }
   await fs.mkdir(path.join(vitest, 'node_modules/@vitest/coverage-v8'), { recursive: true });
   await fs.writeFile(path.join(vitest, 'node_modules/@vitest/coverage-v8/package.json'), '{}');
   const installed = runHelper(vitest, ['--framework', 'vitest', '--provider', 'v8']);
   assert.equal(installed.status, 0, installed.stderr);
-  if (unlessAncestorVitest(t)) {
+  if (unlessAncestorProvider(t)) {
     const noProvider = await withFramework(t, 'vitest');
     await fs.rm(path.join(noProvider, 'node_modules/@vitest'), { recursive: true });
     const prompt = runHelper(noProvider, ['--framework', 'vitest']);

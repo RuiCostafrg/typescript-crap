@@ -1,6 +1,6 @@
 # Work plan and handoff (post-v2.2.1)
 
-Last updated 2026-10-30. This file preserves decisions and the parallel work
+Last updated 2026-10-31. This file preserves decisions and the parallel work
 split so any session can resume after a context reset. Update the status table
 when a stream changes state.
 
@@ -29,8 +29,18 @@ when a stream changes state.
     enables 2FA and sets up trusted publishing.
   - The npm package name is still undecided. `typescript-crap` is
     recommended. `ts-crap` is taken.
+- **Decided 2026-10-31:**
+  - Linux will use the static musl binary, in the installer and every other
+    channel. This is pending implementation in the distribution stream.
+  - The GitHub Action docs show all three reference styles (full commit SHA,
+    immutable `@vX.Y.Z`, floating `@v2`) and recommend the full commit SHA as
+    the most secure. Offering `@v2` needs a separate tag pattern and owner
+    approval of any ruleset change.
+  - The owner will create the npm account. npm work starts once the account
+    exists with 2FA and trusted publishing configured, matching the
+    Distribution A gate above.
 - **Still open:**
-  - Whether Linux should always use the static musl binary (recommended).
+  - The npm package name (`typescript-crap` recommended; `ts-crap` is taken).
   - Whether to add an APT repository (recommendation: no, keep `.deb` assets
     as direct downloads).
 
@@ -39,9 +49,9 @@ when a stream changes state.
 | Stream | Scope | Thread | Branch prefix | Status |
 | --- | --- | --- | --- | --- |
 | Roadmap v2.3 | `ROADMAP_V2_3.md` phases 1–3, in priority order (1.1 → 1.5, 2.1, 2.2, Phase 3, then later items) | Roadmap v2.3 implementation | `roadmap/` | started |
-| Distribution B + C | Installer hardening and GitHub Action | Distribution: installer hardening + GitHub Action | `distribution/` | B docs/CI (#41) and Action (#42) in review; Action ref scheme and musl default await owner |
+| Distribution B + C | Installer hardening and GitHub Action | Distribution: installer hardening + GitHub Action | `distribution/` | B docs/CI merged (#41); Action (#42) in review; musl default and SHA-recommended Action refs decided 2026-10-31 (#45) |
 | Distribution A (npm) | npm package with per-platform binaries and bundled helpers | — | — | blocked on npm account |
-| Docs PR | This file and the two plans | this coordinating thread | `docs/roadmap-v2.3` | open |
+| Docs PRs | This file and the two plans; owner decisions | this coordinating thread | `docs/` | #40 merged; #45 decisions |
 
 Thread links are in T3: search thread titles above with `t3_thread_search`,
 or read them directly:

@@ -4,6 +4,7 @@ import { parseUniqueJson } from './strict-json.mjs';
 import { protectConfigDestinations, publishReport } from './coverage-publish.mjs';
 import { digest, snapshot } from './coverage-snapshot.mjs';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +21,9 @@ function snapshotHint(root, absolute) {
   const relative = path.relative(root, absolute);
   if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     return `it is outside --root ${root}. Pass the project root that contains your sources`;
+  }
+  if (!existsSync(absolute)) {
+    return 'it does not exist under --root (moved, renamed or deleted since the report was generated). Recollect coverage from the current sources';
   }
   return 'it is under --root but in an excluded directory (node_modules, .git, target, dist, build, coverage) or is not a .ts/.tsx/.mts/.cts source. Limit coverage to TypeScript sources outside those directories';
 }
@@ -99,7 +103,9 @@ async function convert(root, files, records) {
       const { map, base } = await sourceMap(filename, record.map).catch(error => {
         // Generated TypeScript (for example under build/) still remaps through its
         // map. Without one, a TypeScript record is simply outside the snapshot.
-        if (!record.map && supported(filename) && (error.code === 'ENOENT' || error.missingSourceMap)) {
+        // Only a missing generated file itself; a missing sidecar map keeps its own error.
+        const sourceMissing = error.code === 'ENOENT' && path.resolve(error.path ?? '') === filename;
+        if (!record.map && supported(filename) && (sourceMissing || error.missingSourceMap)) {
           throw new Error(`Unmappable source outside collected TypeScript snapshot: ${record.path}; ${snapshotHint(root, filename)}`);
         }
         throw error;

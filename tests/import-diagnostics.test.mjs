@@ -82,7 +82,7 @@ const OUTSIDE = /it is outside --root .*\. Pass the project root that contains y
 const EXCLUDED = /it is under --root but in an excluded directory \(node_modules, \.git, target, dist, build, coverage\) or is not a \.ts\/\.tsx\/\.mts\/\.cts source/;
 
 test('source-mapped sources outside the snapshot say whether they are outside the root or excluded', async t => {
-  const root = await project(t, source);
+  const root = await project(t, { ...source, 'dist/b.ts': 'export const b = 1;\n', '..dotted/b.js': 'exports.b = 1;\n' });
   const map = sources => ({ version: 3, sources, sourcesContent: ['x'], mappings: 'AAAA' });
   const outside = collect(root, { raw: statement('gen.js', { inputSourceMap: map(['../elsewhere/b.ts']) }) });
   assert.equal(outside.status, 2);
@@ -159,5 +159,18 @@ test('generated TypeScript outside the snapshot still remaps through its sidecar
   const result = collect(root, { format: 'lcov', raw: 'SF:build/gen.ts\nDA:2,1\nend_of_record\n' });
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(await fs.readFile(result.output, 'utf8')).files['src/a.ts'].lines, { 2: 1 });
+});
+
+test('missing sources and missing sidecar maps get their own diagnostics', async t => {
+  const root = await project(t, { ...source, 'build/gen.ts': 'x;\n//# sourceMappingURL=gen.ts.map\n' });
+  const map = { version: 3, sources: ['src/absent.ts'], sourcesContent: ['x'], mappings: 'AAAA' };
+  const absent = collect(root, { raw: statement('gen.js', { inputSourceMap: map }) });
+  assert.equal(absent.status, 2);
+  assert.match(absent.stderr, /src\/absent\.ts; it does not exist under --root \(moved, renamed or deleted since the report was generated\)/);
+  assert.doesNotMatch(absent.stderr, EXCLUDED);
+  const sidecar = collect(root, { format: 'lcov', raw: 'SF:build/gen.ts\nDA:1,1\nend_of_record\n' });
+  assert.equal(sidecar.status, 2);
+  assert.match(sidecar.stderr, /ENOENT.*gen\.ts\.map/, 'the missing map keeps its own error');
+  assert.doesNotMatch(sidecar.stderr, /outside collected TypeScript snapshot/);
 });
 

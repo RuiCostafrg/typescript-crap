@@ -1,0 +1,190 @@
+name: GitHub Action
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: github-action-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  setup:
+    # Installs the published release through the action at this commit.
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    timeout-minutes: 10
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-26.04-arm
+            target: aarch64-unknown-linux-musl
+          # Older glibc than the GNU build supports: the static build must still run.
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+          - runner: macos-26
+            target: aarch64-apple-darwin
+          - runner: macos-26-intel
+            target: x86_64-apple-darwin
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: install
+        uses: ./
+        with:
+          version: 2.2.1
+          helpers: true
+      - name: Check the installed tool, helpers and outputs
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          OUT_TARGET: ${{ steps.install.outputs.target }}
+          OUT_VERSION: ${{ steps.install.outputs.version }}
+          OUT_EXECUTABLE: ${{ steps.install.outputs.executable }}
+          OUT_HELPERS: ${{ steps.install.outputs.helpers-dir }}
+        run: |
+          test "$OUT_TARGET" = "$TARGET"
+          test "$OUT_VERSION" = 2.2.1
+          test "$(ts-crap --version | tr -d '\r')" = "ts-crap 2.2.1"
+          test -f "$OUT_EXECUTABLE"
+          test "$TS_CRAP_HELPERS" = "$OUT_HELPERS"
+          test -f "$TS_CRAP_HELPERS/coverage.mjs"
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            # Static: no ELF interpreter and no shared-library dependencies.
+            if readelf --program-headers "$OUT_EXECUTABLE" | grep -q INTERP; then exit 1; fi
+            if readelf --dynamic "$OUT_EXECUTABLE" | grep -q NEEDED; then exit 1; fi
+          fi
+      - id: scan
+        uses: ./
+        with:
+          version: v2.2.1
+          scan: true
+          sarif: true
+          args: |
+            --root
+            examples/shop
+            --threshold
+            20
+      - name: Check the passing scan and its SARIF report
+        shell: bash
+        env:
+          EXIT_CODE: ${{ steps.scan.outputs.exit-code }}
+          SARIF: ${{ steps.scan.outputs.sarif-file }}
+        run: |
+          test "$EXIT_CODE" = 0
+          python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["version"] == "2.1.0" and d["runs"][0]["results"] == []' "$SARIF"
+  gate-and-input-failures:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    timeout-minutes: 10
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: failing-gate
+        continue-on-error: true
+        uses: ./
+        with:
+          version: 2.2.1
+          scan: true
+          sarif: true
+          args: |
+            --root
+            examples/shop
+            --threshold
+            5
+      - id: invalid-scan-input
+        continue-on-error: true
+        uses: ./
+        with:
+          version: 2.2.1
+          scan: true
+          args: |
+            --root
+            does-not-exist
+      - id: upload-without-scan
+        continue-on-error: true
+        uses: ./
+        with:
+          version: 2.2.1
+          sarif: true
+          upload-sarif: true
+      - id: latest
+        continue-on-error: true
+        uses: ./
+        with:
+          version: latest
+      - id: too-old
+        continue-on-error: true
+        uses: ./
+        with:
+          version: 2.1.0
+      - id: unpublished
+        continue-on-error: true
+        uses: ./
+        with:
+          version: 2.99.0
+      - name: Gate failures still report SARIF; invalid inputs fail before installing
+        shell: bash
+        env:
+          GATE_OUTCOME: ${{ steps.failing-gate.outcome }}
+          GATE_EXIT: ${{ steps.failing-gate.outputs.exit-code }}
+          GATE_SARIF: ${{ steps.failing-gate.outputs.sarif-file }}
+          INVALID_OUTCOME: ${{ steps.invalid-scan-input.outcome }}
+          INVALID_EXIT: ${{ steps.invalid-scan-input.outputs.exit-code }}
+          UPLOAD_WITHOUT_SCAN: ${{ steps.upload-without-scan.outcome }}
+          UPLOAD_WITHOUT_SCAN_TARGET: ${{ steps.upload-without-scan.outputs.target }}
+          LATEST: ${{ steps.latest.outcome }}
+          LATEST_TARGET: ${{ steps.latest.outputs.target }}
+          TOO_OLD: ${{ steps.too-old.outcome }}
+          UNPUBLISHED: ${{ steps.unpublished.outcome }}
+        run: |
+          test "$GATE_OUTCOME" = failure
+          test "$GATE_EXIT" = 1
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1]))["runs"][0]["results"]; assert [x["level"] for x in r] == ["error", "error"]; assert {x["locations"][0]["physicalLocation"]["artifactLocation"]["uri"] for x in r} == {"examples/shop/src/pricing.mts"}' "$GATE_SARIF"
+          test "$INVALID_OUTCOME" = failure
+          test "$INVALID_EXIT" = 2
+          test "$UPLOAD_WITHOUT_SCAN" = failure
+          test -z "$UPLOAD_WITHOUT_SCAN_TARGET"
+          test "$LATEST" = failure
+          test -z "$LATEST_TARGET"
+          test "$TOO_OLD" = failure
+          test "$UNPUBLISHED" = failure
+  upload-sarif:
+    # The only job with a write scope: uploading an (empty) passing report to
+    # code scanning exercises the pinned upload step end to end. It never runs
+    # for pull requests, so PR runs only ever hold read-only tokens; it runs on
+    # pushes to main and owner dispatches.
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    timeout-minutes: 10
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./
+        with:
+          version: 2.2.1
+          scan: true
+          sarif: true
+          upload-sarif: true
+          sarif-category: ts-crap-action-ci
+          args: |
+            --root
+            examples/shop
+            --threshold
+            20

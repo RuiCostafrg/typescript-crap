@@ -18,6 +18,9 @@
 - Installation CI runs that flow against the published v2.2.1 installer and
   checks its GNU/musl archive selection on Ubuntu 26.04 and 24.04 runners and in
   Debian 12 and Alpine 3.22 containers.
+- GitHub Action (`action.yml` at the repository root) that installs a pinned
+  release (static musl on Linux) after verifying its build provenance and
+  SHA-256, adds `ts-crap` to `PATH`, and can run the gate with SARIF upload.
 
 ### Changed
 

@@ -126,7 +126,7 @@ test('TypeScript files absent from coverage produce a warning without changing s
   const files = { ...source, 'src/b.ts': 'export const b = 1;\n', 'src/c.mts': 'export const c = 1;\n',
     'src/a.test.ts': '', 'src/a.spec.tsx': '', 'src/__mocks__/m.ts': '', 'vitest.config.ts': '', 'types.d.ts': '',
     'app.config.tsx': '', 'tests/fixtures/helper.ts': '', 'test/setup.ts': '', 'src/mocks/api.ts': '', 'fixtures/data.mts': '',
-    'src/api.mock.ts': '', 'src/api.fixture.tsx': '', 'src/data.fixtures.ts': '', '.config.ts': '', 'src/.config.tsx': '', 'src/..notparent/inside.ts': 'export const i = 1;\n' };
+    'src/api.mock.ts': '', 'src/api.fixture.tsx': '', 'src/data.fixtures.ts': '', 'src/a.tests.ts': '', 'src/a.specs.tsx': '', '.config.ts': '', 'src/.config.tsx': '', 'src/..notparent/inside.ts': 'export const i = 1;\n' };
   const root = await project(t, files);
   const result = collect(root, { raw: covered });
   assert.equal(result.status, 0, result.stderr);

@@ -13,7 +13,7 @@ const REMAP_HINT = 'Use a coverage setup that remaps to TypeScript (Vitest istan
 // Tests, mocks, fixtures and tool configuration are rarely meant to be measured.
 const notMeasured = relative =>
   /(^|\/)(__tests__|__mocks__|__fixtures__|tests?|mocks|fixtures)\//.test(relative)
-  || /\.(test|spec|mocks?|fixtures?)\.[cm]?tsx?$|(^|\/)[^/]*\.config\.[cm]?tsx?$/.test(relative);
+  || /\.(tests?|specs?|mocks?|fixtures?)\.[cm]?tsx?$|(^|\/)[^/]*\.config\.[cm]?tsx?$/.test(relative);
 // Paths come from the checkout; never let a filename emit terminal controls.
 const display = text => text.replace(/[\u0000-\u001f\u007f-\u009f]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
 /** Explain why a source named by coverage is absent from the collected snapshot. */

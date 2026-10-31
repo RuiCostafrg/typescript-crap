@@ -151,7 +151,7 @@ Import failures exit with status 2, publish nothing, and name the likely fix.
 
 After a successful import, a warning lists TypeScript files under the root that
 have no coverage records. It leaves out `*.test.*`, `*.spec.*`, `*.mock.*` and
-`*.fixture.*` files (plural forms too), `*.config.*`
+`*.fixture.*` files (and their plurals, such as `*.tests.*`), `*.config.*`
 files, and anything under `__tests__`, `__mocks__`, `__fixtures__`, `test`,
 `tests`, `mocks` or `fixtures` directories. Names are shown with control
 characters escaped.

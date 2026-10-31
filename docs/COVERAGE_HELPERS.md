@@ -54,6 +54,51 @@ It does not transpile TSX or remap source maps. It snapshots source before tests
 and verifies loaded TypeScript through the bundled loader hook. Failed collection
 preserves an existing report; always check the command's exit status before scanning.
 
+## One-step Vitest or Jest coverage
+
+`coverage-run.mjs` wraps the importer below for Vitest and Jest. It finds the
+framework installed in the project (or a parent workspace), creates a new
+private run directory, adds the reporter and directory flags, imports the
+result and prints the matching scanner command:
+
+```sh
+node "/tools/ts-crap-coverage-helpers/coverage-run.mjs" --root /project
+ts-crap --root /project --coverage /tmp/ts-crap-run-AbC123/native-coverage.json --require-coverage
+```
+
+Add `--scan` to run that scanner command directly. The helper's exit status is
+then the scanner's: 0 pass, 1 quality gate, 2 error. Before any test runs,
+`--scan` checks that `ts-crap --version` (or `--scanner PATH`) matches this
+bundle's `version.json` exactly.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--framework vitest\|jest\|auto` | `auto` | `auto` looks for `vitest.config.*`, `vite.config.*` when Vitest is installed (Vitest also loads it, but plain Vite apps have one too), `jest.config.*` or a `jest` key in `package.json`. It never evaluates config files. If both frameworks match it stops and asks for `--framework`. |
+| `--provider PROVIDER` | see below | Each framework's own names: `istanbul` or `v8` for Vitest (`--coverage.provider`), `babel` or `v8` for Jest (`--coverageProvider`). Other combinations are rejected. |
+| `--format json\|lcov` | `json` | Reporter: Istanbul `json` or `lcovonly`. JSON keeps default-argument evidence. |
+| `--root DIR` | `.` | Project root; the framework runs here. |
+| `--output FILE` | inside the run directory | Native coverage path. It must not exist yet, and missing parent directories are created before tests run. With `--output` the run directory is removed after success. Without it, the report stays in the run directory (kept, so the printed command works) until you delete it. |
+| `--config FILE` | — | Alternative ts-crap policy path. It is protected from publication and passed to the scanner. |
+| `--scan`, `--scanner PATH` | off, `ts-crap` | Run the scanner after a successful import. |
+| `-- ARGS` | — | Extra framework arguments, for example `-- --config vitest.ci.ts` or `-- --runInBand`. Arguments that change the coverage reporter, directory, provider or coverage switch are rejected. |
+
+Without `--provider`, Jest uses the project's configured provider. Vitest offers
+to install a missing provider package and edit `package.json`, so for Vitest the
+helper first checks that `@vitest/coverage-v8` or `@vitest/coverage-istanbul`
+is installed. If only one is installed it selects that provider explicitly. If
+both are installed the configured provider is used.
+
+The importer's guarantees still apply. Every run uses fresh reporter and native
+paths, source is hashed before the tests and checked after them, failing tests
+publish nothing, and the project configuration is never overwritten. SIGINT,
+SIGTERM and SIGHUP are forwarded through the importer to the test command, and
+the helper waits for it to stop, so a cancelled run never publishes later.
+
+The printed command is quoted for POSIX shells, and on Windows for PowerShell.
+`cmd.exe` cannot quote `%` literally, so use `--scan` there for paths with
+unusual characters. On failure
+the run directory is kept and its path is printed for inspection.
+
 ## Collect Istanbul or LCOV
 
 For transpiled TypeScript/TSX, run your existing reporter through the importer:

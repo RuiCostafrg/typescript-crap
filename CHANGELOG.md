@@ -4,11 +4,24 @@
 
 ### Added
 
+- `coverage-run.mjs`, a one-step Vitest/Jest coverage command in the helper
+  bundle. It detects the framework from config filenames or the `jest` key in
+  `package.json`, without evaluating them. It uses a fresh private
+  run directory, imports the result, and prints the matching `ts-crap`
+  command. With `--scan` it checks that the helper and scanner versions match
+  exactly, then runs that command.
 - Documented version-pinned shell installer URLs for CI and a verify-before-run
   flow (`gh attestation verify` before running the downloaded installer).
 - Installation CI runs that flow against the published v2.2.1 installer and
   checks its GNU/musl archive selection on Ubuntu 26.04 and 24.04 runners and in
   Debian 12 and Alpine 3.22 containers.
+
+### Changed
+
+- `import-coverage.mjs` forwards SIGINT, SIGTERM and SIGHUP to the test command
+  and waits for it to stop, so cancelling an import also stops the tests. A
+  cancelled import never publishes, even if the test command then exits 0. The
+  exit code stays 2.
 
 ## 2.2.1 — 2026-10-30
 

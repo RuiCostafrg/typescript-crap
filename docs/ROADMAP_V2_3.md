@@ -109,8 +109,11 @@ by hand and must pick fresh directories themselves (`README.md:488-493`).
     then `vitest --merge-reports` merges the blob reports, with coverage enabled.
   - Sharded Jest runs: each shard runs
     `jest --shard=i/n --coverage --coverageDirectory=<fresh dir>/shard-i`, so
-    shards never overwrite each other. The importer then merges those
-    explicitly listed shard files.
+    shards never overwrite each other. Shard runs disable Jest's per-shard
+    `coverageThreshold` check (for example `--coverageThreshold='{}'`),
+    because each shard sees only partial coverage. The importer then merges
+    those explicitly listed shard files, and thresholds are enforced on the
+    merged result by ts-crap's gates.
 - **Acceptance:** a fixture with two or more projects proves the merged counts.
 
 ## Phase 2: scanner gaps

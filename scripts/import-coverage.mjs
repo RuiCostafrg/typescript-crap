@@ -9,8 +9,20 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REMAP_HINT = 'Use a coverage setup that remaps to TypeScript (Vitest istanbul or v8 provider; Jest babel or v8 provider with source maps), and do not import raw NODE_V8_COVERAGE output';
-// Tests, mocks and tool configuration are rarely meant to be measured.
-const notMeasured = relative => /(^|\/)__(tests|mocks|fixtures)__\/|\.(test|spec)\.[cm]?tsx?$|(^|\/)[^/]+\.config\.[cm]?ts$/.test(relative);
+// Tests, mocks, fixtures and tool configuration are rarely meant to be measured.
+const notMeasured = relative =>
+  /(^|\/)(__tests__|__mocks__|__fixtures__|tests?|mocks|fixtures)\//.test(relative)
+  || /\.(test|spec)\.[cm]?tsx?$|(^|\/)[^/]+\.config\.[cm]?tsx?$/.test(relative);
+// Paths come from the checkout; never let a filename emit terminal controls.
+const display = text => text.replace(/[\u0000-\u001f\u007f-\u009f]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
+/** Explain why a source named by coverage is absent from the collected snapshot. */
+function snapshotHint(root, absolute) {
+  const relative = path.relative(root, absolute);
+  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+    return `it is outside --root ${root}. Pass the project root that contains your sources`;
+  }
+  return 'it is under --root but in an excluded directory (node_modules, .git, target, dist, build, coverage) or is not a .ts/.tsx/.mts/.cts source. Limit coverage to TypeScript sources outside those directories';
+}
 const reporterHint = format => format === 'istanbul'
   ? 'Vitest --coverage.reporter=json or Jest --coverageReporters=json'
   : 'Vitest --coverage.reporter=lcovonly or Jest --coverageReporters=lcovonly';
@@ -83,6 +95,9 @@ async function convert(root, files, records) {
     let mapper;
     if (files.has(filename) && !record.map) {
       mapper = (line) => [{ file: files.get(filename), line }];
+    } else if (!record.map && supported(filename)) {
+      // TypeScript itself needs no source map; it is simply not in the snapshot.
+      throw new Error(`Unmappable source outside collected TypeScript snapshot: ${record.path}; ${snapshotHint(root, filename)}`);
     } else {
       const { map, base } = await sourceMap(filename, record.map);
       const rows = mappings(map);
@@ -90,7 +105,7 @@ async function convert(root, files, records) {
         const absolute = resolveSource(resolveSource(base, map.sourceRoot || '.'), name);
         const file = files.get(absolute);
         if (!file) {
-          throw new Error(`Unmappable source outside collected TypeScript snapshot: ${name}; it is outside --root ${root} or is not a TypeScript source. Pass the project root that contains your sources`);
+          throw new Error(`Unmappable source outside collected TypeScript snapshot: ${name}; ${snapshotHint(root, absolute)}`);
         }
         if (typeof map.sourcesContent?.[index] !== 'string' || digest(Buffer.from(map.sourcesContent[index])) !== file.sha256) {
           throw new Error(`Missing or stale source-map content: ${name}`);
@@ -227,12 +242,12 @@ async function main() {
     });
   });
   if (status !== 0) {
-    throw new Error(`Coverage command failed: ${status}; no report was written. Fix the failing tests or coverage thresholds, then rerun with fresh paths`);
+    throw new Error(`Coverage command failed: ${status}; no native coverage was published (any raw report it wrote is not imported). Fix the failing tests or coverage thresholds, then rerun with fresh paths`);
   }
   const format = options['--format'];
   const raw = await fs.readFile(input, 'utf8').catch(error => {
     if (error.code !== 'ENOENT') throw error;
-    throw new Error(`Coverage command succeeded but wrote no report at ${input}. Likely causes: coverage is not enabled (pass --coverage), the reporter does not emit ${format === 'istanbul' ? 'Istanbul JSON' : 'LCOV'} (use ${reporterHint(format)}), or the report directory differs from --input (Vitest --coverage.reportsDirectory, Jest --coverageDirectory)`);
+    throw new Error(`Coverage command succeeded but wrote no report at ${input}. Likely causes: coverage is not enabled (pass --coverage), the reporter does not emit ${format === 'istanbul' ? 'Istanbul JSON' : 'LCOV'} (use ${reporterHint(format)}), or the reporter writes elsewhere (set Vitest --coverage.reportsDirectory or Jest --coverageDirectory to the directory containing --input)`);
   });
   const records = format === 'istanbul' ? istanbul(parseUniqueJson(raw)) : lcov(raw, root);
   if (!records.some(record => record.hits.length)) {
@@ -251,7 +266,7 @@ async function main() {
   const absent = [...files.keys()].map(absolute => path.relative(root, absolute).split(path.sep).join('/'))
     .filter(relative => !result.files[relative] && !notMeasured(relative));
   if (absent.length) {
-    const shown = absent.slice(0, 10).join(', ') + (absent.length > 10 ? `, and ${absent.length - 10} more` : '');
+    const shown = absent.slice(0, 10).map(display).join(', ') + (absent.length > 10 ? `, and ${absent.length - 10} more` : '');
     console.error(`Warning: ${absent.length} TypeScript source file${absent.length === 1 ? ' has' : 's have'} no coverage records and will count as missing coverage if scanned: ${shown}. If they should be measured, add them to Vitest coverage.include or Jest collectCoverageFrom`);
   }
 }

@@ -19,9 +19,12 @@ async function project(t, files) {
 }
 
 /** Run the importer with a child that optionally writes RAW to the input path. */
+let run = 0;
 function collect(root, { format = 'istanbul', raw, exit = 0 } = {}) {
-  const input = path.join(root, 'out', format === 'istanbul' ? 'coverage-final.json' : 'lcov.info');
-  const output = path.join(root, 'native.json');
+  // Every collection uses fresh raw and native paths, as the importer requires.
+  const directory = path.join(root, `out-${run++}`);
+  const input = path.join(directory, format === 'istanbul' ? 'coverage-final.json' : 'lcov.info');
+  const output = path.join(directory, 'native.json');
   const child = `
     const fs = require('node:fs');
     ${raw === undefined ? '' : `fs.mkdirSync(${JSON.stringify(path.dirname(input))}, { recursive: true });
@@ -39,7 +42,7 @@ test('a failing test command names the fix and keeps exit code 2', async t => {
   const root = await project(t, source);
   const result = collect(root, { raw: covered, exit: 1 });
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /Coverage command failed: 1; no report was written\. Fix the failing tests or coverage thresholds/);
+  assert.match(result.stderr, /Coverage command failed: 1; no native coverage was published \(any raw report it wrote is not imported\)\. Fix the failing tests or coverage thresholds/);
   await assert.rejects(fs.access(result.output), { code: 'ENOENT' });
 });
 
@@ -50,7 +53,7 @@ test('a missing report names coverage, reporter and directory causes for each fo
   assert.match(json.stderr, /succeeded but wrote no report at .*coverage-final\.json/);
   assert.match(json.stderr, /coverage is not enabled \(pass --coverage\)/);
   assert.match(json.stderr, /does not emit Istanbul JSON \(use Vitest --coverage\.reporter=json or Jest --coverageReporters=json\)/);
-  assert.match(json.stderr, /Vitest --coverage\.reportsDirectory, Jest --coverageDirectory/);
+  assert.match(json.stderr, /set Vitest --coverage\.reportsDirectory or Jest --coverageDirectory to the directory containing --input/);
   const lcov = collect(root, { format: 'lcov' });
   assert.equal(lcov.status, 2);
   assert.match(lcov.stderr, /does not emit LCOV \(use Vitest --coverage\.reporter=lcovonly or Jest --coverageReporters=lcovonly\)/);
@@ -74,13 +77,34 @@ test('unremapped generated JavaScript explains how to get TypeScript coverage', 
   assert.match(result.stderr, /Vitest istanbul or v8 provider; Jest babel or v8 provider with source maps.*NODE_V8_COVERAGE/);
 });
 
-test('sources outside the root name --root', async t => {
+const statement = (file, extra = {}) => JSON.stringify({ x: { path: file, ...extra, statementMap: { 0: { start: { line: 1, column: 0 } } }, s: { 0: 1 } } });
+const OUTSIDE = /it is outside --root .*\. Pass the project root that contains your sources/;
+const EXCLUDED = /it is under --root but in an excluded directory \(node_modules, \.git, target, dist, build, coverage\) or is not a \.ts\/\.tsx\/\.mts\/\.cts source/;
+
+test('source-mapped sources outside the snapshot say whether they are outside the root or excluded', async t => {
   const root = await project(t, source);
-  const map = { version: 3, sources: ['../elsewhere/b.ts'], sourcesContent: ['x'], mappings: 'AAAA' };
-  const raw = JSON.stringify({ x: { path: 'gen.js', inputSourceMap: map, statementMap: { 0: { start: { line: 1, column: 0 } } }, s: { 0: 1 } } });
-  const result = collect(root, { raw });
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /Unmappable source outside collected TypeScript snapshot: \.\.\/elsewhere\/b\.ts; it is outside --root .* or is not a TypeScript source/);
+  const map = sources => ({ version: 3, sources, sourcesContent: ['x'], mappings: 'AAAA' });
+  const outside = collect(root, { raw: statement('gen.js', { inputSourceMap: map(['../elsewhere/b.ts']) }) });
+  assert.equal(outside.status, 2);
+  assert.match(outside.stderr, /Unmappable source outside collected TypeScript snapshot: \.\.\/elsewhere\/b\.ts; /);
+  assert.match(outside.stderr, OUTSIDE);
+  const excluded = collect(root, { raw: statement('gen.js', { inputSourceMap: map(['dist/b.ts']) }) });
+  assert.equal(excluded.status, 2);
+  assert.match(excluded.stderr, EXCLUDED);
+  assert.doesNotMatch(excluded.stderr, OUTSIDE);
+});
+
+test('plain TypeScript outside the snapshot is not mistaken for generated JavaScript', async t => {
+  const root = await project(t, { ...source, 'build/x.ts': 'export const x = 1;\n' });
+  const excluded = collect(root, { raw: statement('build/x.ts') });
+  assert.equal(excluded.status, 2);
+  assert.match(excluded.stderr, /Unmappable source outside collected TypeScript snapshot: build\/x\.ts; /);
+  assert.match(excluded.stderr, EXCLUDED);
+  assert.doesNotMatch(excluded.stderr, /generated JavaScript/);
+  const outside = collect(root, { raw: statement('../other/y.ts') });
+  assert.equal(outside.status, 2);
+  assert.match(outside.stderr, OUTSIDE);
+  assert.doesNotMatch(outside.stderr, /generated JavaScript/);
 });
 
 test('locations without a mapping keep the remapping hint', async t => {
@@ -94,7 +118,8 @@ test('locations without a mapping keep the remapping hint', async t => {
 
 test('TypeScript files absent from coverage produce a warning without changing success', async t => {
   const files = { ...source, 'src/b.ts': 'export const b = 1;\n', 'src/c.mts': 'export const c = 1;\n',
-    'src/a.test.ts': '', 'src/a.spec.tsx': '', 'src/__mocks__/m.ts': '', 'vitest.config.ts': '', 'types.d.ts': '' };
+    'src/a.test.ts': '', 'src/a.spec.tsx': '', 'src/__mocks__/m.ts': '', 'vitest.config.ts': '', 'types.d.ts': '',
+    'app.config.tsx': '', 'tests/fixtures/helper.ts': '', 'test/setup.ts': '', 'src/mocks/api.ts': '', 'fixtures/data.mts': '' };
   const root = await project(t, files);
   const result = collect(root, { raw: covered });
   assert.equal(result.status, 0, result.stderr);
@@ -112,4 +137,13 @@ test('the warning is singular, truncated after ten files, and absent when everyt
   const complete = collect(await project(t, source), { raw: covered });
   assert.equal(complete.status, 0, complete.stderr);
   assert.doesNotMatch(complete.stderr, /Warning/);
+});
+
+test('uncovered filenames are displayed with control characters escaped', { skip: process.platform === 'win32' && 'POSIX filenames' }, async t => {
+  const root = await project(t, { ...source, 'src/evil\u001b[31m\nforged.ts': 'export const e = 1;\n' });
+  const result = collect(root, { raw: covered });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /src\/evil\\u001b\[31m\\u000aforged\.ts/);
+  assert.doesNotMatch(result.stderr, /\u001b/);
+  assert.equal(result.stderr.trim().split('\n').filter(line => line.startsWith('Warning:')).length, 1);
 });

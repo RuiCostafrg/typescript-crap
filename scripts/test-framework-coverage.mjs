@@ -6,6 +6,7 @@ import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { formatCommand, scannerArguments } from './coverage-run.mjs';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const scanner = path.resolve(process.argv[2] ?? 'target/debug/ts-crap');
@@ -124,7 +125,7 @@ try {
         '--format', format === 'istanbul' ? 'json' : 'lcov', '--root', root, '--output', oneStep, '--',
         ...(framework === 'jest' ? ['--config', 'jest.config.cjs', '--runInBand'] : ['--config', 'vitest.config.mjs'])],
       0, { FIXTURE_COVERAGE_PROVIDER: provider });
-      assert.match(runResult.stdout, /(?:^|\n)ts-crap --root .* --coverage .* --require-coverage\n$/, label);
+      assert(runResult.stdout.endsWith(`${formatCommand(['ts-crap', ...scannerArguments({ root, output: oneStep })])}\n`), label);
       assert.deepEqual(await fs.readFile(oneStep), await fs.readFile(full.output), `${label}: one-step command`);
 
       const partial = await collect('partial', true);

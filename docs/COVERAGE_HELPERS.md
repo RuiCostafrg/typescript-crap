@@ -74,17 +74,25 @@ bundle's `version.json` exactly.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `--framework vitest\|jest\|auto` | `auto` | `auto` looks for `vitest.config.*`, `jest.config.*` or a `jest` key in `package.json`. It never evaluates config files. If both frameworks match it stops and asks for `--framework`. |
-| `--provider istanbul\|v8` | project config | Vitest `--coverage.provider`; Jest `--coverageProvider` (`istanbul` means Jest's `babel`). |
+| `--provider istanbul\|v8` | see below | Vitest `--coverage.provider`; Jest `--coverageProvider` (`istanbul` means Jest's `babel`). |
 | `--format json\|lcov` | `json` | Reporter: Istanbul `json` or `lcovonly`. JSON keeps default-argument evidence. |
 | `--root DIR` | `.` | Project root; the framework runs here. |
-| `--output FILE` | inside the run directory | Native coverage path. It must not exist yet; the run directory is removed after success. |
+| `--output FILE` | inside the run directory | Native coverage path. It must not exist yet; missing parent directories are created before tests run, and the run directory is removed after success. |
 | `--config FILE` | — | Alternative ts-crap policy path. It is protected from publication and passed to the scanner. |
 | `--scan`, `--scanner PATH` | off, `ts-crap` | Run the scanner after a successful import. |
-| `-- ARGS` | — | Extra framework arguments, for example `-- --config vitest.ci.ts` or `-- --runInBand`. |
+| `-- ARGS` | — | Extra framework arguments, for example `-- --config vitest.ci.ts` or `-- --runInBand`. Arguments that change the coverage reporter, directory, provider or coverage switch are rejected. |
+
+Without `--provider`, Jest uses the project's configured provider. Vitest offers
+to install a missing provider package and edit `package.json`, so for Vitest the
+helper first checks that `@vitest/coverage-v8` or `@vitest/coverage-istanbul`
+is installed. If only one is installed it selects that provider explicitly. If
+both are installed the configured provider is used.
 
 The importer's guarantees still apply. Every run uses fresh reporter and native
 paths, source is hashed before the tests and checked after them, failing tests
-publish nothing, and the project configuration is never overwritten. On failure
+publish nothing, and the project configuration is never overwritten. SIGINT,
+SIGTERM and SIGHUP are forwarded to the collection, so a cancelled run never
+publishes later. On failure
 the run directory is kept and its path is printed for inspection.
 
 ## Collect Istanbul or LCOV

@@ -94,6 +94,23 @@ export function findPackage(root, name) {
   }
 }
 
+/**
+ * Choose a Vitest provider that is known to be installed. Vitest offers to install a
+ * missing provider and edit package.json, and the configured provider cannot be read
+ * without evaluating config. With exactly one installed, select it explicitly; with
+ * both installed, any configured choice is available.
+ */
+export function vitestProvider(root, requested, version) {
+  const installed = ['v8', 'istanbul'].filter(name => findPackage(root, `@vitest/coverage-${name}`));
+  const install = name => `npm install --save-dev @vitest/coverage-${name}${version ? `@${version}` : ''}`;
+  if (requested) {
+    if (!installed.includes(requested)) throw new Error(`--provider ${requested} needs @vitest/coverage-${requested}; install it with ${install(requested)}`);
+    return requested;
+  }
+  if (!installed.length) throw new Error(`Vitest coverage needs @vitest/coverage-v8 or @vitest/coverage-istanbul; install one, for example ${install('v8')}`);
+  return installed.length === 1 ? installed[0] : undefined;
+}
+
 const INSTALL = {
   vitest: 'npm install --save-dev vitest @vitest/coverage-v8',
   jest: 'npm install --save-dev jest',
@@ -109,8 +126,27 @@ export function frameworkBinary(root, framework) {
   return { path: path.resolve(found.directory, bin), version: found.manifest.version };
 }
 
+// Options that would redirect, replace or disable the private reporter output.
+// Keys are compared without leading dashes, inner dashes or case (yargs accepts kebab-case).
+const RESERVED = {
+  vitest: ['coverage', 'nocoverage', 'coverage.enabled', 'coverage.reporter', 'coverage.reportsdirectory', 'coverage.provider'],
+  jest: ['coverage', 'nocoverage', 'collectcoverage', 'nocollectcoverage', 'coveragereporters', 'coveragedirectory', 'coverageprovider'],
+};
+
+/** Reject extra framework arguments that would override the private reporter flags. */
+export function checkExtraArguments(framework, extra) {
+  for (const argument of extra) {
+    if (!argument.startsWith('-')) continue;
+    const key = argument.split('=')[0].replace(/^-+/, '').replaceAll('-', '').toLowerCase();
+    if (RESERVED[framework].includes(key)) {
+      throw new UsageError(`Extra ${framework} argument ${JSON.stringify(argument)} would change the coverage reporter, directory or provider that coverage-run controls; use --format and --provider instead`);
+    }
+  }
+}
+
 /** Framework arguments that select the reporter and its fresh directory. */
 export function frameworkArguments(framework, { provider, format, directory, extra = [] }) {
+  checkExtraArguments(framework, extra);
   if (framework === 'vitest') {
     return ['run', '--coverage', `--coverage.reporter=${format === 'json' ? 'json' : 'lcovonly'}`,
       `--coverage.reportsDirectory=${directory}`,
@@ -145,15 +181,25 @@ export function shellQuote(value, platform = process.platform) {
   return platform === 'win32' ? `"${value}"` : `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+export function formatCommand(args, platform = process.platform) {
+  return args.map(value => shellQuote(value, platform)).join(' ');
+}
+
 export function scannerArguments({ root, output, config }) {
   return ['--root', root, '--coverage', output, '--require-coverage', ...(config ? ['--config', config] : [])];
 }
 
-function run(command, args, options = {}) {
+const FORWARDED = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+
+/** Run a child, forwarding termination so a cancelled run cannot publish later. */
+export function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: 'inherit', ...options });
-    child.on('error', reject);
-    child.on('exit', (code, signal) => resolve(signal ? 2 : code));
+    const forward = signal => { child.kill(signal); };
+    const stop = () => { for (const signal of FORWARDED) process.off(signal, forward); };
+    for (const signal of FORWARDED) process.on(signal, forward);
+    child.on('error', error => { stop(); reject(error); });
+    child.on('exit', (code, signal) => { stop(); resolve(signal ? 2 : code); });
   });
 }
 
@@ -191,14 +237,9 @@ async function main() {
   });
   const framework = options.framework === 'auto' ? detectFramework(root) : options.framework;
   const binary = frameworkBinary(root, framework);
-  if (framework === 'vitest') {
-    // Vitest offers to install a missing provider and edit package.json; refuse first.
-    const providers = options.provider ? [options.provider] : ['v8', 'istanbul'];
-    if (!providers.some(provider => findPackage(root, `@vitest/coverage-${provider}`))) {
-      const wanted = options.provider ?? 'v8';
-      throw new Error(`${options.provider ? `--provider ${wanted}` : 'Vitest coverage'} needs @vitest/coverage-${wanted}; install it with npm install --save-dev @vitest/coverage-${wanted}@${binary.version}`);
-    }
-  }
+  checkExtraArguments(framework, options.extra);
+  let provider = options.provider;
+  if (framework === 'vitest') provider = vitestProvider(root, provider, binary.version);
   const scanner = options.scanner ?? 'ts-crap';
   // Fail before running tests rather than after a long run with an unusable scanner.
   if (options.scan) await checkScanner(scanner);
@@ -206,13 +247,15 @@ async function main() {
   const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'ts-crap-run-')));
   const input = path.join(directory, reportName(options.format));
   const output = options.output ? path.resolve(options.output) : path.join(directory, 'native-coverage.json');
+  // The importer never creates parents; do it before tests rather than fail after them.
+  if (options.output) await fs.mkdir(path.dirname(output), { recursive: true });
   const config = options.config ? path.resolve(options.config) : undefined;
-  console.error(`ts-crap coverage-run: ${framework} ${binary.version ?? ''} (${options.provider ?? 'configured provider'}, ${options.format}) in ${root}`);
+  console.error(`ts-crap coverage-run: ${framework} ${binary.version ?? ''} (${provider ?? 'configured provider'}, ${options.format}) in ${root}`);
   const status = await run(process.execPath, [
     path.join(here, 'import-coverage.mjs'), '--root', root,
     '--format', options.format === 'json' ? 'istanbul' : 'lcov', '--input', input, '--output', output,
     ...(config ? ['--config', config] : []), '--', process.execPath, binary.path,
-    ...frameworkArguments(framework, { provider: options.provider, format: options.format, directory, extra: options.extra }),
+    ...frameworkArguments(framework, { provider, format: options.format, directory, extra: options.extra }),
   ]);
   if (status !== 0) {
     console.error(`ts-crap coverage-run: no coverage published; reporter output (if any) is in ${directory}`);
@@ -223,7 +266,7 @@ async function main() {
   const scan = scannerArguments({ root, output, config });
   console.error(`ts-crap coverage-run: native coverage written to ${output}`);
   if (!options.scan) {
-    console.log(['ts-crap', ...scan].map(shellQuote).join(' '));
+    console.log(formatCommand(['ts-crap', ...scan]));
     return;
   }
   process.exitCode = await run(scanner, scan);

@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
-  detectFramework, findPackage, frameworkArguments, frameworkBinary, helperVersion,
-  parseArguments, reportName, scannerArguments, shellQuote, UsageError,
+  checkExtraArguments, detectFramework, findPackage, formatCommand, frameworkArguments, frameworkBinary,
+  helperVersion, parseArguments, reportName, scannerArguments, shellQuote, UsageError, vitestProvider,
 } from '../scripts/coverage-run.mjs';
 
 const helper = fileURLToPath(new URL('../scripts/coverage-run.mjs', import.meta.url));
@@ -33,6 +33,7 @@ import path from 'node:path';
 const args = process.argv.slice(2);
 fs.writeFileSync('framework-args.json', JSON.stringify(args));
 if (process.env.FAKE_EXIT) process.exit(Number(process.env.FAKE_EXIT));
+if (process.env.FAKE_SLEEP) await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_SLEEP)));
 const value = prefix => args.find(arg => arg.startsWith(prefix))?.slice(prefix.length);
 const directory = value('--coverage.reportsDirectory=') ?? value('--coverageDirectory=');
 const reporter = value('--coverage.reporter=') ?? value('--coverageReporters=');
@@ -100,6 +101,35 @@ test('reporter and directory flags match each framework, provider and format', (
   assert.deepEqual(frameworkArguments('jest', { provider: 'v8', format: 'lcov', directory: '/d', extra: ['--ci'] }),
     ['--coverage', '--coverageReporters=lcovonly', '--coverageDirectory=/d', '--coverageProvider=v8', '--ci']);
   assert.equal(reportName('json'), 'coverage-final.json');
+  assert.throws(() => frameworkArguments('jest', { format: 'json', directory: '/d', extra: ['--coverageDirectory=/x'] }), UsageError);
+});
+
+test('extra arguments cannot redirect, replace or disable the private reporter', () => {
+  for (const argument of ['--coverage.reporter=text', '--coverage.reportsDirectory', '/x', '--coverage.reports-directory=/x',
+    '--coverage.provider=v8', '--coverage=false', '--no-coverage', '--coverage.enabled=false']) {
+    if (!argument.startsWith('-')) continue;
+    assert.throws(() => checkExtraArguments('vitest', [argument]), /would change the coverage reporter/, argument);
+  }
+  for (const argument of ['--coverageReporters=text', '--coverage-directory=/x', '--coverageProvider=v8',
+    '--collectCoverage=false', '--no-coverage', '--coverage=false', '--CoverageDirectory', '-coverageDirectory=x']) {
+    assert.throws(() => checkExtraArguments('jest', [argument]), /would change the coverage reporter/, argument);
+  }
+  // Values, test filters and unrelated coverage options remain allowed.
+  checkExtraArguments('vitest', ['--config', 'vitest.ci.ts', '--coverage.include=src/**', 'coverage', '-t', 'name']);
+  checkExtraArguments('jest', ['--runInBand', '--collectCoverageFrom=src/**', '--coverageThreshold={}', 'coverageDirectory']);
+});
+
+test('the Vitest provider is always one that is installed', async t => {
+  const none = await project(t);
+  assert.throws(() => vitestProvider(none, undefined, '5.0.0'), /needs @vitest\/coverage-v8 or @vitest\/coverage-istanbul.*@vitest\/coverage-v8@5\.0\.0/);
+  assert.throws(() => vitestProvider(none, 'istanbul'), /--provider istanbul needs @vitest\/coverage-istanbul; install it with npm install --save-dev @vitest\/coverage-istanbul$/);
+  const v8 = await project(t, { 'node_modules/@vitest/coverage-v8/package.json': '{}' });
+  assert.equal(vitestProvider(v8, undefined), 'v8', 'the only installed provider is selected explicitly');
+  assert.equal(vitestProvider(v8, 'v8'), 'v8');
+  assert.throws(() => vitestProvider(v8, 'istanbul'), /--provider istanbul needs/);
+  const both = await project(t, { 'node_modules/@vitest/coverage-v8/package.json': '{}', 'node_modules/@vitest/coverage-istanbul/package.json': '{}' });
+  assert.equal(vitestProvider(both, undefined), undefined, 'with both installed, the configured provider is kept');
+  assert.equal(vitestProvider(both, 'istanbul'), 'istanbul');
   assert.equal(reportName('lcov'), 'lcov.info');
 });
 
@@ -121,6 +151,8 @@ test('scanner command and quoting are copy-paste safe', () => {
   assert.equal(shellQuote("/tmp/it's here", 'linux'), `'/tmp/it'\\''s here'`);
   assert.equal(shellQuote('C:\\Users\\a b\\x.json', 'win32'), '"C:\\Users\\a b\\x.json"');
   assert.equal(shellQuote('C:\\tmp\\x.json', 'win32'), 'C:\\tmp\\x.json');
+  assert.equal(formatCommand(['ts-crap', '--root', 'C:\\Users\\Jane Doe\\app'], 'win32'), 'ts-crap --root "C:\\Users\\Jane Doe\\app"');
+  assert.equal(formatCommand(['ts-crap', '--root', '/home/Jane Doe'], 'linux'), "ts-crap --root '/home/Jane Doe'");
   assert.deepEqual(scannerArguments({ root: '/r', output: '/o.json' }), ['--root', '/r', '--coverage', '/o.json', '--require-coverage']);
   assert.deepEqual(scannerArguments({ root: '/r', output: '/o', config: '/c.json' }).slice(-2), ['--config', '/c.json']);
 });
@@ -128,7 +160,7 @@ test('scanner command and quoting are copy-paste safe', () => {
 test('helper version comes from bundled metadata, else the checkout manifest', async t => {
   const cargo = await fs.readFile(path.join(repository, 'Cargo.toml'), 'utf8');
   assert.equal(helperVersion(), /^version = "([^"]+)"/m.exec(cargo)[1]);
-  const bundle = await project(t, { 'helpers/version.json': '{"version":"1.2.3","scannerVersion":"1.2.3"}' });
+  const bundle = await project(t, { 'helpers/version.json': '{"version":"0.0.1","scannerVersion":"1.2.3"}' });
   assert.equal(helperVersion(path.join(bundle, 'helpers')), '1.2.3');
   const nothing = await project(t, { 'helpers/x': '' });
   assert.equal(helperVersion(path.join(nothing, 'helpers')), null);
@@ -147,14 +179,16 @@ for (const [framework, configName] of [['vitest', 'vitest.config.mts'], ['jest',
       const command = result.stdout.trim().split('\n').at(-1);
       assert.match(command, /^ts-crap --root .+ --coverage .+native-coverage\.json --require-coverage$/);
       const output = /native coverage written to (.+)$/m.exec(result.stderr)[1];
-      assert(command.includes(output), 'printed command names the published coverage');
+      assert.equal(command, formatCommand(['ts-crap', ...scannerArguments({ root, output })]));
       const native = JSON.parse(await fs.readFile(output, 'utf8'));
       assert.deepEqual(native.files['src/a.ts'].lines, { 2: 1 });
       const args = JSON.parse(await fs.readFile(path.join(root, 'framework-args.json'), 'utf8'));
       assert.equal(args.at(-1), '--extra-flag');
       assert(args.includes(format === 'json' ? (framework === 'vitest' ? '--coverage.reporter=json' : '--coverageReporters=json')
         : (framework === 'vitest' ? '--coverage.reporter=lcovonly' : '--coverageReporters=lcovonly')));
-      assert.match(result.stderr, new RegExp(`${framework} 9\\.9\\.9 \\(configured provider, ${format}\\)`));
+      const provider = framework === 'vitest' ? 'istanbul' : 'configured provider';
+      assert.match(result.stderr, new RegExp(`${framework} 9\\.9\\.9 \\(${provider}, ${format}\\)`));
+      assert.equal(args.includes('--coverage.provider=istanbul'), framework === 'vitest', 'the only installed Vitest provider is explicit');
       await fs.rm(path.dirname(output), { recursive: true });
     });
   }
@@ -219,7 +253,7 @@ test('missing frameworks, providers, roots and ambiguous projects fail before te
   await fs.rm(path.join(noProvider, 'node_modules/@vitest'), { recursive: true });
   const prompt = runHelper(noProvider, ['--framework', 'vitest']);
   assert.equal(prompt.status, 2);
-  assert.match(prompt.stderr, /Vitest coverage needs @vitest\/coverage-v8; install it/);
+  assert.match(prompt.stderr, /Vitest coverage needs @vitest\/coverage-v8 or @vitest\/coverage-istanbul/);
   await assert.rejects(fs.access(path.join(noProvider, 'framework-args.json')), { code: 'ENOENT' });
   const both = await project(t, { 'vitest.config.ts': '', 'jest.config.js': '' });
   assert.match(runHelper(both, []).stderr, /pass --framework vitest or --framework jest/);
@@ -256,7 +290,42 @@ test('--scan runs the matching scanner and returns its gate exit code', { skip: 
   await fs.writeFile(path.join(root, 'ts-crap.json'), '{"version":1,"threshold":1}\n');
   const gate = runHelper(root, ['--framework', 'vitest', '--scan', '--scanner', scanner], { FAKE_COUNT: '0' });
   assert.equal(gate.status, 1, gate.stderr);
+  await fs.rm(path.join(root, 'ts-crap.json'));
   await fs.writeFile(path.join(root, 'src/b.ts'), 'export function g() {\n  return 2;\n}\n');
   const incomplete = runHelper(root, ['--framework', 'vitest', '--scan', '--scanner', scanner]);
   assert.equal(incomplete.status, 1, 'files without coverage records fail --require-coverage');
+});
+
+test('an explicit output parent is created before tests run', async t => {
+  const root = await withFramework(t, 'jest');
+  const output = path.join(root, 'new', 'nested', 'native.json');
+  const result = runHelper(root, ['--framework', 'jest', '--output', output]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(await fs.readFile(output, 'utf8')).files['src/a.ts'].lines, { 2: 1 });
+});
+
+test('extra arguments that would redirect the reporter fail before tests run', async t => {
+  const root = await withFramework(t, 'vitest');
+  const result = runHelper(root, ['--framework', 'vitest', '--', '--coverage.reportsDirectory=coverage']);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /would change the coverage reporter, directory or provider/);
+  await assert.rejects(fs.access(path.join(root, 'framework-args.json')), { code: 'ENOENT' });
+});
+
+test('termination is forwarded so a cancelled run never publishes', { skip: process.platform === 'win32' && 'POSIX signals' }, async t => {
+  const root = await withFramework(t, 'jest');
+  const output = path.join(root, 'native.json');
+  const child = spawn(process.execPath, [helper, '--root', root, '--framework', 'jest', '--output', output], {
+    cwd: root, env: { ...process.env, FAKE_SLEEP: '2000' }, stdio: 'ignore',
+  });
+  const exited = new Promise(resolve => child.on('exit', code => resolve(code)));
+  // Wait until the framework is running inside the importer, then cancel the wrapper.
+  for (let i = 0; i < 200; i++) {
+    try { await fs.access(path.join(root, 'framework-args.json')); break; }
+    catch { await new Promise(resolve => setTimeout(resolve, 25)); }
+  }
+  child.kill('SIGTERM');
+  assert.equal(await exited, 2);
+  await new Promise(resolve => setTimeout(resolve, 3000));
+  await assert.rejects(fs.access(output), { code: 'ENOENT' });
 });

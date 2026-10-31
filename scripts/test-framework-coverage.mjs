@@ -53,6 +53,10 @@ try {
     process.exitCode = result.status ?? 2;
   `);
 
+  // The fixture has both configurations, so detection must refuse to guess.
+  const ambiguous = run(process.execPath, [path.join(repository, 'scripts/coverage-run.mjs'), '--root', root], 2);
+  assert.match(ambiguous.stderr, /Both Vitest and Jest configuration found.*pass --framework/);
+
   for (const [framework, provider] of [['jest', 'babel'], ['vitest', 'istanbul'], ['vitest', 'v8']]) {
     const mutationSource = framework === 'jest'
       ? 'packages/core/src/price.ts' : 'packages/ui/src/panels/Résumé.tsx';
@@ -112,6 +116,16 @@ try {
       const price = fullReport.functions.find(f => f.name === 'price');
       assert.equal(price.complexity, 4, label);
       assert.equal(price.crap, 4, label);
+
+      // The one-step command must produce byte-identical native coverage.
+      const oneStep = path.join(await fs.mkdtemp(path.join(root, 'coverage', `${framework}-one-step-`)), 'native.json');
+      const runResult = run(process.execPath, [path.join(repository, 'scripts/coverage-run.mjs'),
+        '--framework', framework, '--provider', provider === 'babel' ? 'istanbul' : provider,
+        '--format', format === 'istanbul' ? 'json' : 'lcov', '--root', root, '--output', oneStep, '--',
+        ...(framework === 'jest' ? ['--config', 'jest.config.cjs', '--runInBand'] : ['--config', 'vitest.config.mjs'])],
+      0, { FIXTURE_COVERAGE_PROVIDER: provider });
+      assert.match(runResult.stdout, /(?:^|\n)ts-crap --root .* --coverage .* --require-coverage\n$/, label);
+      assert.deepEqual(await fs.readFile(oneStep), await fs.readFile(full.output), `${label}: one-step command`);
 
       const partial = await collect('partial', true);
       const partialReport = JSON.parse(scan(partial.output, 1).stdout);

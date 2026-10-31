@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `coverage-run.mjs`, a one-step Vitest/Jest coverage command in the helper
+  bundle. It detects the framework from config filenames, uses a fresh private
+  run directory, imports the result, and prints or runs (`--scan`) the matching
+  `ts-crap` command after an exact helper/scanner version check.
+
 ## 2.2.1 — 2026-10-30
 
 First published release containing the 2.2.0 changes below.

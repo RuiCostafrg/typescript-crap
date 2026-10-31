@@ -63,6 +63,23 @@ def verify(archive, scanner):
             imported = json.loads(run(scan + ['--coverage', str(output)], root))
             if imported['functions'][0]['coverage'] != 1:
                 raise ValueError('Imported bundle coverage was incomplete')
+        # The installed one-step command checks version.json against the scanner.
+        framework = project / 'node_modules' / 'vitest'
+        framework.mkdir(parents=True)
+        (framework / 'package.json').write_text(json.dumps({'name': 'vitest', 'version': '0.0.0', 'bin': {'vitest': './vitest.mjs'}}))
+        (framework / 'vitest.mjs').write_text(
+            "import fs from 'node:fs'; import path from 'node:path';\n"
+            "const dir = process.argv.find(a => a.startsWith('--coverage.reportsDirectory=')).split('=').slice(1).join('=');\n"
+            "fs.mkdirSync(dir, { recursive: true });\n"
+            "fs.writeFileSync(path.join(dir, 'coverage-final.json'), JSON.stringify({ 'a.mts': { path: 'a.mts', "
+            "statementMap: { 0: { start: { line: 2, column: 2 } } }, s: { 0: 1 } } }));\n")
+        (project / 'vitest.config.mjs').write_text('export default {};\n')
+        provider = project / 'node_modules' / '@vitest' / 'coverage-istanbul'
+        provider.mkdir(parents=True)
+        (provider / 'package.json').write_text('{}')
+        output = run(['node', str(helpers / 'coverage-run.mjs'), '--root', str(project), '--scan', '--scanner', str(scanner)], root)
+        if 'a.mts' not in output:
+            raise ValueError('Installed one-step command did not scan the project')
         source.write_text('export function f() {\n  return 2;\n}\n')
         run(scan + ['--coverage', str(native)], root, expected=2)
         # Prove the distributed loader hook retains its source-integrity guard.
@@ -73,7 +90,7 @@ def verify(archive, scanner):
              '--output', str(rejected), '--', 'node', 'mutate.mjs'], root, expected=1)
         if rejected.exists():
             raise ValueError('Changed source unexpectedly published coverage')
-    print('Installed helper bundle: native, Istanbul, LCOV, stale-source and loader integrity checks passed')
+    print('Installed helper bundle: native, Istanbul, LCOV, one-step run, stale-source and loader integrity checks passed')
 
 
 if __name__ == '__main__':

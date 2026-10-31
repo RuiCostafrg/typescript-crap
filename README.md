@@ -478,6 +478,15 @@ reviewed policy inputs, not authenticated proof of past code quality.
 
 ### Istanbul and LCOV collection
 
+For Vitest and Jest, the one-step helper chooses fresh paths and reporter flags
+for you (see the [helper guide](docs/COVERAGE_HELPERS.md#one-step-vitest-or-jest-coverage)):
+
+```sh
+node scripts/coverage-run.mjs --framework vitest --scan   # or --framework jest
+```
+
+The manual importer commands below remain supported.
+
 Jest/nyc `coverage-final.json`, Vitest's Istanbul reporter, and LCOV line records
 can be collected through the dependency-free Node adapter. Use fresh input/output
 paths (the adapter rejects existing destinations). Paths passed on the command

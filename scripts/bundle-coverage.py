@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NAME = 'ts-crap-coverage-helpers.zip'
 PREFIX = 'ts-crap-coverage-helpers/'
 MODULES = (
-    'coverage.mjs', 'coverage-hook.mjs', 'coverage-lines.mjs',
+    'coverage.mjs', 'coverage-hook.mjs', 'coverage-lines.mjs', 'coverage-run.mjs',
     'coverage-publish.mjs', 'coverage-snapshot.mjs', 'import-coverage.mjs',
     'strict-json.mjs',
 )

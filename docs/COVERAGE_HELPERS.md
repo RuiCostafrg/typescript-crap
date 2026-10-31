@@ -54,6 +54,39 @@ It does not transpile TSX or remap source maps. It snapshots source before tests
 and verifies loaded TypeScript through the bundled loader hook. Failed collection
 preserves an existing report; always check the command's exit status before scanning.
 
+## One-step Vitest or Jest coverage
+
+`coverage-run.mjs` wraps the importer below for Vitest and Jest. It finds the
+framework installed in the project (or a parent workspace), creates a new
+private run directory, adds the reporter and directory flags, imports the
+result and prints the matching scanner command:
+
+```sh
+node "/tools/ts-crap-coverage-helpers/coverage-run.mjs" --root /project
+ts-crap --root /project --coverage /tmp/ts-crap-run-AbC123/native-coverage.json --require-coverage
+```
+
+Add `--scan` to run that scanner command directly. The helper's exit status is
+then the scanner's: 0 pass, 1 quality gate, 2 error. Before any test runs,
+`--scan` checks that `ts-crap --version` (or `--scanner PATH`) matches this
+bundle's `version.json` exactly.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--framework vitest\|jest\|auto` | `auto` | `auto` looks for `vitest.config.*`, `jest.config.*` or a `jest` key in `package.json`. It never evaluates config files. If both frameworks match it stops and asks for `--framework`. |
+| `--provider istanbul\|v8` | project config | Vitest `--coverage.provider`; Jest `--coverageProvider` (`istanbul` means Jest's `babel`). |
+| `--format json\|lcov` | `json` | Reporter: Istanbul `json` or `lcovonly`. JSON keeps default-argument evidence. |
+| `--root DIR` | `.` | Project root; the framework runs here. |
+| `--output FILE` | inside the run directory | Native coverage path. It must not exist yet; the run directory is removed after success. |
+| `--config FILE` | — | Alternative ts-crap policy path. It is protected from publication and passed to the scanner. |
+| `--scan`, `--scanner PATH` | off, `ts-crap` | Run the scanner after a successful import. |
+| `-- ARGS` | — | Extra framework arguments, for example `-- --config vitest.ci.ts` or `-- --runInBand`. |
+
+The importer's guarantees still apply. Every run uses fresh reporter and native
+paths, source is hashed before the tests and checked after them, failing tests
+publish nothing, and the project configuration is never overwritten. On failure
+the run directory is kept and its path is printed for inspection.
+
 ## Collect Istanbul or LCOV
 
 For transpiled TypeScript/TSX, run your existing reporter through the importer:

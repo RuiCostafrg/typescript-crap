@@ -217,7 +217,7 @@ review for little benefit.
 | Priority | Channel | Why |
 | --- | --- | --- |
 | 1 | **npm package** (A) | Fits how TypeScript users install and pin dev tools, and works in CI with no extra setup. It also keeps the helpers and scanner on the same version and is the home for the Vitest/Jest one-step command. |
-| 2 | **Shell installer hardening** (B) | Cheap. Version-pinned and verifiable installs. The installer's GNU path and musl fallback are tested on Ubuntu, Debian and Alpine; the musl archives are tested across the container matrix. |
+| 2 | **Shell installer hardening** (B) | Cheap. Version-pinned and verifiable installs. The installer's GNU path is tested on Ubuntu 26.04 and its musl fallback on Ubuntu 24.04, Debian 12 and Alpine 3.22; the musl archives are tested across the container matrix. |
 | 3 | **GitHub Action** (C) | One-line, verified CI setup for non-Node pipelines. |
 | 4 | **crates.io** (D) | Already on the roadmap; cheap. |
 | Later | GHCR image (H), AUR/Nix (G), RPM (F), APT repository (E) | Add when users ask for them. |

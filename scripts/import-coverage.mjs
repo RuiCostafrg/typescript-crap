@@ -105,7 +105,9 @@ async function convert(root, files, records) {
         // map. Without one, a TypeScript record is simply outside the snapshot.
         // Only a missing generated file itself; a missing sidecar map keeps its own error.
         const sourceMissing = error.code === 'ENOENT' && path.resolve(error.path ?? '') === filename;
-        if (!record.map && supported(filename) && (sourceMissing || error.missingSourceMap)) {
+        // Declaration files are TypeScript too, just never collected.
+        const typescript = supported(filename) || /\.d\.[cm]?ts$/.test(filename);
+        if (!record.map && typescript && (sourceMissing || error.missingSourceMap)) {
           throw new Error(`Unmappable source outside collected TypeScript snapshot: ${record.path}; ${snapshotHint(root, filename)}`);
         }
         throw error;

@@ -177,3 +177,12 @@ test('missing sources and missing sidecar maps get their own diagnostics', async
   assert.doesNotMatch(sidecar.stderr, /outside collected TypeScript snapshot/);
 });
 
+test('a declaration-file record gets the snapshot diagnostic, not generated-JavaScript advice', async t => {
+  const root = await project(t, { ...source, 'types.d.ts': 'export declare const x: number;\n' });
+  const result = collect(root, { format: 'lcov', raw: 'SF:types.d.ts\nDA:1,1\nend_of_record\n' });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Unmappable source outside collected TypeScript snapshot: .*types\.d\.ts; /);
+  assert.match(result.stderr, EXCLUDED);
+  assert.doesNotMatch(result.stderr, /generated JavaScript/);
+});
+

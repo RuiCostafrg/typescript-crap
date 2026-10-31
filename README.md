@@ -56,14 +56,17 @@ curl --proto '=https' --tlsv1.2 -LsSf -o "$installer_dir/ts-crap-installer.sh" \
 gh attestation verify "$installer_dir/ts-crap-installer.sh" --repo RuiCostafrg/typescript-crap \
   --signer-workflow RuiCostafrg/typescript-crap/.github/workflows/release.yml \
   --source-ref "refs/tags/v$version" --deny-self-hosted-runners &&
+command -v sha256sum >/dev/null &&
 sh "$installer_dir/ts-crap-installer.sh"
 ```
 
 Each step runs only if the previous one succeeded, so a missing `gh` or a
-failed verification stops before the installer runs.
-
-The verified installer then checks the downloaded archive against its embedded
-checksum. In CI, set `TS_CRAP_UNMANAGED_INSTALL` to a directory to install there
+failed verification stops before the installer runs. The verified installer
+then checks the downloaded archive against its embedded checksum, but only
+when `sha256sum` is available: without it, the installer prints
+`skipping sha256 checksum verification` and installs anyway. The
+`command -v sha256sum` step stops the sequence in that case. On macOS without
+`sha256sum`, use Homebrew or the manual archive download instead. In CI, set `TS_CRAP_UNMANAGED_INSTALL` to a directory to install there
 without editing shell profiles or writing an install receipt, then add that
 directory to `PATH`. On Linux the installer uses the GNU build when the system
 glibc is 2.43 or newer (Ubuntu 26.04), and otherwise the static musl build.

@@ -111,8 +111,10 @@ fields.
 This already exists. The verified Linux boundary is the release container
 matrix: Ubuntu, Debian, Alpine and Fedora, on x86-64 and ARM64. That matrix
 tests the static musl archives and `.deb` packages directly. The installer
-itself is tested on Ubuntu 26.04 (GNU path), so its glibc-version fallback to
-musl is cargo-dist behaviour that isn't yet exercised in CI. Other
+itself is tested on Ubuntu 26.04 (GNU path), and installation CI also runs the
+published, attested installer on Ubuntu 24.04 and in Debian 12 and Alpine 3.22
+containers (musl fallback), comparing installed bytes with the attested
+archive. Other
 distributions, and kernels older than the hosted runners', are expected to work
 with the static musl build but are not verified. Improvements:
 
@@ -215,7 +217,7 @@ review for little benefit.
 | Priority | Channel | Why |
 | --- | --- | --- |
 | 1 | **npm package** (A) | Fits how TypeScript users install and pin dev tools, and works in CI with no extra setup. It also keeps the helpers and scanner on the same version and is the home for the Vitest/Jest one-step command. |
-| 2 | **Shell installer hardening** (B) | Cheap. Version-pinned and verifiable installs. The installer is tested on Ubuntu 26.04; the musl archives it falls back to are tested across the container matrix. |
+| 2 | **Shell installer hardening** (B) | Cheap. Version-pinned and verifiable installs. The installer's GNU path and musl fallback are tested on Ubuntu, Debian and Alpine; the musl archives are tested across the container matrix. |
 | 3 | **GitHub Action** (C) | One-line, verified CI setup for non-Node pipelines. |
 | 4 | **crates.io** (D) | Already on the roadmap; cheap. |
 | Later | GHCR image (H), AUR/Nix (G), RPM (F), APT repository (E) | Add when users ask for them. |

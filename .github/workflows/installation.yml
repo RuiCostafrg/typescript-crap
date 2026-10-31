@@ -129,7 +129,10 @@ jobs:
             --signer-workflow RuiCostafrg/typescript-crap/.github/workflows/release.yml \
             --source-ref "refs/tags/v$version" --deny-self-hosted-runners
           install_dir="$RUNNER_TEMP/ts crap pinned/bin"
-          TS_CRAP_UNMANAGED_INSTALL="$install_dir" sh "$installer_dir/ts-crap-installer.sh"
+          command -v sha256sum
+          TS_CRAP_UNMANAGED_INSTALL="$install_dir" sh "$installer_dir/ts-crap-installer.sh" 2>&1 | tee "$RUNNER_TEMP/installer.log"
+          # The installer skips its checksum, without failing, when sha256sum is missing.
+          if grep -q 'skipping sha256' "$RUNNER_TEMP/installer.log"; then exit 1; fi
           test "$("$install_dir/ts-crap" --version)" = "ts-crap $version"
           "$install_dir/ts-crap" --root examples/shop --threshold 20
           # The installed bytes must be the attested archive for the expected target.
@@ -190,7 +193,11 @@ jobs:
               else
                 apt-get update -qq && apt-get install -qq -y --no-install-recommends ca-certificates curl xz-utils >/dev/null
               fi
-              TS_CRAP_UNMANAGED_INSTALL=/install sh /installer/ts-crap-installer.sh
+              command -v sha256sum
+              TS_CRAP_UNMANAGED_INSTALL=/install sh /installer/ts-crap-installer.sh > /install/installer.log 2>&1 \
+                || { cat /install/installer.log; exit 1; }
+              cat /install/installer.log
+              if grep -q "skipping sha256" /install/installer.log; then exit 1; fi
               /install/ts-crap --version
               /install/ts-crap --root /project --threshold 20'
           tar -xf "$work/expected/ts-crap-$expected.tar.xz" -C "$work/expected"

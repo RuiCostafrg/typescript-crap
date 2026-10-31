@@ -210,11 +210,13 @@ const FORWARDED = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 export function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: 'inherit', ...options });
-    const forwards = FORWARDED.map(signal => [signal, () => { child.kill(signal); }]);
+    let cancelled = false;
+    const forwards = FORWARDED.map(signal => [signal, () => { cancelled = true; child.kill(signal); }]);
     for (const [signal, forward] of forwards) process.on(signal, forward);
     const stop = () => { for (const [signal, forward] of forwards) process.off(signal, forward); };
     child.on('error', error => { stop(); reject(error); });
-    child.on('exit', (code, signal) => { stop(); resolve(signal ? 2 : code); });
+    // After cancellation never report success, so no scan follows a cancelled run.
+    child.on('exit', (code, signal) => { stop(); resolve(cancelled || signal ? 2 : code); });
   });
 }
 

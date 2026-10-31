@@ -13,8 +13,9 @@
 ### Changed
 
 - `import-coverage.mjs` forwards SIGINT, SIGTERM and SIGHUP to the test command
-  and waits for it to stop, so cancelling an import also stops the tests. Exit
-  codes are unchanged (2), and nothing is published.
+  and waits for it to stop, so cancelling an import also stops the tests. A
+  cancelled import never publishes, even if the test command then exits 0. The
+  exit code stays 2.
 
 ## 2.2.1 — 2026-10-30
 

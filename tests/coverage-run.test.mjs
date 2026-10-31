@@ -33,24 +33,32 @@ import path from 'node:path';
 const args = process.argv.slice(2);
 fs.writeFileSync('framework-args.json', JSON.stringify(args));
 if (process.env.FAKE_EXIT) process.exit(Number(process.env.FAKE_EXIT));
-if (process.env.FAKE_SLEEP) {
-  fs.writeFileSync('framework-pid', String(process.pid));
-  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
-    process.on(signal, () => { fs.writeFileSync('framework-signal', signal); process.exit(1); });
-  }
-  await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_SLEEP)));
-}
 const value = prefix => args.find(arg => arg.startsWith(prefix))?.slice(prefix.length);
 const directory = value('--coverage.reportsDirectory=') ?? value('--coverageDirectory=');
 const reporter = value('--coverage.reporter=') ?? value('--coverageReporters=');
 const count = Number(process.env.FAKE_COUNT ?? 1);
-if (!process.env.FAKE_SKIP_REPORT) {
+function report() {
   fs.mkdirSync(directory, { recursive: true });
   if (reporter === 'json') {
     fs.writeFileSync(path.join(directory, 'coverage-final.json'), JSON.stringify({ 'src/a.ts': {
       path: 'src/a.ts', statementMap: { 0: { start: { line: 2, column: 2 } } }, s: { 0: count } } }));
   } else fs.writeFileSync(path.join(directory, 'lcov.info'), 'SF:src/a.ts\\nDA:2,' + count + '\\nend_of_record\\n');
 }
+if (process.env.FAKE_SLEEP) {
+  // FAKE_SIGNAL_EXIT=0 models a framework that writes a report during cleanup and succeeds.
+  const exit = Number(process.env.FAKE_SIGNAL_EXIT ?? 1);
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(signal, () => {
+      fs.writeFileSync('framework-signal', signal);
+      if (exit === 0) report();
+      process.exit(exit);
+    });
+  }
+  // Ready only after the handlers exist, so a signal can never arrive unhandled.
+  fs.writeFileSync('framework-pid', String(process.pid));
+  await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_SLEEP)));
+}
+if (!process.env.FAKE_SKIP_REPORT) report();
 `;
 
 async function withFramework(t, framework, files = {}) {
@@ -335,12 +343,12 @@ test('extra arguments that would redirect the reporter fail before tests run', a
   await assert.rejects(fs.access(path.join(root, 'framework-args.json')), { code: 'ENOENT' });
 });
 
-for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
-  test(`${signal} reaches the framework, which stops, and nothing is published`, { skip: process.platform === 'win32' && 'POSIX signals' }, async t => {
+for (const [signal, cleanupExit] of [['SIGINT', '1'], ['SIGTERM', '1'], ['SIGHUP', '1'], ['SIGINT', '0'], ['SIGTERM', '0']]) {
+  test(`${signal} reaches the framework, which stops, and nothing is published (cleanup exit ${cleanupExit})`, { skip: process.platform === 'win32' && 'POSIX signals' }, async t => {
     const root = await withFramework(t, 'jest');
     const output = path.join(root, 'native.json');
     const child = spawn(process.execPath, [helper, '--root', root, '--framework', 'jest', '--output', output], {
-      cwd: root, env: { ...process.env, FAKE_SLEEP: '5000' }, stdio: 'ignore',
+      cwd: root, env: { ...process.env, FAKE_SLEEP: '5000', FAKE_SIGNAL_EXIT: cleanupExit }, stdio: 'ignore',
     });
     const exited = new Promise(resolve => child.on('exit', code => resolve(code)));
     // Wait until the framework is running inside the importer, then cancel the wrapper only.

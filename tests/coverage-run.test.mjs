@@ -14,6 +14,15 @@ const helper = fileURLToPath(new URL('../scripts/coverage-run.mjs', import.meta.
 const repository = fileURLToPath(new URL('../', import.meta.url));
 // cargo test passes the scanner built from this checkout; standalone runs skip scans.
 const scanner = process.env.TS_CRAP_SCANNER;
+// Lookup intentionally walks up for hoisted installs, so "not installed" cases only
+// hold when nothing above the temporary directory already provides Vitest.
+const temporaryRoot = await fs.realpath(os.tmpdir());
+const ancestorVitest = ['vitest', '@vitest/coverage-v8', '@vitest/coverage-istanbul']
+  .map(name => findPackage(temporaryRoot, name)?.directory).find(Boolean);
+function unlessAncestorVitest(t) {
+  if (ancestorVitest) t.diagnostic(`skipping not-installed assertions: ${ancestorVitest} is above the temporary directory`);
+  return !ancestorVitest;
+}
 
 async function project(t, files = {}) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'ts-crap run ü-')));
@@ -98,10 +107,10 @@ test('framework detection reads filenames and package.json without evaluating co
     assert.equal(detectFramework(await project(t, { [name]: 'throw 1', ...installed })), 'vitest', `Vite config with Vitest: ${name}`);
     // A plain Vite app (no Vitest installed) is not a Vitest signal.
     const plain = await project(t, { [name]: 'throw 1' });
-    assert.throws(() => detectFramework(plain), /No Vitest or Jest configuration/);
+    if (unlessAncestorVitest(t)) assert.throws(() => detectFramework(plain), /No Vitest or Jest configuration/);
   }
   const viteApp = await project(t, { 'vite.config.ts': '', 'package.json': '{"jest":{}}' });
-  assert.equal(detectFramework(viteApp), 'jest', 'Vite app tested with Jest');
+  if (unlessAncestorVitest(t)) assert.equal(detectFramework(viteApp), 'jest', 'Vite app tested with Jest');
   const hoisted = await project(t, { 'node_modules/vitest/package.json': '{}', 'packages/web/vite.config.ts': '' });
   assert.equal(detectFramework(path.join(hoisted, 'packages/web')), 'vitest', 'hoisted Vitest counts as installed');
   const viteJest = await project(t, { 'vite.config.js': '', 'jest.config.ts': '', ...installed });
@@ -155,6 +164,7 @@ test('extra arguments cannot redirect, replace or disable the private reporter',
 });
 
 test('the Vitest provider is always one that is installed', async t => {
+  if (!unlessAncestorVitest(t)) return;
   const none = await project(t);
   assert.throws(() => vitestProvider(none, undefined, '5.0.0'), /needs @vitest\/coverage-v8 or @vitest\/coverage-istanbul.*@vitest\/coverage-v8@5\.0\.0/);
   assert.throws(() => vitestProvider(none, 'istanbul'), /--provider istanbul needs @vitest\/coverage-istanbul; install it with npm install --save-dev @vitest\/coverage-istanbul$/);
@@ -174,7 +184,7 @@ test('installed frameworks resolve from hoisted ancestors and report clear insta
   assert.equal(frameworkBinary(nested, 'jest').path, path.join(root, 'node_modules/jest/bin/jest.js'));
   assert.equal(frameworkBinary(nested, 'jest').version, '9.9.9');
   assert.equal(findPackage(nested, 'missing-package-for-test'), null);
-  assert.throws(() => frameworkBinary(nested, 'vitest'), /Cannot find vitest.*npm install --save-dev vitest/);
+  if (unlessAncestorVitest(t)) assert.throws(() => frameworkBinary(nested, 'vitest'), /Cannot find vitest.*npm install --save-dev vitest/);
   const binless = await project(t, { 'node_modules/jest/package.json': '{"name":"jest"}' });
   assert.throws(() => frameworkBinary(binless, 'jest'), /declares no jest executable/);
   const stringBin = await project(t, { 'node_modules/vitest/package.json': '{"bin":"./cli.mjs"}' });
@@ -276,9 +286,11 @@ test('project configuration is protected and failures keep exit codes without pu
 
 test('missing frameworks, providers, roots and ambiguous projects fail before tests run', async t => {
   const empty = await project(t, { 'vitest.config.ts': '' });
-  const missing = runHelper(empty, []);
-  assert.equal(missing.status, 2);
-  assert.match(missing.stderr, /Cannot find vitest installed/);
+  if (unlessAncestorVitest(t)) {
+    const missing = runHelper(empty, []);
+    assert.equal(missing.status, 2);
+    assert.match(missing.stderr, /Cannot find vitest installed/);
+  }
   const vitest = await withFramework(t, 'vitest');
   const provider = runHelper(vitest, ['--framework', 'vitest', '--provider', 'v8']);
   assert.equal(provider.status, 2);
@@ -288,12 +300,14 @@ test('missing frameworks, providers, roots and ambiguous projects fail before te
   await fs.writeFile(path.join(vitest, 'node_modules/@vitest/coverage-v8/package.json'), '{}');
   const installed = runHelper(vitest, ['--framework', 'vitest', '--provider', 'v8']);
   assert.equal(installed.status, 0, installed.stderr);
-  const noProvider = await withFramework(t, 'vitest');
-  await fs.rm(path.join(noProvider, 'node_modules/@vitest'), { recursive: true });
-  const prompt = runHelper(noProvider, ['--framework', 'vitest']);
-  assert.equal(prompt.status, 2);
-  assert.match(prompt.stderr, /Vitest coverage needs @vitest\/coverage-v8 or @vitest\/coverage-istanbul/);
-  await assert.rejects(fs.access(path.join(noProvider, 'framework-args.json')), { code: 'ENOENT' });
+  if (unlessAncestorVitest(t)) {
+    const noProvider = await withFramework(t, 'vitest');
+    await fs.rm(path.join(noProvider, 'node_modules/@vitest'), { recursive: true });
+    const prompt = runHelper(noProvider, ['--framework', 'vitest']);
+    assert.equal(prompt.status, 2);
+    assert.match(prompt.stderr, /Vitest coverage needs @vitest\/coverage-v8 or @vitest\/coverage-istanbul/);
+    await assert.rejects(fs.access(path.join(noProvider, 'framework-args.json')), { code: 'ENOENT' });
+  }
   const both = await project(t, { 'vitest.config.ts': '', 'jest.config.js': '' });
   assert.match(runHelper(both, []).stderr, /pass --framework vitest or --framework jest/);
   const root = runHelper(path.join(empty, 'absent'), [], {}, empty);

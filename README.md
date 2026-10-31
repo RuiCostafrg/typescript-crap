@@ -36,6 +36,41 @@ installs to `~/.local/bin`. Follow its
 PATH instructions, or open a new terminal, then run `ts-crap --help`.
 Run the same installer again to update to the latest release.
 
+The `latest` URL changes with every release. For CI and other reproducible
+installs, pin a version instead. Each release's installer installs only that
+release and embeds the SHA-256 of every archive it can download:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/RuiCostafrg/typescript-crap/releases/download/v2.2.1/ts-crap-installer.sh | sh
+```
+
+To check the installer before running it, download it, verify its
+[build provenance](SECURITY.md#verifying-downloads) with the GitHub CLI, and
+only then run the verified file:
+
+```sh
+version=2.2.1
+installer_dir=$(mktemp -d) &&
+curl --proto '=https' --tlsv1.2 -LsSf -o "$installer_dir/ts-crap-installer.sh" \
+  "https://github.com/RuiCostafrg/typescript-crap/releases/download/v$version/ts-crap-installer.sh" &&
+gh attestation verify "$installer_dir/ts-crap-installer.sh" --repo RuiCostafrg/typescript-crap \
+  --signer-workflow RuiCostafrg/typescript-crap/.github/workflows/release.yml \
+  --source-ref "refs/tags/v$version" --deny-self-hosted-runners &&
+command -v sha256sum >/dev/null &&
+sh "$installer_dir/ts-crap-installer.sh"
+```
+
+Each step runs only if the previous one succeeded, so a missing `gh` or a
+failed verification stops before the installer runs. The verified installer
+then checks the downloaded archive against its embedded checksum, but only
+when `sha256sum` is available: without it, the installer prints
+`skipping sha256 checksum verification` and installs anyway. The
+`command -v sha256sum` step stops the sequence in that case. On macOS without
+`sha256sum`, use Homebrew or the manual archive download instead. In CI, set `TS_CRAP_UNMANAGED_INSTALL` to a directory to install there
+without editing shell profiles or writing an install receipt, then add that
+directory to `PATH`. On Linux the installer uses the GNU build when the system
+glibc is 2.43 or newer (Ubuntu 26.04), and otherwise the static musl build.
+
 ### Homebrew (macOS and Linux)
 
 ```sh

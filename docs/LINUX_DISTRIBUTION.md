@@ -23,8 +23,16 @@ included license notices. The CLI needs neither Node, Rust nor a dynamic libc
 loader. Git remains necessary for Git diff features. These archives are useful
 on Alpine and older glibc userlands; they are not Android/Termux builds. The
 container matrix does not establish compatibility with older Linux kernels.
-The generated shell installer retains its platform selection; the portable
-matrix explicitly tests manual archive execution, not every installer fallback.
+The generated shell installer retains its platform selection: the GNU build
+when the system glibc is 2.43 or newer, otherwise the static musl build. The
+portable matrix tests manual archive execution. Installation CI separately runs
+the published, provenance-verified v2.2.1 installer on hosted Ubuntu 26.04
+(GNU selected) and Ubuntu 24.04 (musl fallback) on both architectures and
+compares the installed bytes with the attested archive. A companion job runs
+the attested installer inside stock Debian 12 (glibc 2.36) and Alpine 3.22 images on
+both architectures and checks that it installs the static musl build. Other
+distributions are expected to follow the same glibc/musl selection but are not
+verified by these jobs.
 
 ## Debian and Ubuntu packages
 

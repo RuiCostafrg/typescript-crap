@@ -111,6 +111,14 @@ jobs:
             expected: aarch64-unknown-linux-musl
           - runner: macos-26
             expected: aarch64-apple-darwin
+          # The release-time rewrite applied to the published installer selects
+          # static musl even where glibc 2.43 would select GNU.
+          - runner: ubuntu-26.04
+            expected: x86_64-unknown-linux-musl
+            prefer-static: true
+          - runner: ubuntu-26.04-arm
+            expected: aarch64-unknown-linux-musl
+            prefer-static: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -120,6 +128,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED: ${{ matrix.expected }}
+          PREFER_STATIC: ${{ matrix.prefer-static || false }}
         run: |
           version=2.2.1
           installer_dir=$(mktemp -d "$RUNNER_TEMP/ts-crap-installer.XXXXXX")
@@ -128,6 +137,9 @@ jobs:
           gh attestation verify "$installer_dir/ts-crap-installer.sh" --repo RuiCostafrg/typescript-crap \
             --signer-workflow RuiCostafrg/typescript-crap/.github/workflows/release.yml \
             --source-ref "refs/tags/v$version" --deny-self-hosted-runners
+          if [[ "$PREFER_STATIC" == true ]]; then
+            python3 scripts/prefer-static-linux-installer.py "$installer_dir/ts-crap-installer.sh"
+          fi
           install_dir="$RUNNER_TEMP/ts crap pinned/bin"
           command -v sha256sum
           TS_CRAP_UNMANAGED_INSTALL="$install_dir" sh "$installer_dir/ts-crap-installer.sh" 2>&1 | tee "$RUNNER_TEMP/installer.log"
@@ -157,6 +169,9 @@ jobs:
       matrix:
         runner: [ubuntu-26.04, ubuntu-26.04-arm]
         image: ['debian:12-slim', 'alpine:3.22']
+        # true applies the release-time static-musl rewrite first, so the
+        # rewritten installer is exercised on older glibc and on Alpine too.
+        prefer-static: [false, true]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -166,6 +181,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           IMAGE: ${{ matrix.image }}
+          PREFER_STATIC: ${{ matrix.prefer-static }}
         run: |
           version=2.2.1
           case "$RUNNER_ARCH" in
@@ -183,6 +199,9 @@ jobs:
               --signer-workflow RuiCostafrg/typescript-crap/.github/workflows/release.yml \
               --source-ref "refs/tags/v$version" --deny-self-hosted-runners
           done
+          if [[ "$PREFER_STATIC" == true ]]; then
+            python3 scripts/prefer-static-linux-installer.py "$work/installer/ts-crap-installer.sh"
+          fi
           docker run --rm \
             --mount "type=bind,src=$work/installer,dst=/installer,readonly" \
             --mount "type=bind,src=$work/bin,dst=/install" \

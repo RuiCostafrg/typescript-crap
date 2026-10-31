@@ -79,10 +79,10 @@ test('unremapped generated JavaScript explains how to get TypeScript coverage', 
 
 const statement = (file, extra = {}) => JSON.stringify({ x: { path: file, ...extra, statementMap: { 0: { start: { line: 1, column: 0 } } }, s: { 0: 1 } } });
 const OUTSIDE = /it is outside --root .*\. Pass the project root that contains your sources/;
-const EXCLUDED = /it is under --root but in an excluded directory \(node_modules, \.git, target, dist, build, coverage\) or is not a \.ts\/\.tsx\/\.mts\/\.cts source/;
+const EXCLUDED = /it is under --root but in an excluded directory \(node_modules, \.git, target, dist, build, coverage\), is a declaration file \(\.d\.ts\/\.d\.mts\/\.d\.cts\), or is not a \.ts\/\.tsx\/\.mts\/\.cts source/;
 
 test('source-mapped sources outside the snapshot say whether they are outside the root or excluded', async t => {
-  const root = await project(t, { ...source, 'dist/b.ts': 'export const b = 1;\n', '..dotted/b.js': 'exports.b = 1;\n' });
+  const root = await project(t, { ...source, 'dist/b.ts': 'export const b = 1;\n', '..dotted/b.js': 'exports.b = 1;\n', 'types.d.ts': 'export {};\n' });
   const map = sources => ({ version: 3, sources, sourcesContent: ['x'], mappings: 'AAAA' });
   const outside = collect(root, { raw: statement('gen.js', { inputSourceMap: map(['../elsewhere/b.ts']) }) });
   assert.equal(outside.status, 2);
@@ -91,6 +91,9 @@ test('source-mapped sources outside the snapshot say whether they are outside th
   const dotted = collect(root, { raw: statement('gen.js', { inputSourceMap: map(['..dotted/b.js']) }) });
   assert.equal(dotted.status, 2);
   assert.match(dotted.stderr, EXCLUDED, 'a directory named ..dotted is still under --root');
+  const declaration = collect(root, { raw: statement('gen.js', { inputSourceMap: map(['types.d.ts']) }) });
+  assert.equal(declaration.status, 2);
+  assert.match(declaration.stderr, EXCLUDED, 'an existing declaration file is named as a possible cause');
   const excluded = collect(root, { raw: statement('gen.js', { inputSourceMap: map(['dist/b.ts']) }) });
   assert.equal(excluded.status, 2);
   assert.match(excluded.stderr, EXCLUDED);
@@ -123,7 +126,7 @@ test('TypeScript files absent from coverage produce a warning without changing s
   const files = { ...source, 'src/b.ts': 'export const b = 1;\n', 'src/c.mts': 'export const c = 1;\n',
     'src/a.test.ts': '', 'src/a.spec.tsx': '', 'src/__mocks__/m.ts': '', 'vitest.config.ts': '', 'types.d.ts': '',
     'app.config.tsx': '', 'tests/fixtures/helper.ts': '', 'test/setup.ts': '', 'src/mocks/api.ts': '', 'fixtures/data.mts': '',
-    'src/api.mock.ts': '', 'src/api.fixture.tsx': '', 'src/data.fixtures.ts': '', 'src/..notparent/inside.ts': 'export const i = 1;\n' };
+    'src/api.mock.ts': '', 'src/api.fixture.tsx': '', 'src/data.fixtures.ts': '', '.config.ts': '', 'src/.config.tsx': '', 'src/..notparent/inside.ts': 'export const i = 1;\n' };
   const root = await project(t, files);
   const result = collect(root, { raw: covered });
   assert.equal(result.status, 0, result.stderr);

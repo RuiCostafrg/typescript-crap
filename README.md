@@ -100,6 +100,25 @@ runtime; the v0.3.0 and earlier Linux archives retain their glibc 2.35+ baseline
 v2.2.1 adds separate static musl archives for Alpine and other Linux
 userlands. Android/Termux and Windows ARM64 have no native release builds.
 
+### GitHub Actions
+
+The repository's [setup action](action.yml) downloads a pinned release for the
+runner (static musl on Linux), verifies its build provenance and SHA-256, and
+adds `ts-crap` to `PATH`. It can also run the gate and upload SARIF:
+
+```yaml
+- uses: RuiCostafrg/typescript-crap@<full commit SHA> # vX.Y.Z
+  with:
+    version: 2.2.1
+```
+
+Pinning the full commit SHA, with the release as a comment, is the recommended
+and most secure reference. An immutable `@vX.Y.Z` release tag also works, and
+a floating `@v2` is not offered yet. See
+[choosing the action ref](docs/CI_ADOPTION.md#choosing-the-action-ref) for the
+trade-offs, and [CI adoption](docs/CI_ADOPTION.md#github-action) for inputs and
+SARIF upload.
+
 See [installation verification](docs/INSTALLATION_COMPATIBILITY.md) for tested
 install/upgrade paths, runtime boundaries, and outstanding release-time evidence.
 

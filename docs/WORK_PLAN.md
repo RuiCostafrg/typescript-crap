@@ -29,8 +29,15 @@ when a stream changes state.
     enables 2FA and sets up trusted publishing.
   - The npm package name is still undecided. `typescript-crap` is
     recommended. `ts-crap` is taken.
+- **Decided 2026-10-31:**
+  - Linux always uses the static musl binary, in the installer and every other
+    channel.
+  - The GitHub Action docs show all three reference styles (full commit SHA,
+    immutable `@vX.Y.Z`, floating `@v2`) and recommend the full commit SHA as
+    the most secure. Offering `@v2` needs a separate tag pattern and owner
+    approval of any ruleset change.
+  - The owner will create the npm account; npm work starts once it exists.
 - **Still open:**
-  - Whether Linux should always use the static musl binary (recommended).
   - Whether to add an APT repository (recommendation: no, keep `.deb` assets
     as direct downloads).
 

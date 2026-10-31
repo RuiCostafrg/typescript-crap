@@ -107,8 +107,10 @@ by hand and must pick fresh directories themselves (`README.md:488-493`).
   - Jest `projects`
   - Sharded Vitest runs: each shard runs `vitest run --shard=i/n --reporter=blob`,
     then `vitest --merge-reports` merges the blob reports, with coverage enabled.
-  - Sharded Jest runs: each shard runs `jest --shard=i/n --coverage`, and the importer
-    merges the shards' coverage files.
+  - Sharded Jest runs: each shard runs
+    `jest --shard=i/n --coverage --coverageDirectory=<fresh dir>/shard-i`, so
+    shards never overwrite each other. The importer then merges those
+    explicitly listed shard files.
 - **Acceptance:** a fixture with two or more projects proves the merged counts.
 
 ## Phase 2: scanner gaps

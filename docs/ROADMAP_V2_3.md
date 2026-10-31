@@ -112,8 +112,11 @@ by hand and must pick fresh directories themselves (`README.md:488-493`).
     shards never overwrite each other. Shard runs disable Jest's per-shard
     `coverageThreshold` check (for example `--coverageThreshold='{}'`),
     because each shard sees only partial coverage. The importer then merges
-    those explicitly listed shard files, and thresholds are enforced on the
-    merged result by ts-crap's gates.
+    those explicitly listed shard files. ts-crap's gates check CRAP scores
+    and coverage evidence, not coverage percentages, so the recipe also
+    re-checks the project's `coverageThreshold` on the merged Istanbul
+    report (for example `nyc check-coverage` with the same limits). Otherwise
+    the project's existing percentage requirements would be dropped.
 - **Acceptance:** a fixture with two or more projects proves the merged counts.
 
 ## Phase 2: scanner gaps

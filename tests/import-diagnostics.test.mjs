@@ -186,3 +186,15 @@ test('a declaration-file record gets the snapshot diagnostic, not generated-Java
   assert.doesNotMatch(result.stderr, /generated JavaScript/);
 });
 
+test('sources reached through a symbolic link name the link', { skip: process.platform === 'win32' && 'symlinks need privileges' }, async t => {
+  const root = await project(t, { ...source, 'real/b.ts': 'export const b = 1;\n' });
+  await fs.symlink(path.join(root, 'real'), path.join(root, 'linked'), 'dir');
+  await fs.symlink(path.join(root, 'real/b.ts'), path.join(root, 'src/alias.ts'));
+  for (const [named, link] of [['linked/b.ts', 'linked'], ['src/alias.ts', 'src/alias\\.ts']]) {
+    const result = collect(root, { raw: statement(named) });
+    assert.equal(result.status, 2, named);
+    assert.match(result.stderr, new RegExp(`reached through the symbolic link ${link}, which collection does not follow`), named);
+    assert.doesNotMatch(result.stderr, EXCLUDED, named);
+  }
+});
+

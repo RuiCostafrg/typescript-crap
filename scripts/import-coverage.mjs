@@ -4,7 +4,7 @@ import { parseUniqueJson } from './strict-json.mjs';
 import { protectConfigDestinations, publishReport } from './coverage-publish.mjs';
 import { digest, snapshot } from './coverage-snapshot.mjs';
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +21,16 @@ function snapshotHint(root, absolute) {
   const relative = path.relative(root, absolute);
   if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     return `it is outside --root ${root}. Pass the project root that contains your sources`;
+  }
+  // The snapshot never follows symbolic links, to files or directories.
+  let current = root;
+  for (const part of relative.split(path.sep)) {
+    current = path.join(current, part);
+    let entry;
+    try { entry = lstatSync(current); } catch { break; }
+    if (entry.isSymbolicLink()) {
+      return `it is reached through the symbolic link ${path.relative(root, current) || current}, which collection does not follow. Configure coverage to report the real source path`;
+    }
   }
   if (!existsSync(absolute)) {
     return 'it does not exist under --root (moved, renamed or deleted since the report was generated). Recollect coverage from the current sources';

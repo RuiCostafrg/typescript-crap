@@ -40,6 +40,7 @@ when a stream changes state.
     exists with 2FA and trusted publishing configured, matching the
     Distribution A gate above.
 - **Still open:**
+  - The npm package name (`typescript-crap` recommended; `ts-crap` is taken).
   - Whether to add an APT repository (recommendation: no, keep `.deb` assets
     as direct downloads).
 

@@ -23,7 +23,26 @@ included license notices. The CLI needs neither Node, Rust nor a dynamic libc
 loader. Git remains necessary for Git diff features. These archives are useful
 on Alpine and older glibc userlands; they are not Android/Termux builds. The
 container matrix does not establish compatibility with older Linux kernels.
-The generated shell installer retains its platform selection: the GNU build
+## Shell installer selection
+
+From the first release after v2.2.1, the shell installer installs the static
+musl build on every Linux system, so all installer users run the same tested
+binary whatever their glibc version. Release assembly rewrites the two Linux
+GNU selection branches of cargo-dist's generated installer
+([script](../scripts/prefer-static-linux-installer.py)). The rewrite is an
+exact text match and fails the release if the cargo-dist template changes.
+Nothing else changes:
+
+- The musl archives' embedded SHA-256 values are unchanged.
+- macOS and Windows are unchanged.
+- The GNU archives are still published for direct download.
+- The Homebrew formula still uses the GNU archive on Linux.
+
+The installer is attested after the rewrite. On a 40,000-function scan and a
+32 MiB file, the published v2.2.1 musl and GNU binaries took the same time
+within noise (ARM64, 2026-10-31).
+
+The v2.2.1 and earlier installers keep cargo-dist's selection: the GNU build
 when the system glibc is 2.43 or newer, otherwise the static musl build. The
 portable matrix tests manual archive execution. Installation CI separately runs
 the published, provenance-verified v2.2.1 installer on hosted Ubuntu 26.04
@@ -32,7 +51,11 @@ compares the installed bytes with the attested archive. A companion job runs
 the attested installer inside stock Debian 12 (glibc 2.36) and Alpine 3.22 images on
 both architectures and checks that it installs the static musl build. Other
 distributions are expected to follow the same glibc/musl selection but are not
-verified by these jobs.
+verified by these jobs. The jobs also apply the release-time rewrite to the
+published v2.2.1 installer and check that it installs the static musl build on
+Ubuntu 26.04, where the unmodified installer selects GNU, and in the Debian 12
+and Alpine 3.22 containers. Candidate release
+verification checks that the rewritten installer downloads the musl archive.
 
 ## Debian and Ubuntu packages
 

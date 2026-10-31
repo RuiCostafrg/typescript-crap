@@ -21,6 +21,16 @@ TARGETS = {
     'aarch64-unknown-linux-gnu', 'x86_64-unknown-linux-gnu',
     'x86_64-pc-windows-msvc',
 }
+# Archives an installer for a platform may download. Release installers from
+# v2.3 on select the static musl build on every Linux system.
+ARCHIVE_TARGETS = TARGETS | {'aarch64-unknown-linux-musl', 'x86_64-unknown-linux-musl'}
+
+
+def archive_target(target, selected):
+    selected = selected or target
+    if selected not in ARCHIVE_TARGETS or selected.replace('-musl', '-gnu') != target:
+        raise ValueError(f'{target} installers cannot download the {selected} archive')
+    return selected
 
 
 def run(command, *, env=None, expected=0, timeout=180):
@@ -50,7 +60,7 @@ def regular(path):
 
 
 def stage(source, destination, target, version, installer):
-    if target not in TARGETS or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?', version):
+    if target not in ARCHIVE_TARGETS or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?', version):
         raise ValueError('Unsupported target or invalid version')
     name = f'ts-crap-{target}.{"zip" if "windows" in target else "tar.xz"}'
     archive = regular(source / name)
@@ -130,8 +140,10 @@ def verify(args):
         root = Path(temporary).resolve()
         served = root / 'releases'
         served.mkdir()
-        current_hash = stage(args.assets, served / 'current', args.target, args.version, args.installer)
-        previous_hash = stage(args.previous_assets, served / 'previous', args.target,
+        current_hash = stage(args.assets, served / 'current',
+                             archive_target(args.target, args.archive_target), args.version, args.installer)
+        previous_hash = stage(args.previous_assets, served / 'previous',
+                              archive_target(args.target, args.previous_archive_target),
                               args.previous_version, args.installer)
         if current_hash == previous_hash:
             raise ValueError('Upgrade archives must contain different executable bytes')
@@ -236,6 +248,10 @@ def main():
     parser.add_argument('--previous-version', required=True)
     parser.add_argument('--target', choices=sorted(TARGETS), required=True)
     parser.add_argument('--installer', choices=['shell', 'powershell', 'homebrew'], required=True)
+    parser.add_argument('--archive-target', choices=sorted(ARCHIVE_TARGETS),
+                        help='archive the current installer downloads (default: --target)')
+    parser.add_argument('--previous-archive-target', choices=sorted(ARCHIVE_TARGETS),
+                        help='archive the previous installer downloads (default: --target)')
     parser.add_argument('--powershell', default='powershell')
     verify(parser.parse_args())
 

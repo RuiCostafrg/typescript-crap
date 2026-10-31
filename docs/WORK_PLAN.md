@@ -39,7 +39,7 @@ when a stream changes state.
 | Stream | Scope | Thread | Branch prefix | Status |
 | --- | --- | --- | --- | --- |
 | Roadmap v2.3 | `ROADMAP_V2_3.md` phases 1–3, in priority order (1.1 → 1.5, 2.1, 2.2, Phase 3, then later items) | Roadmap v2.3 implementation | `roadmap/` | started |
-| Distribution B + C | Installer hardening and GitHub Action | Distribution: installer hardening + GitHub Action | `distribution/` | B docs/CI (#41) and Action (#42) in review; Action ref scheme and musl default await owner |
+| Distribution B + C | Installer hardening and GitHub Action | Distribution: installer hardening + GitHub Action | `distribution/` | #41 merged; Action (#42) and musl default (#44, owner-approved) in review |
 | Distribution A (npm) | npm package with per-platform binaries and bundled helpers | — | — | blocked on npm account |
 | Docs PR | This file and the two plans | this coordinating thread | `docs/roadmap-v2.3` | open |
 

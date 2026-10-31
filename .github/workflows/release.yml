@@ -156,6 +156,8 @@ jobs:
           CARGO_NET_OFFLINE=true dist build --tag "$TAG" --artifacts=global --output-format=json > assembled-manifest.json
           git diff --exit-code -- Cargo.lock
           cp assembled-manifest.json target/distrib/dist-manifest.json
+          # Every Linux system installs the static musl build (see LINUX_DISTRIBUTION.md).
+          python3 scripts/prefer-static-linux-installer.py target/distrib/ts-crap-installer.sh
           python3 scripts/bundle-coverage.py target/distrib
           version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
           python3 scripts/linux-packages.py --assets target/distrib --version "$version" --epoch "$(git log -1 --format=%ct)"

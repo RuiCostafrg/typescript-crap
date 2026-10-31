@@ -151,3 +151,13 @@ test('uncovered filenames are displayed with control characters escaped', { skip
   assert.doesNotMatch(result.stderr, /\u001b/);
   assert.equal(result.stderr.trim().split('\n').filter(line => line.startsWith('Warning:')).length, 1);
 });
+
+test('generated TypeScript outside the snapshot still remaps through its sidecar map', async t => {
+  const map = { version: 3, sources: ['../src/a.ts'], sourcesContent: [source['src/a.ts']], mappings: ';AACA' };
+  const root = await project(t, { ...source, 'build/gen.ts': 'x;\nexport const f = () => 1;\n//# sourceMappingURL=gen.ts.map\n',
+    'build/gen.ts.map': JSON.stringify(map) });
+  const result = collect(root, { format: 'lcov', raw: 'SF:build/gen.ts\nDA:2,1\nend_of_record\n' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(await fs.readFile(result.output, 'utf8')).files['src/a.ts'].lines, { 2: 1 });
+});
+

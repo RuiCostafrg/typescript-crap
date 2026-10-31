@@ -75,7 +75,7 @@ async function sourceMap(filename, inline) {
   const text = await fs.readFile(filename, 'utf8');
   const matches = [...text.matchAll(/[#@]\s*sourceMappingURL=([^\s]+)/g)];
   if (!matches.length) {
-    throw new Error(`No source map for generated input: ${filename}; the report covers generated JavaScript instead of TypeScript. ${REMAP_HINT}`);
+    throw Object.assign(new Error(`No source map for generated input: ${filename}; the report covers generated JavaScript instead of TypeScript. ${REMAP_HINT}`), { missingSourceMap: true });
   }
   const url = matches.at(-1)[1];
   if (/^data:application\/json(?:;charset=[^;,]+)?;base64,/i.test(url)) {
@@ -95,11 +95,15 @@ async function convert(root, files, records) {
     let mapper;
     if (files.has(filename) && !record.map) {
       mapper = (line) => [{ file: files.get(filename), line }];
-    } else if (!record.map && supported(filename)) {
-      // TypeScript itself needs no source map; it is simply not in the snapshot.
-      throw new Error(`Unmappable source outside collected TypeScript snapshot: ${record.path}; ${snapshotHint(root, filename)}`);
     } else {
-      const { map, base } = await sourceMap(filename, record.map);
+      const { map, base } = await sourceMap(filename, record.map).catch(error => {
+        // Generated TypeScript (for example under build/) still remaps through its
+        // map. Without one, a TypeScript record is simply outside the snapshot.
+        if (!record.map && supported(filename) && (error.code === 'ENOENT' || error.missingSourceMap)) {
+          throw new Error(`Unmappable source outside collected TypeScript snapshot: ${record.path}; ${snapshotHint(root, filename)}`);
+        }
+        throw error;
+      });
       const rows = mappings(map);
       const sources = map.sources.map((name, index) => {
         const absolute = resolveSource(resolveSource(base, map.sourceRoot || '.'), name);

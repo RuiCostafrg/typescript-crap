@@ -93,6 +93,27 @@ never transform old scores into new evidence or silently bless an updated baseli
 Keep the previous baseline in version control for review. Coverage documents must
 always be recollected against unchanged source with matching-version helpers.
 
+## Supported test frameworks
+
+The coverage helpers support these Vitest and Jest majors with TypeScript and
+TSX sources. Each runs from its own lockfile in
+[`tests/fixtures/framework-versions`](../tests/fixtures/framework-versions),
+with Node 24 on Linux, macOS and Windows, in the owner-gated
+`framework-versions` CI job. Each run imports JSON and LCOV coverage, gates it,
+and checks stale-source and failed-test rejection.
+
+| Framework | Tested version | Providers | Transformer |
+| --- | --- | --- | --- |
+| Vitest 3 | 3.2.7 | `istanbul`, `v8` | built-in (esbuild) |
+| Vitest 4 | 4.1.12 | `istanbul`, `v8` | built-in |
+| Vitest 5 | 5.0.5 | `istanbul`, `v8` | built-in |
+| Jest 29 | 29.7.0 | `babel` | `babel-jest` 29.7.0 |
+| Jest 30 | 30.5.2 | `babel` | `babel-jest` 30.5.2 |
+
+Other versions in these majors are expected to work but are not tested. A
+failing matrix entry names its framework and exact version. Coverage results
+are compared within a release, not across framework versions.
+
 ## Rust API and dependencies
 
 The public Rust API follows SemVer starting with 1.0.0. Removing/renaming public

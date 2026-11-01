@@ -10,3 +10,7 @@ test('service uses the workspace pricing package', () => {
     expect([0, 1, 2, 3].map(shipping)).toEqual([0, 5, 10, 20]);
   }
 });
+
+(process.env.FIXTURE_FAIL === '1' ? test : test.skip)('deliberate failure verifies importer publication is aborted', () => {
+  expect('actual test failure').toBe('a passing test');
+});

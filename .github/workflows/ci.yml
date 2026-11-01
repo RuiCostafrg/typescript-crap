@@ -133,6 +133,38 @@ jobs:
           scanner=target/debug/ts-crap
           if [[ "$RUNNER_OS" == Windows ]]; then scanner="$scanner.exe"; fi
           node scripts/test-framework-coverage.mjs "$scanner"
+  framework-versions:
+    # Supported Vitest/Jest majors, each from its own lockfile (docs/COMPATIBILITY.md).
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    timeout-minutes: 20
+    runs-on: ${{ matrix.os }}
+    name: framework-versions (${{ matrix.versions }}, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        versions: [vitest-3, vitest-4, vitest-5, jest-29, jest-30]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: "1.90"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tests/fixtures/framework-versions/${{ matrix.versions }}/package-lock.json
+      - run: cargo build --locked
+      - name: Real coverage imports and gates for ${{ matrix.versions }}
+        shell: bash
+        env:
+          FRAMEWORK_VERSIONS: ${{ matrix.versions }}
+        run: |
+          scanner=target/debug/ts-crap
+          if [[ "$RUNNER_OS" == Windows ]]; then scanner="$scanner.exe"; fi
+          node scripts/test-framework-coverage.mjs "$scanner" --versions "$FRAMEWORK_VERSIONS"
   audit:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     timeout-minutes: 15

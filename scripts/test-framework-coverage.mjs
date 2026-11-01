@@ -9,7 +9,20 @@ import { fileURLToPath } from 'node:url';
 import { formatCommand, scannerArguments } from './coverage-run.mjs';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
-const scanner = path.resolve(process.argv[2] ?? 'target/debug/ts-crap');
+// Usage: node scripts/test-framework-coverage.mjs SCANNER [--versions NAME]
+// NAME selects tests/fixtures/framework-versions/NAME: its own package.json and
+// lockfile replace the shared fixture's, and only its installed frameworks run.
+const argv = process.argv.slice(2);
+const versionsAt = argv.indexOf('--versions');
+const versions = versionsAt < 0 ? undefined : argv[versionsAt + 1];
+// Only known fixture names: never a path such as ".." that escapes the directory.
+if (versionsAt >= 0 && !/^(vitest|jest)-\d+$/.test(versions ?? '')) throw new Error('--versions needs a fixture name such as vitest-3 or jest-29');
+const positional = argv.filter((_, index) => versionsAt < 0 || (index !== versionsAt && index !== versionsAt + 1));
+// Reject anything else (for example --versions=NAME) rather than test the wrong fixture.
+if (positional.length > 1 || positional.some(arg => arg.startsWith('-'))) {
+  throw new Error('Usage: node scripts/test-framework-coverage.mjs SCANNER [--versions NAME]');
+}
+const scanner = path.resolve(positional[0] ?? 'target/debug/ts-crap');
 await fs.access(scanner);
 // Windows os.tmpdir() can contain an 8.3 alias such as RUNNER~1. Jest must see
 // the same canonical paths for workspace imports and collectCoverageFrom;
@@ -31,11 +44,16 @@ function run(command, args, expected = 0, env = {}) {
   return result;
 }
 
+const installed = {};
 try {
   await fs.cp(path.join(repository, 'tests/fixtures/frameworks'), root, {
     recursive: true,
     filter: source => !['node_modules', 'coverage'].includes(path.basename(source)),
   });
+  if (versions) {
+    const manifest = path.join(repository, 'tests/fixtures/framework-versions', versions);
+    for (const name of ['package.json', 'package-lock.json']) await fs.copyFile(path.join(manifest, name), path.join(root, name));
+  }
   // Invoke npm's JS entry point so Windows does not require a shell for npm.cmd.
   const npm = process.env.npm_execpath;
   if (npm) run(process.execPath, [npm, 'ci', '--ignore-scripts', '--no-audit', '--no-fund']);
@@ -54,14 +72,27 @@ try {
     process.exitCode = result.status ?? 2;
   `);
 
+  // Name the framework and exact installed version in every failure.
+  for (const framework of ['jest', 'vitest']) {
+    const manifest = path.join(root, 'node_modules', framework, 'package.json');
+    try { installed[framework] = JSON.parse(await fs.readFile(manifest, 'utf8')).version; }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  assert(Object.keys(installed).length, 'the fixture installs neither Jest nor Vitest');
+  console.log(`Frameworks under test${versions ? ` (${versions})` : ''}: ${Object.entries(installed).map(([name, version]) => `${name} ${version}`).join(', ')}`);
+
   // The fixture has both configurations, so detection must refuse to guess.
   const ambiguous = run(process.execPath, [path.join(repository, 'scripts/coverage-run.mjs'), '--root', root], 2);
   assert.match(ambiguous.stderr, /Both Vitest and Jest configuration found.*pass --framework/);
-  const mismatched = run(process.execPath, [path.join(repository, 'scripts/coverage-run.mjs'), '--root', root,
-    '--framework', 'jest', '--provider', 'istanbul'], 2);
-  assert.match(mismatched.stderr, /not a Jest coverage provider; use babel or v8/);
+  if (installed.jest) {
+    const mismatched = run(process.execPath, [path.join(repository, 'scripts/coverage-run.mjs'), '--root', root,
+      '--framework', 'jest', '--provider', 'istanbul'], 2);
+    assert.match(mismatched.stderr, /not a Jest coverage provider; use babel or v8/);
+  }
 
-  for (const [framework, provider] of [['jest', 'babel'], ['vitest', 'istanbul'], ['vitest', 'v8']]) {
+  const combinations = [['jest', 'babel'], ['vitest', 'istanbul'], ['vitest', 'v8']]
+    .filter(([framework]) => installed[framework]);
+  for (const [framework, provider] of combinations) {
     const mutationSource = framework === 'jest'
       ? 'packages/core/src/price.ts' : 'packages/ui/src/panels/Résumé.tsx';
     const selected = ['packages/core/src', `packages/${framework === 'jest' ? 'service' : 'ui'}/src`];
@@ -71,7 +102,7 @@ try {
         'packages/ui/src/panels/OrderPanel.tsx', 'packages/ui/src/panels/AsyncPanel.tsx',
         'packages/ui/src/panels/Résumé.tsx']).sort();
     for (const format of ['istanbul', 'lcov']) {
-      const label = `${framework}/${provider}/${format}`;
+      const label = `${framework} ${installed[framework]}/${provider}/${format}`;
       const collect = async (name, partial = false, mutation = false, expected = 0, env = {}) => {
         // Every execution owns a new directory: neither raw nor native is reused.
         const directory = await fs.mkdtemp(path.join(root, 'coverage', `${framework}-${name}-`));
@@ -143,12 +174,20 @@ try {
       assert(Object.values(native.files).some(file => Object.values(file.lines).includes(0)), label);
 
       if (framework === 'vitest') {
-        // JSON carries direct default-argument counters; LCOV line records may
-        // omit their declaration lines. Never invent evidence for that omission.
-        const missingDefault = format === 'lcov';
-        const gapReport = run(scanner, ['--root', root, 'packages/ui/coverage-gaps',
-          '--coverage', full.output, '--require-coverage', '--threshold', '4', '--format', 'json'], missingDefault ? 1 : 0);
-        assert.equal(JSON.parse(gapReport.stdout).functions_missing_coverage, Number(missingDefault), label);
+        // JSON carries direct default-argument counters and must be complete. LCOV
+        // line records may omit the declaration line (Vitest 4/5 do; Vitest 3's V8
+        // provider records it). Never invent evidence: LCOV may pass completeness
+        // only when the raw report really has a DA record for that line.
+        const gapArgs = ['--root', root, 'packages/ui/coverage-gaps',
+          '--coverage', full.output, '--require-coverage', '--threshold', '4', '--format', 'json'];
+        let declarationRecorded = true;
+        if (format === 'lcov') {
+          const raw = await fs.readFile(full.input, 'utf8');
+          const record = raw.split('end_of_record').find(block => /SF:.*DefaultPanel\.tsx/.test(block)) ?? '';
+          declarationRecorded = /^DA:1,/m.test(record);
+        }
+        const gapReport = run(scanner, gapArgs, declarationRecorded ? 0 : 1);
+        assert.equal(JSON.parse(gapReport.stdout).functions_missing_coverage, Number(!declarationRecorded), label);
         const complex = fullReport.functions.filter(f => f.path.includes('/panels/'));
         assert(complex.length >= 9, `${label}: nested callbacks must be scored separately`);
         for (const name of ['quantityLabel', 'ItemList', 'OrderPanel', 'loadMessage', 'AsyncPanel', 'Résumé']) {
@@ -176,11 +215,12 @@ try {
         assert.equal(branchNative.files['packages/ui/src/panels/OrderPanel.tsx'].lines[callbackLine], 0, label);
         const fullNative = JSON.parse(await fs.readFile(full.output, 'utf8'));
         assert(fullNative.files['packages/ui/src/panels/OrderPanel.tsx'].lines[callbackLine] > 0, label);
-
-        const failed = await collect('failing-tests', false, false, 2, { FIXTURE_FAIL: '1' });
-        assert.match(failed.result.stderr, /actual test failure/);
-        await assert.rejects(fs.access(failed.output), { code: 'ENOENT' });
       }
+
+      // A real failing test must prevent publication for every framework.
+      const failed = await collect('failing-tests', false, false, 2, { FIXTURE_FAIL: '1' });
+      assert.match(failed.result.stderr, /actual test failure/, label);
+      await assert.rejects(fs.access(failed.output), { code: 'ENOENT' }, label);
 
       const before = await fs.readFile(full.output);
       const reused = run(process.execPath, full.args, 2);
@@ -200,6 +240,16 @@ try {
       console.log(`PASS ${label}: full, uncovered, fresh repeat, reuse rejected, stale and changed source rejected`);
     }
   }
+} catch (error) {
+  let under = Object.entries(installed).map(([name, version]) => `${name} ${version}`).join(', ');
+  if (!under) {
+    // Installation can fail before anything is installed; name the declared versions.
+    const manifest = path.join(repository, 'tests/fixtures', versions ? `framework-versions/${versions}` : 'frameworks', 'package.json');
+    const declared = JSON.parse(await fs.readFile(manifest, 'utf8').catch(() => '{}')).devDependencies ?? {};
+    under = ['jest', 'vitest'].filter(name => declared[name]).map(name => `${name} ${declared[name]} declared, not installed`).join(', ') || 'no framework declared';
+  }
+  console.error(`FAIL ${versions ?? 'shared fixture'} (${under})`);
+  throw error;
 } finally {
   await fs.rm(temporary, { recursive: true, force: true });
 }

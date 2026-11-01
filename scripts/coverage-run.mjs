@@ -207,6 +207,21 @@ export function formatCommand(args, platform = process.platform) {
   return args.map(value => shellQuote(value, platform)).join(' ');
 }
 
+/**
+ * Words that start the printed scanner command: `ts-crap`, or the JSON string
+ * array in TS_CRAP_SCANNER_COMMAND (the npm launcher sets `npx typescript-crap@VERSION`).
+ */
+export function scannerCommand(environment = process.env) {
+  const value = environment.TS_CRAP_SCANNER_COMMAND;
+  if (value === undefined || value === '') return ['ts-crap'];
+  let words;
+  try { words = JSON.parse(value); } catch { words = null; }
+  if (!Array.isArray(words) || !words.length || words.some(word => typeof word !== 'string' || word === '')) {
+    throw new UsageError('TS_CRAP_SCANNER_COMMAND must be a JSON array of non-empty strings');
+  }
+  return words;
+}
+
 export function scannerArguments({ root, output, config }) {
   return ['--root', root, '--coverage', output, '--require-coverage', ...(config ? ['--config', config] : [])];
 }
@@ -259,6 +274,7 @@ async function main() {
   const root = await fs.realpath(options.root).catch(error => {
     throw new Error(`Cannot resolve --root ${options.root}: ${error.message}`);
   });
+  const printed = scannerCommand();
   const framework = options.framework === 'auto' ? detectFramework(root) : options.framework;
   const binary = frameworkBinary(root, framework);
   checkProvider(framework, options.provider);
@@ -291,7 +307,7 @@ async function main() {
   const scan = scannerArguments({ root, output, config });
   console.error(`ts-crap coverage-run: native coverage written to ${output}`);
   if (!options.scan) {
-    console.log(formatCommand(['ts-crap', ...scan]));
+    console.log(formatCommand([...printed, ...scan]));
     return;
   }
   process.exitCode = await run(scanner, scan);

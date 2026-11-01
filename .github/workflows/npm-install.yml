@@ -1,0 +1,132 @@
+name: Verify npm installs
+# Installs typescript-crap with npm, pnpm, Yarn and Bun on clean hosts and
+# containers. Packed mode uses the calling run's `npm-packages` and archive
+# artifacts before publication; registry mode installs the published version
+# and compares it with the attested GitHub release archives.
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      registry:
+        description: Install the published version instead of the packed artifacts
+        type: boolean
+        default: false
+      assets-artifact:
+        description: Artifact with the release archives and .sha256 sidecars (packed mode)
+        type: string
+        default: release-assets
+permissions:
+  contents: read
+env:
+  PNPM_VERSION: 12.16.1
+  YARN_VERSION: 4.18.1
+  BUN_VERSION: 1.4.4
+jobs:
+  host:
+    name: npm, pnpm, Yarn and Bun (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-26.04, ubuntu-26.04-arm, macos-26, macos-26-intel, windows-2022]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - if: ${{ !inputs.registry }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.assets-artifact }}
+          path: ${{ runner.temp }}/npm-assets
+      - if: ${{ !inputs.registry }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-packages
+          path: ${{ runner.temp }}/npm-packages
+      - name: Download and authenticate the published release archives
+        if: inputs.registry
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: bash scripts/download-npm-assets.sh "$VERSION" "$RUNNER_TEMP/npm-assets"
+      - name: Install pinned package managers
+        shell: bash
+        run: |
+          npm install -g --no-audit --no-fund "pnpm@$PNPM_VERSION" "@yarnpkg/cli-dist@$YARN_VERSION" "bun@$BUN_VERSION"
+          for tool in pnpm:$PNPM_VERSION yarn:$YARN_VERSION bun:$BUN_VERSION; do
+            actual=$("${tool%%:*}" --version)
+            [[ "$actual" == "${tool#*:}" ]] || { echo "${tool%%:*} is $actual, expected ${tool#*:}" >&2; exit 1; }
+          done
+      - name: Install without scripts, run, and compare bytes with the release archive
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          REGISTRY: ${{ inputs.registry }}
+        run: |
+          source=(--packages "$RUNNER_TEMP/npm-packages")
+          if [[ "$REGISTRY" == true ]]; then source=(--registry); fi
+          python3 -B scripts/verify-npm-install.py --manager npm --manager pnpm --manager yarn --manager bun \
+            --version "$VERSION" --assets "$RUNNER_TEMP/npm-assets" "${source[@]}"
+  containers:
+    name: npm, pnpm, Yarn and Bun (${{ matrix.image }}, ${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-26.04, ubuntu-26.04-arm]
+        image: ['ubuntu:24.04', 'debian:12-slim', 'alpine:3.22', 'fedora:43']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: ${{ !inputs.registry }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.assets-artifact }}
+          path: ${{ runner.temp }}/npm-assets
+      - if: ${{ !inputs.registry }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-packages
+          path: ${{ runner.temp }}/npm-packages
+      - name: Download and authenticate the published release archives
+        if: inputs.registry
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: bash scripts/download-npm-assets.sh "$VERSION" "$RUNNER_TEMP/npm-assets"
+      - name: Install the distribution's Node.js, then verify in the clean container
+        env:
+          IMAGE: ${{ matrix.image }}
+          VERSION: ${{ inputs.version }}
+          REGISTRY: ${{ inputs.registry }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm-packages"
+          source=--packages=/packages
+          if [[ "$REGISTRY" == true ]]; then source=--registry; fi
+          # The distribution's own Node.js: 18 on Ubuntu 24.04 and Debian 12, so the
+          # coverage command's Node.js 24 requirement message is checked there.
+          docker run --rm -e VERSION -e PNPM_VERSION -e YARN_VERSION -e BUN_VERSION -e SOURCE="$source" -e CI=true \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/repo,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/npm-assets,dst=/assets,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/npm-packages,dst=/packages,readonly" \
+            "$IMAGE" /bin/sh -ec '
+              . /etc/os-release
+              case "$ID" in
+                alpine) apk add --no-cache nodejs npm python3 libstdc++ libgcc >/dev/null ;;
+                fedora) dnf install -y -q nodejs npm python3 >/dev/null ;;
+                *) apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+                     nodejs npm python3 ca-certificates >/dev/null ;;
+              esac
+              echo "$PRETTY_NAME, Node.js $(node --version), npm $(npm --version)"
+              npm install -g --no-audit --no-fund "pnpm@$PNPM_VERSION" "@yarnpkg/cli-dist@$YARN_VERSION" "bun@$BUN_VERSION"
+              python3 -B /repo/scripts/verify-npm-install.py --manager npm --manager pnpm --manager yarn --manager bun \
+                --version "$VERSION" --assets /assets "$SOURCE" --scan-root /repo/examples/shop'

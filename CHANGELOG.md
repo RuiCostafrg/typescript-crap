@@ -10,6 +10,9 @@
   run directory, imports the result, and prints the matching `ts-crap`
   command. With `--scan` it checks that the helper and scanner versions match
   exactly, then runs that command.
+- `import-coverage.mjs` names the likely cause and fix for failed, missing,
+  empty and unremapped coverage, and warns about TypeScript files without
+  coverage records. Exit codes are unchanged.
 - Documented version-pinned shell installer URLs for CI and a verify-before-run
   flow (`gh attestation verify` before running the downloaded installer).
 - Installation CI runs that flow against the published v2.2.1 installer and

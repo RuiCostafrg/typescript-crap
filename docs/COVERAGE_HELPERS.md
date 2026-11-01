@@ -136,3 +136,24 @@ approximation, not branch coverage. Istanbul JSON also maps direct `default-arg`
 initializer counters; LCOV can omit that declaration-line evidence. Use JSON for
 complete default-argument evidence. Missing evidence is never treated as covered.
 These helpers run trusted test commands with your permissions; they are not a sandbox.
+
+## Troubleshooting imports
+
+Import failures exit with status 2, publish nothing, and name the likely fix.
+
+| Message starts with | Likely cause | Fix |
+| --- | --- | --- |
+| `Coverage command failed: N` | Tests failed, or a coverage threshold failed. Any raw report the command wrote is not imported. | Fix the tests or thresholds, then rerun with fresh paths. |
+| `Coverage command succeeded but wrote no report` | Coverage is off, the reporter is wrong, or the report went elsewhere. | Pass `--coverage`; use the `json` (Istanbul) or `lcovonly` reporter; set the reports directory (Vitest `coverage.reportsDirectory`, Jest `coverageDirectory`) to the directory that contains the `--input` file. |
+| `Empty imported coverage` | No tests ran, or the coverage include misses your sources. | Set Vitest `coverage.include` or Jest `collectCoverageFrom`, for example `src/**/*.ts`. |
+| `No source map for generated input`, `could not be source-mapped` | The report covers generated JavaScript. | Use a provider that remaps to TypeScript (Vitest `istanbul`/`v8`; Jest `babel`/`v8` with source maps). Do not import raw `NODE_V8_COVERAGE` output. |
+| `Unmappable source outside collected TypeScript snapshot` | The report names a file outside `--root`; a file under it that no longer exists; a file reached through a symbolic link (never followed); or one that is not collected: in an excluded directory (`node_modules`, `.git`, `target`, `dist`, `build`, `coverage`), a declaration file, or not `.ts`/`.tsx`/`.mts`/`.cts`. | The message says which. Pass the project root that contains your sources, recollect coverage from current sources, or limit coverage to collected TypeScript sources. |
+
+After a successful import, a warning lists TypeScript files under the root that
+have no coverage records. It leaves out `*.test.*`, `*.spec.*`, `*.mock.*` and
+`*.fixture.*` files (and their plurals, such as `*.tests.*`), `*.config.*`
+files, and anything under `__tests__`, `__mocks__`, `__fixtures__`, `test`,
+`tests`, `mocks` or `fixtures` directories. Names are shown with control
+characters escaped.
+Those files count as missing coverage if the scanner selects them. The warning
+never changes the exit status.

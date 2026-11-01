@@ -15,7 +15,8 @@ const repository = fileURLToPath(new URL('../', import.meta.url));
 const argv = process.argv.slice(2);
 const versionsAt = argv.indexOf('--versions');
 const versions = versionsAt < 0 ? undefined : argv[versionsAt + 1];
-if (versionsAt >= 0 && (!versions || !/^[\w.-]+$/.test(versions))) throw new Error('--versions needs a fixture name');
+// Only known fixture names: never a path such as ".." that escapes the directory.
+if (versionsAt >= 0 && !/^(vitest|jest)-\d+$/.test(versions ?? '')) throw new Error('--versions needs a fixture name such as vitest-3 or jest-29');
 const positional = argv.filter((_, index) => versionsAt < 0 || (index !== versionsAt && index !== versionsAt + 1));
 const scanner = path.resolve(positional[0] ?? 'target/debug/ts-crap');
 await fs.access(scanner);
@@ -210,11 +211,12 @@ try {
         assert.equal(branchNative.files['packages/ui/src/panels/OrderPanel.tsx'].lines[callbackLine], 0, label);
         const fullNative = JSON.parse(await fs.readFile(full.output, 'utf8'));
         assert(fullNative.files['packages/ui/src/panels/OrderPanel.tsx'].lines[callbackLine] > 0, label);
-
-        const failed = await collect('failing-tests', false, false, 2, { FIXTURE_FAIL: '1' });
-        assert.match(failed.result.stderr, /actual test failure/);
-        await assert.rejects(fs.access(failed.output), { code: 'ENOENT' });
       }
+
+      // A real failing test must prevent publication for every framework.
+      const failed = await collect('failing-tests', false, false, 2, { FIXTURE_FAIL: '1' });
+      assert.match(failed.result.stderr, /actual test failure/, label);
+      await assert.rejects(fs.access(failed.output), { code: 'ENOENT' }, label);
 
       const before = await fs.readFile(full.output);
       const reused = run(process.execPath, full.args, 2);
@@ -235,7 +237,13 @@ try {
     }
   }
 } catch (error) {
-  const under = Object.entries(installed).map(([name, version]) => `${name} ${version}`).join(', ') || 'frameworks not installed';
+  let under = Object.entries(installed).map(([name, version]) => `${name} ${version}`).join(', ');
+  if (!under) {
+    // Installation can fail before anything is installed; name the declared versions.
+    const manifest = path.join(repository, 'tests/fixtures', versions ? `framework-versions/${versions}` : 'frameworks', 'package.json');
+    const declared = JSON.parse(await fs.readFile(manifest, 'utf8').catch(() => '{}')).devDependencies ?? {};
+    under = ['jest', 'vitest'].filter(name => declared[name]).map(name => `${name} ${declared[name]} declared, not installed`).join(', ') || 'no framework declared';
+  }
   console.error(`FAIL ${versions ?? 'shared fixture'} (${under})`);
   throw error;
 } finally {

@@ -54,6 +54,25 @@ For each combination, the suite asserts:
 - Editing source after collection causes a scanner SHA-256 mismatch (exit 2).
   Editing source during collection makes the importer reject publication (exit 2).
 
+## Version matrix
+
+[`tests/fixtures/framework-versions`](../tests/fixtures/framework-versions)
+holds one `package.json` and lockfile per supported major: `vitest-3`,
+`vitest-4`, `vitest-5`, `jest-29` and `jest-30`. Each installs one framework
+and reuses this suite's sources and assertions:
+
+```sh
+node scripts/test-framework-coverage.mjs target/debug/ts-crap --versions vitest-3
+```
+
+Only the installed framework's combinations run, and every label and failure
+names the exact installed version (for example `vitest 3.2.7/v8/lcov`). The
+`vitest-5` and `jest-30` lockfiles were seeded from the shared fixture's lockfile,
+so they resolve the same transitive versions. The `framework-versions` CI job runs
+all five on Linux, macOS and Windows with Node 24. It keeps the owner-only numeric
+actor gate described in [DEPENDENCY_UPDATES.md](DEPENDENCY_UPDATES.md). The
+supported-versions table is in [COMPATIBILITY.md](COMPATIBILITY.md#supported-test-frameworks).
+
 ## Complex Vitest/TSX scenarios
 
 The Vitest fixture has 13 passing behavioral cases in a full run, plus one

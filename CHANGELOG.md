@@ -13,6 +13,9 @@
 - `import-coverage.mjs` names the likely cause and fix for failed, missing,
   empty and unremapped coverage, and warns about TypeScript files without
   coverage records. Exit codes are unchanged.
+- A Vitest 3/4/5 and Jest 29/30 coverage matrix, each from its own lockfile, on
+  Linux, macOS and Windows, and a supported-versions table in
+  `docs/COMPATIBILITY.md`.
 - Documented version-pinned shell installer URLs for CI and a verify-before-run
   flow (`gh attestation verify` before running the downloaded installer).
 - Installation CI runs that flow against the published v2.2.1 installer and

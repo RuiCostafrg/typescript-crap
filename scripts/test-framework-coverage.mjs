@@ -18,6 +18,10 @@ const versions = versionsAt < 0 ? undefined : argv[versionsAt + 1];
 // Only known fixture names: never a path such as ".." that escapes the directory.
 if (versionsAt >= 0 && !/^(vitest|jest)-\d+$/.test(versions ?? '')) throw new Error('--versions needs a fixture name such as vitest-3 or jest-29');
 const positional = argv.filter((_, index) => versionsAt < 0 || (index !== versionsAt && index !== versionsAt + 1));
+// Reject anything else (for example --versions=NAME) rather than test the wrong fixture.
+if (positional.length > 1 || positional.some(arg => arg.startsWith('-'))) {
+  throw new Error('Usage: node scripts/test-framework-coverage.mjs SCANNER [--versions NAME]');
+}
 const scanner = path.resolve(positional[0] ?? 'target/debug/ts-crap');
 await fs.access(scanner);
 // Windows os.tmpdir() can contain an 8.3 alias such as RUNNER~1. Jest must see

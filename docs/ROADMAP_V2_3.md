@@ -154,11 +154,12 @@ Linux and npm distribution options are evaluated separately in
 [LINUX_DISTRIBUTION_STRATEGY.md](LINUX_DISTRIBUTION_STRATEGY.md). The schedule
 follows [WORK_PLAN.md](WORK_PLAN.md):
 
-- Installer hardening and the GitHub Action are in progress now, and each ships
-  in the first release after it merges.
-- The npm package waits for the owner's npm account. Until then, the Vitest/Jest
-  one-step command (1.1) ships in the coverage helper bundle. It moves to `npx`
-  once the npm package exists.
+- Installer hardening and the GitHub Action are merged, and each ships in the
+  first release after v2.2.1.
+- The npm package `typescript-crap` is merged and ships in that release too. The
+  Vitest/Jest one-step command (1.1) is then
+  `npx typescript-crap coverage --framework vitest|jest|auto`, and it stays in
+  the coverage helper bundle as `coverage-run.mjs`.
 - crates.io (2.6) stays in v2.4.0.
 
 ## Proposed release grouping

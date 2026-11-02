@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- Jest `ts-jest` and `@swc/jest` transformer fixtures and the Jest `v8` coverage
+  provider. Each pair must give exactly the `babel-jest`/`babel` CRAP results.
+  The docs include a configuration snippet for every supported combination.
+
 ## 2.3.0 — 2026-11-02
 
 ### Added

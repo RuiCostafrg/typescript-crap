@@ -108,8 +108,11 @@ and checks stale-source and failed-test rejection.
 | Vitest 4 | 4.1.12 | `istanbul`, `v8` | built-in |
 | Vitest 5 | 5.0.5 | `istanbul`, `v8` | built-in |
 | Jest 29 | 29.7.0 | `babel` | `babel-jest` 29.7.0 |
-| Jest 30 | 30.5.2 | `babel` | `babel-jest` 30.5.2 |
+| Jest 30 | 30.5.2 | `babel`, `v8` | `babel-jest` 30.5.2, `ts-jest` 29.4.15, `@swc/jest` 0.2.39 |
 
+Every Jest 30 transformer and provider pair must give the scanner exactly the
+`babel-jest`/`babel` results for full and partial runs. Configuration snippets
+are in [FRAMEWORK_COVERAGE.md](FRAMEWORK_COVERAGE.md#jest-transformers-and-coverage-providers).
 Other versions in these majors are expected to work but are not tested. A
 failing matrix entry names its framework and exact version. Coverage results
 are compared within a release, not across framework versions.

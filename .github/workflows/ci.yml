@@ -111,7 +111,7 @@ jobs:
           python3 scripts/verify-coverage-bundle.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner "$scanner"
   framework-coverage:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
-    timeout-minutes: 15
+    timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

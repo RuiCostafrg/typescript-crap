@@ -55,6 +55,92 @@ For each combination, the suite asserts:
 - Editing source after collection causes a scanner SHA-256 mismatch (exit 2).
   Editing source during collection makes the importer reject publication (exit 2).
 
+## Jest transformers and coverage providers
+
+The shared fixture also runs Jest 30 with `ts-jest` 29.4.15 (TypeScript 5.9.3)
+and `@swc/jest` 0.2.39 (`@swc/core` 1.16.20), each with both coverage providers,
+through `coverage-run.mjs`. Each run must show the requested provider and, for
+`v8`, the extra V8 line records. A fixture test also checks a per-config Jest
+global (`fixtureTransformer`), so a silent fallback to the baseline cannot pass. For JSON and LCOV, every pair must give the scanner
+exactly the same functions, coverage and CRAP scores as `babel-jest` with the
+`babel` provider, for a full and a partial run. A failing test must still publish
+nothing. `@swc/core` has no Android binary, so the suite skips `@swc/jest` only on
+Android; every CI platform runs it.
+
+Each snippet is a complete `jest.config.cjs` for `.ts` sources, which is what
+the Jest fixture tests. Pick the provider at run time with
+`--provider babel|v8`, or set `coverageProvider` in the config.
+
+The snippets match `.ts` files only. For `.tsx` files containing JSX, widen the
+transform pattern to `'^.+\\.tsx?$'`, widen `collectCoverageFrom` to
+`'src/**/*.{ts,tsx}'`, and add one option per transformer (these TSX
+settings are not part of the Jest fixture; the tested TSX fixture runs under
+Vitest):
+
+- `babel-jest`: add `['@babel/preset-react', { runtime: 'automatic' }]` to
+  `presets`.
+- `ts-jest`: add `jsx: 'react-jsx'` to the inline `tsconfig`.
+- `@swc/jest`: use `parser: { syntax: 'typescript', tsx: true }` and add
+  `transform: { react: { runtime: 'automatic' } }` under `jsc`.
+
+`babel-jest` (strips types with the Babel TypeScript preset):
+
+```js
+module.exports = {
+  testEnvironment: 'node',
+  transform: { '^.+\\.ts$': ['babel-jest', {
+    presets: ['@babel/preset-typescript'],
+    plugins: ['@babel/plugin-transform-modules-commonjs'],
+  }] },
+  collectCoverageFrom: ['src/**/*.ts'],
+};
+```
+
+`ts-jest` (transpile only; keep type checking in `tsc`):
+
+```js
+module.exports = {
+  testEnvironment: 'node',
+  transform: { '^.+\\.ts$': ['ts-jest', {
+    diagnostics: false,
+    tsconfig: { module: 'commonjs', target: 'es2022', esModuleInterop: true },
+  }] },
+  collectCoverageFrom: ['src/**/*.ts'],
+};
+```
+
+`@swc/jest` (inline source maps let coverage remap to TypeScript):
+
+```js
+module.exports = {
+  testEnvironment: 'node',
+  transform: { '^.+\\.ts$': ['@swc/jest', {
+    jsc: { parser: { syntax: 'typescript' }, target: 'es2022' },
+    module: { type: 'commonjs' },
+    sourceMaps: 'inline',
+  }] },
+  collectCoverageFrom: ['src/**/*.ts'],
+};
+```
+
+Then collect and scan in one step from the project root, using the npm package:
+
+```sh
+npx typescript-crap coverage --framework jest --provider v8 --scan -- --config jest.config.cjs
+```
+
+With the release helper bundle, run
+`node /tools/ts-crap-coverage-helpers/coverage-run.mjs` with the same arguments,
+replacing `/tools/ts-crap-coverage-helpers` with the extracted directory.
+
+Vitest needs no transformer configuration. Both providers are tested on every
+supported major. Choose one with `--provider`:
+
+```sh
+npx typescript-crap coverage --framework vitest --provider v8 --scan
+npx typescript-crap coverage --framework vitest --provider istanbul --scan
+```
+
 ## Version matrix
 
 [`tests/fixtures/framework-versions`](../tests/fixtures/framework-versions)

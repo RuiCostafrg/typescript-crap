@@ -72,7 +72,8 @@ the Jest fixture tests. Pick the provider at run time with
 `--provider babel|v8`, or set `coverageProvider` in the config.
 
 The snippets match `.ts` files only. For `.tsx` files containing JSX, widen the
-pattern to `'^.+\\.tsx?$'` and add one option per transformer (these TSX
+transform pattern to `'^.+\\.tsx?$'`, widen `collectCoverageFrom` to
+`'src/**/*.{ts,tsx}'`, and add one option per transformer (these TSX
 settings are not part of the Jest fixture; the tested TSX fixture runs under
 Vitest):
 

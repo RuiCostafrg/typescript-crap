@@ -261,6 +261,12 @@ try {
       continue;
     }
     const version = JSON.parse(await fs.readFile(path.join(root, 'node_modules', transformer, 'package.json'), 'utf8')).version;
+    // Jest's resolved config must transform TypeScript with the declared module.
+    const shown = JSON.parse(run(process.execPath, [path.join(root, 'node_modules/jest/bin/jest.js'),
+      '--config', config, '--showConfig']).stdout);
+    const modules = shown.configs.flatMap(entry => entry.transform.map(([, module]) => module.split(path.sep).join('/')));
+    assert(modules.length && modules.every(module => module.includes(`/node_modules/${transformer}/`)),
+      `${config} must transform with ${transformer}, got ${JSON.stringify(modules)}`);
     if (transformer !== 'babel-jest') {
       // The marker must catch a wrong config: expecting babel-jest here fails the tests.
       const output = path.join(await fs.mkdtemp(path.join(root, 'coverage', 'jest-wrong-config-')), 'native.json');

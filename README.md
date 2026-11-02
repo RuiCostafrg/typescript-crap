@@ -31,13 +31,20 @@ Homebrew, PowerShell, a manual download or the GitHub Action below.
 ### npm (TypeScript projects)
 
 Releases after v2.2.1 are published to npm as
-[`typescript-crap`](https://www.npmjs.com/package/typescript-crap). The installed
-command is still `ts-crap`:
+[`typescript-crap`](https://www.npmjs.com/package/typescript-crap). Until the
+first of them is out, npm only has a `0.0.0` placeholder with no scanner, so use
+one of the other methods below. The installed command is still `ts-crap`:
 
 ```sh
-npm install --save-dev typescript-crap   # or pnpm add -D, yarn add -D, bun add -d
-npx ts-crap --root . --threshold 30
+npm install --save-dev --save-exact typescript-crap   # or pnpm add -D -E, yarn add -D -E, bun add -d -E
+npx ts-crap --root . --threshold 30                   # or pnpm exec / yarn / bun run ts-crap
 ```
+
+- `--save-exact` records the exact version in `package.json`; without it the
+  lockfile still pins the installed version, but a regenerated lockfile may
+  pick a newer release.
+- Under Yarn Plug'n'Play, run `yarn ts-crap`: `npx` can't see Plug'n'Play
+  commands and would fetch the unrelated npm package `ts-crap` instead.
 
 - The scanner comes from a platform package (`typescript-crap-linux-x64`,
   `-linux-arm64`, `-darwin-x64`, `-darwin-arm64`, `-win32-x64`) that your
@@ -50,8 +57,10 @@ npx ts-crap --root . --threshold 30
   dependencies.
 - The package also contains the coverage helpers at the same version. The
   one-step Vitest/Jest command is
-  `npx typescript-crap coverage --framework vitest --scan` (Node.js 24 or later;
-  see [coverage helpers](docs/COVERAGE_HELPERS.md#install-with-npm)).
+  `npx typescript-crap coverage --framework vitest --scan`. It needs Node.js 24
+  or later and Vitest or Jest in `node_modules`, so Yarn Plug'n'Play projects
+  set `nodeLinker: node-modules` first (see
+  [coverage helpers](docs/COVERAGE_HELPERS.md#install-with-npm)).
 - For a one-off run without installing, use `npx typescript-crap@VERSION`, not
   `npx ts-crap`: the npm name `ts-crap` belongs to an unrelated package.
 - Packages are published from the release workflow with npm trusted publishing

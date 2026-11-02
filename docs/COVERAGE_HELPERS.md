@@ -3,7 +3,8 @@
 ## Install with npm
 
 Releases after v2.2.1 include the helpers in the npm package `typescript-crap`,
-in `node_modules/typescript-crap/coverage/`. They are byte-identical to the
+in `node_modules/typescript-crap/coverage/`. (Until the first such release, npm
+only has a `0.0.0` placeholder; use the standalone bundle below.) They are byte-identical to the
 release's `ts-crap-coverage-helpers.zip`, and the package's scanner is the same
 version, so nothing needs to be matched by hand:
 
@@ -13,6 +14,10 @@ npx typescript-crap coverage --framework vitest --scan      # one-step Vitest/Je
 node node_modules/typescript-crap/coverage/coverage.mjs --root . --output native.json -- node test.mjs
 npx ts-crap --root . --coverage native.json --require-coverage
 ```
+
+With pnpm, Yarn or Bun, run the same commands through `pnpm exec`, `yarn` or
+`bun run`. Under Yarn Plug'n'Play use `yarn ts-crap`, never `npx ts-crap`, which
+would fetch the unrelated npm package of that name.
 
 `typescript-crap coverage ARGS` runs `coverage-run.mjs` (described
 [below](#one-step-vitest-or-jest-coverage)) with ARGS. With `--scan` and no

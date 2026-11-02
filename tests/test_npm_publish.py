@@ -101,6 +101,8 @@ class PublishJobScriptTests(unittest.TestCase):
         self.calls.write_text('')
         self.summary = self.root / 'summary.md'
         self.stage_ids = self.root / 'stage-ids'
+        self.pending = self.root / 'pending'
+        self.pending.mkdir()
         # gh serves the release assets from disk; attestation can be made to fail per asset.
         (self.bin / 'gh').write_text(
             '#!/bin/bash\necho "gh $*" >> "$CALLS"\n'
@@ -124,6 +126,9 @@ class PublishJobScriptTests(unittest.TestCase):
             # Staged versions are private, so npm view keeps returning E404 for them.
             'if [[ "$1 $2" == "stage publish" ]]; then n=$(basename "$3"); n=${n%.tgz}\n'
             '  if [[ "$n" == *"$FAIL_STAGE"* && -n "$FAIL_STAGE" ]]; then echo "npm error code E403" >&2; exit 1; fi\n'
+            # Like the registry: a version that is still staged can't be staged again.
+            '  if [[ -e "$PENDING/$n" ]]; then echo "npm error You cannot publish over the previously staged version" >&2; exit 1; fi\n'
+            '  : > "$PENDING/$n"\n'
             # Unpredictable ids, recorded so tests can check the job copies npm's ids.
             '  if [[ -z "$NO_STAGE_ID" ]]; then id=$(openssl rand -hex 8); echo "${n%-*}@${n##*-} $id" >> "$STAGE_IDS"\n'
             '    echo "+ ${n%-*}@${n##*-} (staged with id $id)"; else echo "+ ${n%-*}@${n##*-} (staged)"; fi; fi\n')
@@ -139,6 +144,7 @@ class PublishJobScriptTests(unittest.TestCase):
         # Always a private file: hosted runners already set GITHUB_STEP_SUMMARY.
         env['GITHUB_STEP_SUMMARY'] = str(self.summary)
         env['STAGE_IDS'] = str(self.stage_ids)
+        env['PENDING'] = str(self.pending)
         return subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', script], cwd=self.work, env=env,
                               capture_output=True, text=True, timeout=120)
 
@@ -263,6 +269,8 @@ class PublishJobScriptTests(unittest.TestCase):
     def dist_tag_is(self, tag):
         for name in [npm.platform_name(t) for t in npm.TARGETS] + ['typescript-crap']:
             (self.published / name).unlink(missing_ok=True)
+        for staged in self.pending.iterdir():  # each check starts with nothing staged
+            staged.unlink()
         self.calls.write_text('')
         result = self.publish()
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -309,6 +317,15 @@ class PublishJobScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f'{name}@{VERSION} is already published with identical contents', result.stdout)
         self.assertEqual(len(self.published_calls()), 5)
+        # Staged versions stay pending until the owner acts, so a plain rerun stops at the first one.
+        self.calls.write_text('')
+        result = self.publish()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('previously staged version', result.stderr)
+        self.assertEqual(len(self.published_calls()), 1)
+        # After the owner rejects the pending stages, a rerun stops at a conflicting published version.
+        for staged in self.pending.iterdir():
+            staged.unlink()
         self.calls.write_text('')
         (self.published / 'typescript-crap-darwin-x64').write_text('sha512-different\n')
         result = self.publish()

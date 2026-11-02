@@ -22,13 +22,11 @@ when a stream changes state.
 - **Distribution now:**
   - B (shell installer hardening) and C (GitHub Action) start now, in parallel
     with the roadmap. Each ships in the first release after it merges.
-  - Until npm exists, the Vitest/Jest one-step command ships in the coverage
-    helper bundle (`ts-crap-coverage-helpers.zip`), not through `npx`.
-- **Distribution later:**
-  - A (npm package) is **deferred until the owner creates the npm account**,
-    enables 2FA and sets up trusted publishing.
-  - The npm package name is still undecided. `typescript-crap` is
-    recommended. `ts-crap` is taken.
+  - The Vitest/Jest one-step command ships in the coverage helper bundle
+    (`ts-crap-coverage-helpers.zip`), and in the npm package as
+    `npx typescript-crap coverage` from the first release after v2.2.1.
+- **Distribution A (npm):** originally deferred until the owner's npm account
+  existed. Unblocked on 2026-11-01 (below); merged in #48 and #49.
 - **Decided 2026-10-31:**
   - Linux will use the static musl binary, in the installer and every other
     channel. This is pending implementation in the distribution stream.
@@ -53,7 +51,7 @@ when a stream changes state.
 | --- | --- | --- | --- | --- |
 | Roadmap v2.3 | `ROADMAP_V2_3.md` phases 1–3, in priority order (1.1 → 1.5, 2.1, 2.2, Phase 3, then later items) | Roadmap v2.3 implementation | `roadmap/` | 1.1 one-step command (#43), 1.2 diagnostics (#46) and 1.3 version matrix (#47) merged |
 | Distribution B + C | Installer hardening and GitHub Action | Distribution: installer hardening + GitHub Action | `distribution/` | B docs/CI (#41), static musl default (#44) and GitHub Action (#42) merged; decisions recorded in #45. Next: exact `--cert-identity` in the repo's own verification commands |
-| Distribution A (npm) | npm package with per-platform binaries and bundled helpers | Distribution A: npm package | `distribution/npm-` | Packages and install verification (#48), release publishing and published checks (#49) merged; user docs in review. Ships with the next release (two `release` approvals; run verify-published with `verify-npm=true`) |
+| Distribution A (npm) | npm package with per-platform binaries and bundled helpers | Distribution A: npm package | `distribution/npm-` | Packages and install verification (#48), release publishing and published checks (#49) merged; user docs in review. Ships with the next release (two `release` approvals; after publication, run verify-published with `verify-npm=true`) |
 | Docs PRs | This file and the two plans; owner decisions | this coordinating thread | `docs/` | #40 merged; #45 decisions |
 
 Thread links are in T3: search thread titles above with `t3_thread_search`,

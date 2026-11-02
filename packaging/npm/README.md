@@ -13,7 +13,7 @@ The package installs a prebuilt native scanner for Linux (x64, arm64; static,
 so glibc and musl both work), macOS (x64, arm64) and Windows (x64). The
 executable comes from a platform package (`typescript-crap-linux-x64` and so
 on), which your package manager selects by `os` and `cpu`. There is no install
-script and nothing is downloaded at install time, so it works with
+script and nothing is downloaded at install time, so installing works with
 `--ignore-scripts`, pnpm, Yarn (including Plug'n'Play), Bun, offline caches and
 registry mirrors. Do not omit optional dependencies (`--omit=optional`): the
 platform packages are optional dependencies.
@@ -32,6 +32,10 @@ platform packages are optional dependencies.
   ```sh
   npx typescript-crap coverage --framework vitest --scan
   ```
+
+  The coverage command runs your test framework from `node_modules`, so it
+  does not support Yarn Plug'n'Play: set `nodeLinker: node-modules` in
+  `.yarnrc.yml` first. The scanner itself works under Plug'n'Play.
 
 The other coverage helpers are in `node_modules/typescript-crap/coverage/`,
 for example `node node_modules/typescript-crap/coverage/coverage.mjs`. They are

@@ -271,7 +271,7 @@ jobs:
             expected+=("typescript-crap-$platform-$version.tgz")
             patterns+=(--pattern "${archives[$platform]}")
           done
-          [[ "$(ls npm-packages | sort)" == "$(printf '%s\n' "${expected[@]}" | sort)" ]] \
+          [[ "$(find npm-packages -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)" == "$(printf '%s\n' "${expected[@]}" | sort)" ]] \
             || { echo "::error::npm-packages must hold exactly: ${expected[*]}"; exit 1; }
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$work/release" "${patterns[@]}"
           # The release assets and the npm tarballs themselves were attested by the publish job.

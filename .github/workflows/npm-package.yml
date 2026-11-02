@@ -109,7 +109,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.22.2
-      - name: Dry-run the release publish command with the release's pinned npm CLI
+      - name: Dry-run the release stage-publish command with the release's pinned npm CLI
         shell: bash
         env:
           VERSION: ${{ steps.pack.outputs.version }}
@@ -125,7 +125,7 @@ jobs:
           cp -R target/npm-packages "$publish_dir/npm-packages"
           cd "$publish_dir"
           for name in typescript-crap-linux-x64 typescript-crap-linux-arm64 typescript-crap-darwin-x64 typescript-crap-darwin-arm64 typescript-crap-win32-x64 typescript-crap; do
-            npm publish --dry-run --force "./npm-packages/$name-$VERSION.tgz" --access public --tag latest
+            npm stage publish --dry-run --force "./npm-packages/$name-$VERSION.tgz" --access public --tag latest
           done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

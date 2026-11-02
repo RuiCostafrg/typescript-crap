@@ -1,6 +1,6 @@
 # Adopt the CI gate with installed tools
 
-For Node projects on v2.3.1 and later, the simplest setup is the npm
+For Node projects on v2.3.2 and later, the simplest setup is the npm
 package: add `typescript-crap` as a dev dependency, so `npm ci` installs the
 scanner and the matching helpers, and run `npx ts-crap ...` or
 `npx typescript-crap coverage --framework vitest --scan` (or `--framework jest`)
@@ -149,7 +149,7 @@ steps:
       persist-credentials: false
   - uses: RuiCostafrg/typescript-crap@<full commit SHA> # vX.Y.Z
     with:
-      version: 2.3.1
+      version: 2.3.2
       helpers: true
   # ts-crap and $TS_CRAP_HELPERS are now available to later steps.
 ```
@@ -182,7 +182,7 @@ jobs:
           persist-credentials: false
       - uses: RuiCostafrg/typescript-crap@<full commit SHA> # vX.Y.Z
         with:
-          version: 2.3.1
+          version: 2.3.2
           scan: true
           sarif: true
           upload-sarif: true

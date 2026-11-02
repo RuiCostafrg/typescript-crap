@@ -1,4 +1,6 @@
 module.exports = {
+  // service.test.ts checks this against FIXTURE_TRANSFORMER to prove this config ran.
+  globals: { fixtureTransformer: 'babel-jest' },
   testEnvironment: 'node',
   testMatch: ['<rootDir>/packages/service/*.test.ts'],
   transform: { '^.+\\.tsx?$': ['babel-jest', {

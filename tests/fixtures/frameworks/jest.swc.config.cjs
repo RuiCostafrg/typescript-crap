@@ -1,5 +1,7 @@
 // @swc/jest with inline source maps so coverage remaps to TypeScript.
 module.exports = {
+  // service.test.ts checks this against FIXTURE_TRANSFORMER to prove this config ran.
+  globals: { fixtureTransformer: '@swc/jest' },
   testEnvironment: 'node',
   testMatch: ['<rootDir>/packages/service/*.test.ts'],
   transform: { '^.+\\.tsx?$': ['@swc/jest', {

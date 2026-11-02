@@ -24,7 +24,7 @@ when a stream changes state.
     with the roadmap. Each ships in the first release after it merges.
   - The Vitest/Jest one-step command ships in the coverage helper bundle
     (`ts-crap-coverage-helpers.zip`), and in the npm package as
-    `npx typescript-crap coverage` from the first release after v2.2.1.
+    `npx typescript-crap coverage` from v2.3.0.
 - **Distribution A (npm):** originally deferred until the owner's npm account
   existed. Unblocked on 2026-11-01 (below); merged in #48 and #49.
 - **Decided 2026-10-31:**

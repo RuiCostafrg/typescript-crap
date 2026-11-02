@@ -30,10 +30,9 @@ Homebrew, PowerShell, a manual download or the GitHub Action below.
 
 ### npm (TypeScript projects)
 
-Releases after v2.2.1 are published to npm as
-[`typescript-crap`](https://www.npmjs.com/package/typescript-crap). Until the
-first of them is out, npm only has a `0.0.0` placeholder with no scanner, so use
-one of the other methods below. The installed command is still `ts-crap`:
+Releases from v2.3.0 are published to npm as
+[`typescript-crap`](https://www.npmjs.com/package/typescript-crap). The
+installed command is still `ts-crap`:
 
 ```sh
 npm install --save-dev --save-exact typescript-crap   # or pnpm add -D -E, yarn add -D -E, bun add -d -E
@@ -113,7 +112,7 @@ when `sha256sum` is available: without it, the installer prints
 `command -v sha256sum` step stops the sequence in that case. On macOS without
 `sha256sum`, use Homebrew or the manual archive download instead. In CI, set `TS_CRAP_UNMANAGED_INSTALL` to a directory to install there
 without editing shell profiles or writing an install receipt, then add that
-directory to `PATH`. On Linux, installers for releases after v2.2.1 always
+directory to `PATH`. On Linux, installers from v2.3.0 on always
 install the static musl build. The v2.2.1 installer uses the GNU build when the
 system glibc is 2.43 or newer (Ubuntu 26.04), and otherwise the static musl build.
 
@@ -155,7 +154,7 @@ adds `ts-crap` to `PATH`. It can also run the gate and upload SARIF:
 ```yaml
 - uses: RuiCostafrg/typescript-crap@<full commit SHA> # vX.Y.Z
   with:
-    version: 2.2.1
+    version: 2.3.0
 ```
 
 Pinning the full commit SHA, with the release as a comment, is the recommended

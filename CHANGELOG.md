@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.3.0 — 2026-11-02
+
 ### Added
 
 - npm package `typescript-crap`: `npm install --save-dev typescript-crap`,

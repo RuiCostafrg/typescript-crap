@@ -30,7 +30,7 @@ Homebrew, PowerShell, a manual download or the GitHub Action below.
 
 ### npm (TypeScript projects)
 
-Releases from v2.3.0 are published to npm as
+Releases from v2.3.1 are published to npm as
 [`typescript-crap`](https://www.npmjs.com/package/typescript-crap). The
 installed command is still `ts-crap`:
 
@@ -85,7 +85,7 @@ installs, pin a version instead. Each release's installer installs only that
 release and embeds the SHA-256 of every archive it can download:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/RuiCostafrg/typescript-crap/releases/download/v2.3.0/ts-crap-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/RuiCostafrg/typescript-crap/releases/download/v2.3.1/ts-crap-installer.sh | sh
 ```
 
 To check the installer before running it, download it, verify its
@@ -93,7 +93,7 @@ To check the installer before running it, download it, verify its
 only then run the verified file:
 
 ```sh
-version=2.3.0
+version=2.3.1
 installer_dir=$(mktemp -d) &&
 curl --proto '=https' --tlsv1.2 -LsSf -o "$installer_dir/ts-crap-installer.sh" \
   "https://github.com/RuiCostafrg/typescript-crap/releases/download/v$version/ts-crap-installer.sh" &&
@@ -154,7 +154,7 @@ adds `ts-crap` to `PATH`. It can also run the gate and upload SARIF:
 ```yaml
 - uses: RuiCostafrg/typescript-crap@<full commit SHA> # vX.Y.Z
   with:
-    version: 2.3.0
+    version: 2.3.1
 ```
 
 Pinning the full commit SHA, with the release as a comment, is the recommended

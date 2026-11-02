@@ -116,6 +116,9 @@ class PublishJobScriptTests(unittest.TestCase):
             'if [[ "$1" == view ]]; then f="$PUBLISHED/${2%@*}"\n'
             '  if [[ ! -f "$f" ]]; then printf "npm error code E404\\nnpm error 404 No match found for version %s\\n" "${2##*@}" >&2; exit 1; fi\n'
             '  if [[ "$3" == version ]]; then echo "${2##*@}"; else cat "$f"; fi; exit 0; fi\n'
+            # Like npm 12: a tarball path without ./ or / is a GitHub shorthand and is refused.
+            'if [[ "$1" == publish && "$2" != ./* && "$2" != /* ]]; then\n'
+            '  printf "npm error code EALLOWGIT\\nnpm error Refusing to fetch \\"github:%s\\"\\n" "$2" >&2; exit 1; fi\n'
             'if [[ "$1" == publish ]]; then n=$(basename "$2"); n=${n%-$VERSION.tgz}\n'
             '  echo "sha512-$(openssl dgst -sha512 -binary "$2" | base64 -w0)" > "$PUBLISHED/$n"; fi\n')
         (self.bin / 'sleep').write_text('#!/bin/sh\nexit 0\n')
@@ -217,7 +220,7 @@ class PublishJobScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         expected = [npm.platform_name(t) for t in npm.TARGETS] + ['typescript-crap']
         self.assertEqual(self.published_calls(), [
-            f'npm publish npm-packages/{name}-{VERSION}.tgz --access public --provenance --tag latest' for name in expected])
+            f'npm publish ./npm-packages/{name}-{VERSION}.tgz --access public --provenance --tag latest' for name in expected])
 
     def test_prereleases_use_the_next_dist_tag(self):
         for path in (self.work / 'npm-packages').iterdir():

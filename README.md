@@ -529,9 +529,10 @@ directory names. Each entry is one directory name, matched at any depth, with no
 separators, `.`, `..` or duplicates; `[]` excludes nothing. Omitting it keeps the
 defaults `["node_modules", ".git", "target", "dist", "build", "coverage"]`. Keep
 `node_modules` and `.git` when you replace the list. The coverage helpers read
-this key from the same file (`ROOT/ts-crap.json` or `--config`), so coverage is
-collected for exactly the directories the scanner selects. Older scanners reject
-the key as unknown.
+this key from the same file (`ROOT/ts-crap.json` or `--config`), so they skip
+the same directory names as the scanner. They do not apply `.gitignore` or skip
+hidden entries, so they may record extra files the scanner never selects; those
+records are unused. Older scanners reject the key as unknown.
 
 ```json
 {

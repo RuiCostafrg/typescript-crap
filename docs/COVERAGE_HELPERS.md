@@ -69,7 +69,10 @@ directory and `/project` with your project root. On Windows use Windows paths in
 the same quoted arguments. Output paths are relative to your calling directory;
 the child command runs inside the project root.
 
-Both helpers snapshot the same directories the scanner selects. They read only
+Both helpers skip the same excluded directory names as the scanner. They do not
+apply `.gitignore` or skip hidden entries as the scanner's directory walk does,
+so they may record extra files the scanner never selects; those records are
+unused. They read only
 `excluded_directories` from `ROOT/ts-crap.json` (or `--config FILE`), and use the
 default list when the key or the default file is absent. An explicit `--config`
 must exist, and an invalid list is an error. See the README's

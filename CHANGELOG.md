@@ -7,8 +7,8 @@
 - `excluded_directories` in `ts-crap.json` replaces the built-in excluded
   directory names (`node_modules`, `.git`, `target`, `dist`, `build`,
   `coverage`), for example to scan a real `src/build/` directory. The coverage
-  helpers read the same key, so collection snapshots exactly what the scanner
-  selects. Omitting it keeps the defaults.
+  helpers read the same key, so collection skips the same directory names as
+  the scanner. Omitting it keeps the defaults.
 - Jest `ts-jest` and `@swc/jest` transformer fixtures and the Jest `v8` coverage
   provider. Each pair must give exactly the `babel-jest`/`babel` CRAP results.
   The docs include a configuration snippet for every supported combination.

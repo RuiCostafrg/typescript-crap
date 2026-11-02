@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import struct
 import tarfile
@@ -210,6 +211,15 @@ class NpmPackageTests(unittest.TestCase):
         (self.root / 'exists').mkdir()
         with self.assertRaises(FileExistsError):
             npm.build(self.assets, VERSION, self.root / 'exists')
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX modes')
+    def test_output_directory_gets_the_normal_umask_mode(self):
+        previous = os.umask(0o027)
+        try:
+            output = self.build()[0].parent
+        finally:
+            os.umask(previous)
+        self.assertEqual(output.stat().st_mode & 0o777, 0o750)
 
     def test_failed_write_leaves_no_partial_output(self):
         output = self.root / 'packages'

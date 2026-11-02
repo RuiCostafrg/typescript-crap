@@ -217,7 +217,9 @@ test('a Yarn Plug\'n\'Play project gets a node_modules hint instead of an instal
   assert.throws(() => frameworkBinary(app, 'vitest'),
     new RegExp(`${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} uses Yarn Plug'n'Play.*nodeLinker: node-modules`));
   const plain = await project(t);
-  if (!yarnPnpRoot(plain)) assert.throws(() => frameworkBinary(plain, 'jest'), /install it first \(npm install --save-dev jest\)/);
+  if (!yarnPnpRoot(plain) && unlessAncestor(t, ['jest'])) {
+    assert.throws(() => frameworkBinary(plain, 'jest'), /install it first \(npm install --save-dev jest\)/);
+  }
 });
 
 test('the printed scanner command starts with ts-crap or the launcher\'s JSON words', async t => {

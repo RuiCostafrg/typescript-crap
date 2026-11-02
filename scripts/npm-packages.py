@@ -5,6 +5,7 @@ import gzip
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import struct
@@ -178,6 +179,10 @@ def build(assets, version, output):
         raise FileExistsError(f'output already exists: {output}')
     staging = Path(tempfile.mkdtemp(prefix='.npm-packages-', dir=output.parent))
     try:
+        # mkdtemp is owner-only; give the result the mode mkdir() would have.
+        mask = os.umask(0)
+        os.umask(mask)
+        staging.chmod(0o777 & ~mask)
         for name, data in built.items():
             (staging / name).write_bytes(data)
         staging.rename(output)

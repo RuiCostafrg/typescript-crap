@@ -48,7 +48,8 @@ For each combination, the suite asserts:
   hits remain coverage evidence, and the scanner returns quality-gate exit 1.
 - Reusing report paths is rejected without changing the previous native report.
   A new directory produces the same native coverage and scanner report.
-- The one-step `coverage-run.mjs` command, given the same framework, provider
+- The one-step `coverage-run.mjs` command (`npx typescript-crap coverage` in
+  the npm package), given the same framework, provider
   and format, publishes byte-identical native coverage. Automatic detection
   refuses to guess in this fixture, which has both configurations.
 - Editing source after collection causes a scanner SHA-256 mismatch (exit 2).

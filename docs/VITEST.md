@@ -8,8 +8,11 @@ providers on Linux, macOS and Windows (see the
 ## 1. Install
 
 ```sh
-npm install --save-dev --save-exact typescript-crap @vitest/coverage-v8
+npm install --save-dev --save-exact typescript-crap @vitest/coverage-v8@VITEST_VERSION
 ```
+
+Replace `VITEST_VERSION` with your installed Vitest version (`npx vitest --version`):
+the coverage provider must match it exactly, as in the tested fixtures.
 
 `typescript-crap` installs the `ts-crap` scanner and the coverage helpers at the
 same version. The helpers need Node.js 24 or later. Install
@@ -117,8 +120,8 @@ jobs:
 Actions are pinned to commit SHAs, as in this repository's workflows. For a
 reviewed baseline, changed-file (`--diff`) gating and retained JSON/SARIF reports,
 start from [examples/ci/github-actions.yml](../examples/ci/github-actions.yml) and
-[CI_ADOPTION.md](CI_ADOPTION.md). CI runs that workflow's collection, baseline and
-gate commands with real Vitest coverage, using `scripts/verify-ci-guide.py` in a synthetic
+[CI_ADOPTION.md](CI_ADOPTION.md). CI replays equivalent collection, baseline and gate
+commands with real Vitest coverage, using `scripts/verify-ci-guide.py` in a synthetic
 Git checkout with the installed helper bundle. The YAML file itself is not run.
 
 ## Troubleshooting

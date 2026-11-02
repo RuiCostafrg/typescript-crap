@@ -69,7 +69,8 @@ directory. It then converts the report into source-hashed native coverage and ru
 instead.
 
 - `--provider babel` or `--provider v8` sets Jest's `--coverageProvider`. Without
-  it, your configured provider is used. The CRAP results are the same either way.
+  it, your configured provider is used. On Jest 30 both providers are tested to
+  give the same CRAP results; Jest 29 is tested with `babel`.
 - Arguments after `--` go to Jest, for example `-- --config jest.ci.config.cjs --runInBand`.
   Arguments that would change the coverage reporter, directory or provider are
   rejected.
@@ -122,8 +123,8 @@ jobs:
 Actions are pinned to commit SHAs, as in this repository's workflows. For a
 reviewed baseline, changed-file (`--diff`) gating and retained JSON/SARIF reports,
 start from [examples/ci/github-actions-jest.yml](../examples/ci/github-actions-jest.yml) and
-[CI_ADOPTION.md](CI_ADOPTION.md). CI runs that workflow's collection, baseline and
-gate commands with real Jest coverage through the one-step command, using `scripts/verify-ci-guide.py` in a synthetic
+[CI_ADOPTION.md](CI_ADOPTION.md). CI replays equivalent collection, baseline and gate
+commands with real Jest coverage through the one-step command, using `scripts/verify-ci-guide.py` in a synthetic
 Git checkout with the installed helper bundle. The YAML file itself is not run.
 
 ## Troubleshooting

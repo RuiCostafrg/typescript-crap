@@ -245,9 +245,10 @@ changes, a regression, deterministic fresh repeats, JSON/SARIF artifacts on exit
 and stale-input rejection while preserving prior artifacts. It verifies the
 baseline stays unchanged. CI runs it with direct Node, actual Vitest JSON
 collection, and Jest through the one-step `coverage-run.mjs` command that
-[the Jest workflow](../examples/ci/github-actions-jest.yml) uses. These runs repeat
-the workflows' commands in a synthetic checkout; the YAML files are not executed
-themselves. Release archive
+[the Jest workflow](../examples/ci/github-actions-jest.yml) uses. These runs replay
+equivalent collection, baseline and gate commands in a synthetic checkout with
+their own policy and baseline; the YAML files, including their `git show`,
+`--config` and artifact steps, are not executed themselves. Release archive
 verification runs it with the packaged CLI/helpers.
 
 ```sh

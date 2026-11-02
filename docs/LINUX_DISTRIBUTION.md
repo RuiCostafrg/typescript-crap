@@ -25,7 +25,7 @@ on Alpine and older glibc userlands; they are not Android/Termux builds. The
 container matrix does not establish compatibility with older Linux kernels.
 ## Shell installer selection
 
-From the first release after v2.2.1, the shell installer installs the static
+From v2.3.0, the shell installer installs the static
 musl build on every Linux system, so all installer users run the same tested
 binary whatever their glibc version. Release assembly rewrites the two Linux
 GNU selection branches of cargo-dist's generated installer

@@ -154,8 +154,7 @@ Linux and npm distribution options are evaluated separately in
 [LINUX_DISTRIBUTION_STRATEGY.md](LINUX_DISTRIBUTION_STRATEGY.md). The schedule
 follows [WORK_PLAN.md](WORK_PLAN.md):
 
-- Installer hardening and the GitHub Action are merged, and each ships in the
-  first release after v2.2.1.
+- Installer hardening and the GitHub Action are merged and ship in v2.3.0.
 - The npm package `typescript-crap` is merged and ships in that release too. The
   Vitest/Jest one-step command (1.1) is then, for example,
   `npx typescript-crap coverage --framework vitest --scan` (or `jest`, or

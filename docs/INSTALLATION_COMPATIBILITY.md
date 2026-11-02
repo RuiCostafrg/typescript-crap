@@ -16,7 +16,7 @@ The [installation workflow](../.github/workflows/installation.yml) verifies a
 pinned published upgrade pair, v0.3.0 to v0.4.0. The
 [release verification workflow](../.github/workflows/verify-release.yml) repeats
 installation and upgrades using the candidate release assets before publication.
-The installer and Homebrew checks upgrade candidates from the published v2.1.0
+The installer and Homebrew checks upgrade candidates from the published v2.2.1
 release; Debian package checks use the synthetic revision-zero fixture described
 in the Linux distribution guide. Update the published-version fixture
 explicitly if its supported upgrade range changes. Tagged publication requires
@@ -127,9 +127,10 @@ installer matrix exercises the hosted runner's standard Homebrew prefix.
 
 After each new release, run that workflow with its version and an explicitly
 selected, distinct previous published upgrade fixture. There is no default
-previous version: use `version=2.2.1`, `previous-version=2.1.0` and
-`verify-linux=true` for v2.2.1 verification, so its musl and Debian assets are
-checked. Historical rechecks keep `verify-linux=false` and use `version=2.0.0`,
+previous version: use `version=2.3.0`, `previous-version=2.2.1`,
+`verify-linux=true` and `verify-npm=true` for v2.3.0 verification, so its musl,
+Debian and npm packages are checked. v2.2.1 rechecks use `version=2.2.1`,
+`previous-version=2.1.0` and `verify-linux=true`. Historical rechecks keep `verify-linux=false` and use `version=2.0.0`,
 `previous-version=1.0.0` for v2.0.0, or `version=1.0.0`, `previous-version=0.4.0`
 for v1.
 Leave guide verification enabled for releases containing helpers.

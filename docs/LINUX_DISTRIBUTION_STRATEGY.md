@@ -2,7 +2,7 @@
 
 Drafted 2026-10-30 for discussion. Status (2026-11-02): B (installer
 hardening), C (GitHub Action) and A (npm package `typescript-crap`) are
-implemented and ship in the first release after v2.2.1; D is planned for
+implemented and ship in v2.3.0; D is planned for
 v2.4.0. See
 [ROADMAP_V2_3.md](ROADMAP_V2_3.md) for the feature roadmap and
 [LINUX_DISTRIBUTION.md](LINUX_DISTRIBUTION.md) for what ships today.
@@ -23,7 +23,7 @@ System package managers (APT, DNF, pacman) serve a different audience:
 machine-wide tools at one version for every project. A distro package doesn't
 help a TypeScript developer pin the tool per project.
 
-## What exists today (v2.2.1)
+## What existed at v2.2.1
 
 | Channel | Linux status | Notes |
 | --- | --- | --- |
@@ -31,7 +31,7 @@ help a TypeScript developer pin the tool per project.
 | Manual archives (`.tar.xz`) | ✅ GNU and static musl | Each has a `.sha256` and GitHub build provenance (`gh attestation verify`). |
 | Debian packages (`.deb`) | ✅ amd64, arm64 | Release assets installed with `apt install ./file.deb`. There is no APT repository, so there are no `apt upgrade` updates. |
 | Homebrew tap | ✅ Linux x86-64 | Owner-approved tap PRs; provenance is checked before every update. |
-| npm | ❌ (✅ `typescript-crap` from the next release) | The name `ts-crap` belongs to an unrelated package, so the package is `typescript-crap`; the command is still `ts-crap`. |
+| npm | ❌ (✅ `typescript-crap` from v2.3.0) | The name `ts-crap` belongs to an unrelated package, so the package is `typescript-crap`; the command is still `ts-crap`. |
 | crates.io / cargo-binstall | ❌ | Planned in the roadmap (item 2.6). |
 | APT/RPM repo, AUR, Nix, container image, GitHub Action | ❌ | — |
 
@@ -127,11 +127,10 @@ with the static musl build but are not verified. Improvements:
 - Document a verify-before-run flow: download the installer, check it with
   `gh attestation verify`, then run it. Piping a URL into `sh` remains the quick
   path.
-- Owner decision (2026-10-31): Linux will use the static musl build. Once the
-  installer and CI switch to that policy, it gives one tested Linux binary per
-  CPU and removes the glibc-2.43 GNU path from the installer. Until then the
-  v2.2.1 installer behaviour described above applies: GNU when glibc ≥ 2.43,
-  otherwise the static musl build. v2.1.0 and earlier installers have no musl
+- Owner decision (2026-10-31): Linux uses the static musl build. From v2.3.0
+  the installer installs it on every Linux system (#44), giving one tested
+  Linux binary per CPU without the glibc-2.43 GNU path. The v2.2.1 installer
+  used GNU when glibc ≥ 2.43, otherwise the static musl build. v2.1.0 and earlier installers have no musl
   archives and install the GNU build only.
 - **Effort:** S.
 
@@ -240,7 +239,7 @@ review for little benefit.
 Schedule (owner decision, 2026-10-30, updated 2026-11-02; see
 [WORK_PLAN.md](WORK_PLAN.md)):
 
-- B and C are merged and ship in the first release after v2.2.1.
+- B and C are merged and ship in v2.3.0.
 - A is merged as `typescript-crap` and ships in the same release. The
   Vitest/Jest one-step command is then
   `npx typescript-crap coverage --framework vitest --scan`.

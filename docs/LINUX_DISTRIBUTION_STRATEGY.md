@@ -127,11 +127,10 @@ with the static musl build but are not verified. Improvements:
 - Document a verify-before-run flow: download the installer, check it with
   `gh attestation verify`, then run it. Piping a URL into `sh` remains the quick
   path.
-- Owner decision (2026-10-31): Linux will use the static musl build. Once the
-  installer and CI switch to that policy, it gives one tested Linux binary per
-  CPU and removes the glibc-2.43 GNU path from the installer. Until then the
-  v2.2.1 installer behaviour described above applies: GNU when glibc ≥ 2.43,
-  otherwise the static musl build. v2.1.0 and earlier installers have no musl
+- Owner decision (2026-10-31): Linux uses the static musl build. From v2.3.0
+  the installer installs it on every Linux system (#44), giving one tested
+  Linux binary per CPU without the glibc-2.43 GNU path. The v2.2.1 installer
+  used GNU when glibc ≥ 2.43, otherwise the static musl build. v2.1.0 and earlier installers have no musl
   archives and install the GNU build only.
 - **Effort:** S.
 

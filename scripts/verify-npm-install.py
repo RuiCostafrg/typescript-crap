@@ -66,7 +66,9 @@ def manifest(manager, version, packages):
     fields['dependencies'] = {npm.MAIN: tarball(npm.MAIN)}
     pinned = {npm.platform_name(t): tarball(npm.platform_name(t)) for t in npm.TARGETS}
     if manager == 'npm':
-        fields['overrides'] = pinned
+        # Root optional dependencies satisfy the main package's exact pins on every
+        # npm, keep os/cpu filtering, and avoid npm 9's rejection of file: overrides.
+        fields['optionalDependencies'] = pinned
     elif manager == 'pnpm':
         pass  # pnpm 10+ reads overrides from pnpm-workspace.yaml; see workspace_files()
     elif manager == 'yarn':
@@ -158,7 +160,9 @@ def verify(manager, version, assets, packages, scan_root, work, target):
         raise ValueError(f'{manager}: installed {binary} differs from {npm.archive_name(target)}')
     if os.name != 'nt' and not os.access(binary, os.X_OK):
         raise ValueError(f'{manager}: installed {binary} is not executable')
-    if manager != 'yarn':  # Yarn may keep other platforms' archives in its cache.
+    # Yarn may keep other platforms' archives in its cache, and Bun installs every
+    # override-pinned local tarball; registry installs check Bun's os/cpu filtering.
+    if manager != 'yarn' and not (manager == 'bun' and packages is not None):
         stray = other_platform_paths(project, target)
         if stray:
             raise ValueError(f'{manager} installed other platform packages: {stray}')

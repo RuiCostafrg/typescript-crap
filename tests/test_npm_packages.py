@@ -388,7 +388,7 @@ class VerifyNpmInstallTests(unittest.TestCase):
 
     def test_packed_manifest_pins_every_platform_through_each_managers_override_field(self):
         packages = Path('/packed')
-        field = {'npm': 'overrides', 'bun': 'overrides', 'yarn': 'resolutions'}
+        field = {'npm': 'optionalDependencies', 'bun': 'overrides', 'yarn': 'resolutions'}
         for manager in installer.MANAGERS:
             with self.subTest(manager=manager):
                 fields = installer.manifest(manager, '2.3.0', packages)

@@ -348,13 +348,20 @@ jobs:
               dist_tag=backport
             fi
           fi
+          view() {  # Print a field; nothing if the version doesn't exist (E404). Other errors stop the job.
+            local errors output status=0
+            errors=$(mktemp)
+            output=$(npm view "$@" 2> "$errors") || status=$?
+            if (( status )) && ! grep -qx 'npm error code E404' "$errors"; then cat "$errors" >&2; exit 1; fi
+            rm -f "$errors"
+            printf '%s' "$output"
+          }
           publish() {
             local name=$1 file integrity published
             file="npm-packages/$name-$version.tgz"
             integrity=$(openssl dgst -sha512 -binary "$file" | base64 -w0)
             # npm versions are immutable, so a rerun skips identical packages and stops on any difference.
-            # A missing version prints nothing with status 0; registry errors stop the job.
-            published=$(npm view "$name@$version" dist.integrity)
+            published=$(view "$name@$version" dist.integrity)
             if [[ -n "$published" ]]; then
               [[ "$published" == "sha512-$integrity" ]] || { echo "::error::$name@$version is already published with different contents"; exit 1; }
               echo "$name@$version is already published with identical contents"

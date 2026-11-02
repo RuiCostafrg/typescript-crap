@@ -113,7 +113,8 @@ class PublishJobScriptTests(unittest.TestCase):
         (self.bin / 'npm').write_text(
             '#!/bin/bash\necho "npm $*" >> "$CALLS"\n'
             'if [[ "$1 $3" == "view dist-tags.latest" ]]; then cat "$PUBLISHED/latest" 2>/dev/null || echo 0.0.0; exit 0; fi\n'
-            'if [[ "$1" == view ]]; then f="$PUBLISHED/${2%@*}"; [[ -f "$f" ]] || exit 0\n'
+            'if [[ "$1" == view ]]; then f="$PUBLISHED/${2%@*}"\n'
+            '  if [[ ! -f "$f" ]]; then printf "npm error code E404\\nnpm error 404 No match found for version %s\\n" "${2##*@}" >&2; exit 1; fi\n'
             '  if [[ "$3" == version ]]; then echo "${2##*@}"; else cat "$f"; fi; exit 0; fi\n'
             'if [[ "$1" == publish ]]; then n=$(basename "$2"); n=${n%-$VERSION.tgz}\n'
             '  echo "sha512-$(openssl dgst -sha512 -binary "$2" | base64 -w0)" > "$PUBLISHED/$n"; fi\n')

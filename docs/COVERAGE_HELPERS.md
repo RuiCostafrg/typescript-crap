@@ -69,6 +69,12 @@ directory and `/project` with your project root. On Windows use Windows paths in
 the same quoted arguments. Output paths are relative to your calling directory;
 the child command runs inside the project root.
 
+Both helpers snapshot the same directories the scanner selects. They read only
+`excluded_directories` from `ROOT/ts-crap.json` (or `--config FILE`), and use the
+default list when the key or the default file is absent. An explicit `--config`
+must exist, and an invalid list is an error. See the README's
+[adoption gates](../README.md#adoption-gates-v02).
+
 Both helpers reject destinations at `ROOT/ts-crap.json`, whether or not it
 already exists. If the scanner uses an alternative policy, pass the same
 caller-relative `--config FILE` to the helper before `--` to protect that path as

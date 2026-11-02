@@ -27,15 +27,14 @@ fn supported(path: &Path) -> bool {
             .any(|ext| name.ends_with(ext))
 }
 
-fn excluded(path: &Path, root: &Path) -> bool {
+fn excluded(path: &Path, root: &Path, names: &[String]) -> bool {
     path.strip_prefix(root)
         .unwrap_or(path)
         .components()
         .any(|part| {
-            matches!(
-                part.as_os_str().to_str(),
-                Some("node_modules" | ".git" | "target" | "dist" | "build" | "coverage")
-            )
+            part.as_os_str()
+                .to_str()
+                .is_some_and(|part| names.iter().any(|name| name == part))
         })
 }
 
@@ -84,7 +83,7 @@ fn oid(root: &Path, reference: &str) -> Result<String> {
     Ok(String::from_utf8(data)?.trim().to_string())
 }
 
-fn diff_files(root: &Path, reference: &str) -> Result<BTreeMap<PathBuf, String>> {
+fn diff_files(root: &Path, reference: &str, names: &[String]) -> Result<BTreeMap<PathBuf, String>> {
     let reference = oid(root, reference)?;
     let head = oid(root, "HEAD")?;
     let data = git(root, &["merge-base", &head, &reference])?;
@@ -123,7 +122,7 @@ fn diff_files(root: &Path, reference: &str) -> Result<BTreeMap<PathBuf, String>>
             .nth(3)
             .context("Git diff omitted HEAD object ID")?;
         let path = top.join(std::str::from_utf8(name).context("Git source path is not UTF-8")?);
-        if path.starts_with(root) && supported(&path) && !excluded(&path, root) {
+        if path.starts_with(root) && supported(&path) && !excluded(&path, root, names) {
             // A committed file absent from the worktree is stale, not a passing empty scan.
             result.insert(
                 checked(&path, root)
@@ -173,13 +172,14 @@ pub fn files(
     requested: &[PathBuf],
     diff: Option<&str>,
     pr: Option<&str>,
+    names: &[String],
 ) -> Result<Selection> {
     // Git's tracked change set is authoritative in diff mode. A directory walk
     // would silently omit tracked ignored/hidden files and could hide gate failures.
     let changed = if let Some(pr) = pr {
-        Some(diff_files(root, &pr_base(root, pr)?)?)
+        Some(diff_files(root, &pr_base(root, pr)?, names)?)
     } else {
-        diff.map(|base| diff_files(root, base)).transpose()?
+        diff.map(|base| diff_files(root, base, names)).transpose()?
     };
     let mut all = BTreeSet::new();
     let default = vec![root.to_path_buf()];
@@ -199,7 +199,7 @@ pub fn files(
             if !supported(&path) {
                 bail!("not a supported TypeScript source: {}", path.display());
             }
-            if excluded(&path, root) {
+            if excluded(&path, root, names) {
                 bail!("source is in an excluded directory: {}", path.display());
             }
             all.insert(path);
@@ -219,7 +219,8 @@ pub fn files(
                 .follow_links(false)
                 .filter_entry({
                     let root = root.to_path_buf();
-                    move |entry| !excluded(entry.path(), &root)
+                    let names = names.to_vec();
+                    move |entry| !excluded(entry.path(), &root, &names)
                 });
             for entry in builder.build() {
                 let entry = entry.context("cannot walk source directory")?;

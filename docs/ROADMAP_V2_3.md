@@ -128,7 +128,7 @@ by hand and must pick fresh directories themselves (`README.md:488-493`).
 | 2.3 | Inline suppression comment, e.g. `// ts-crap-ignore-next-function: reason`. | A reason is required. Suppressions are listed in every report format. Suppression affects the gate but never coverage completeness. | S–M |
 | 2.4 | Changed-function-only diff mode. Currently every function in a changed file is scored. | `--diff-scope functions` scores only functions overlapping changed lines. The current file scope remains the default. | M |
 | 2.5 | Per-path thresholds for monorepos. | Glob overrides in `ts-crap.json`. The effective threshold is shown per function in JSON and SARIF. | M |
-| 2.6 | Publish to crates.io so `cargo install ts-crap` works. | Publish job in the release workflow. Uses the same owner approval and provenance model as the GitHub release, with a crates.io trusted-publishing token and no long-lived secret. | S |
+| 2.6 | Publish to crates.io so `cargo install ts-crap` works. | Publish job in the release workflow. Uses the same owner approval and provenance model as the GitHub release, with a crates.io trusted-publishing token and no long-lived secret. crates.io only allows Trusted Publishing after a first publish, so the first version needs an owner-approved manual publish and Trusted Publisher registration before the job is scheduled. | S |
 | 2.7 | Optional resource limits: maximum file size and child-process timeout. This is the open item from the 2026-10-24 review. | Opt-in flags. Defaults are unchanged. Documented for scanning untrusted repositories. | M |
 
 ## Phase 3: repository tooling
@@ -165,7 +165,7 @@ follows [WORK_PLAN.md](WORK_PLAN.md):
 ## Proposed release grouping
 
 - **v2.3.0:** 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, Phase 3.
-  Makes Vitest and Jest first-class and removes the two ways a scan can
+  Makes Vitest and Jest first-class and adds opt-in controls for the two ways a scan can
   silently skip code or abort entirely.
 - **v2.4.0:** 1.6, 2.3, 2.4, 2.5, 2.6.
   Adds monorepo, shard and PR-noise improvements, plus crates.io.

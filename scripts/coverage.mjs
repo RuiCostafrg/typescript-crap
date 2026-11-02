@@ -9,7 +9,7 @@
  */
 import { lineHits, mergeLineHits } from './coverage-lines.mjs';
 import { protectConfigDestinations, publishReport } from './coverage-publish.mjs';
-import { snapshot } from './coverage-snapshot.mjs';
+import { policyExclusions, snapshot } from './coverage-snapshot.mjs';
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import os from 'node:os';
@@ -60,6 +60,7 @@ async function main() {
   const files = await snapshot(root, {
     supported: name => extensions.has(path.extname(name)),
     sourceText: true, lineCount: false, compareNames: (a, b) => a.localeCompare(b),
+    excludedDirectories: await policyExclusions(root, args.config),
   });
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'ts-crap-v8-'));
   try {

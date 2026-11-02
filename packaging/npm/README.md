@@ -12,8 +12,9 @@ npx ts-crap --root . --threshold 30
 The package installs a prebuilt native scanner for Linux (x64, arm64; static,
 so glibc and musl both work), macOS (x64, arm64) and Windows (x64). The
 executable comes from a platform package (`typescript-crap-linux-x64` and so
-on), which your package manager selects by `os` and `cpu`. There is no install
-script and nothing is downloaded at install time, so installing works with
+on), which your package manager selects by `os` and `cpu` and fetches like
+any other dependency. There is no install script and no download outside the
+package manager, so installing works with
 `--ignore-scripts`, pnpm, Yarn (including Plug'n'Play), Bun, offline caches and
 registry mirrors. Do not omit optional dependencies (`--omit=optional`): the
 platform packages are optional dependencies.

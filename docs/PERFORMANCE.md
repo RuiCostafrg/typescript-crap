@@ -234,6 +234,27 @@ executable hashes, and compare production files against the baseline commit.
 This preserves the synthetic sequencing caveat above; use an actual CLI harness
 instead if exact historical CLI latency is the question.
 
+## Report streaming measurements
+
+The v0.4.0 rendering benchmark ran on 2026-10-25 in fresh optimized processes,
+with one warmup and five samples per case. The
+[raw measurements](measurements/p2-rendering-2026-10-25.json) retain timings,
+output sizes, toolchain, and process peak RSS.
+
+| Functions | SARIF output | Median (ms) | Process peak RSS (KiB) |
+| --- | --- | ---: | ---: |
+| 2,000 | String wrapper | 3.544 | 18,128 |
+| 2,000 | Stream to `io::sink` | 1.338 | 14,556 |
+| 10,000 | String wrapper | 20.033 | 59,372 |
+| 10,000 | Stream to `io::sink` | 6.660 | 49,584 |
+
+Reproduce with the release `review` benchmark's `render-sarif` and
+`stream-sarif` modes at sizes 2000 and 10000. Output byte counts agree between
+the two modes. These measurements describe the current implementation at that
+revision, rather than a controlled before/after comparison. Sink output omits
+file I/O and can allow compiler optimizations; peak RSS includes fixture setup
+and parsing. No general throughput or memory reduction percentage is inferred.
+
 ## Lookup optimization follow-up
 
 The three lookup changes are now implemented. This supersedes the initial

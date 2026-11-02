@@ -358,7 +358,8 @@ jobs:
           }
           publish() {
             local name=$1 file integrity published
-            file="npm-packages/$name-$version.tgz"
+            # The ./ prefix is required: npm reads "dir/file.tgz" as a GitHub shorthand.
+            file="./npm-packages/$name-$version.tgz"
             integrity=$(openssl dgst -sha512 -binary "$file" | base64 -w0)
             # npm versions are immutable, so a rerun skips identical packages and stops on any difference.
             published=$(view "$name@$version" dist.integrity)

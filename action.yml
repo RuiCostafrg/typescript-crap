@@ -10,7 +10,7 @@ branding:
 inputs:
   version:
     description: >-
-      Published ts-crap release to install, such as 2.3.0 (2.2.1 or newer;
+      Published ts-crap release to install, such as 2.3.1 (2.2.1 or newer;
       a leading v is accepted). Required, so CI stays reproducible.
     required: true
   helpers:

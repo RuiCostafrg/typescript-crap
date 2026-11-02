@@ -1,5 +1,40 @@
 # Standalone coverage helpers
 
+## Install with npm
+
+Releases after v2.2.1 include the helpers in the npm package `typescript-crap`,
+in `node_modules/typescript-crap/coverage/`. (Until the first such release, npm
+only has a `0.0.0` placeholder; use the standalone bundle below.) They are byte-identical to the
+release's `ts-crap-coverage-helpers.zip`, and the package's scanner is the same
+version, so nothing needs to be matched by hand:
+
+```sh
+npm install --save-dev typescript-crap
+npx typescript-crap coverage --framework vitest --scan      # one-step; or --framework jest
+node node_modules/typescript-crap/coverage/coverage.mjs --root . --output native.json -- node test.mjs
+npx ts-crap --root . --coverage native.json --require-coverage
+```
+
+With pnpm, Yarn or Bun, run the same commands through `pnpm exec`, `yarn` or
+`bun run`. Under Yarn Plug'n'Play use `yarn ts-crap`, never `npx ts-crap`, which
+would fetch the unrelated npm package of that name.
+
+`typescript-crap coverage ARGS` runs `coverage-run.mjs` (described
+[below](#one-step-vitest-or-jest-coverage)) with ARGS. With `--scan` and no
+`--scanner`, it scans with the package's own executable. Without `--scan`, the
+printed follow-up command is `npx typescript-crap@VERSION ...`, at the same
+version. The helpers need Node.js 24 or later; on older Node.js the command
+stops with a message.
+
+The coverage command finds Vitest and Jest in `node_modules`, so it doesn't
+support Yarn Plug'n'Play projects: set `nodeLinker: node-modules` in
+`.yarnrc.yml` first. The scanner itself works under Plug'n'Play.
+
+The rest of this page describes the standalone bundle. Its options and
+guarantees apply to the npm copy too.
+
+## Standalone bundle
+
 Starting with v1.0.0, releases include
 `ts-crap-coverage-helpers.zip` and its `.sha256` checksum. The bundle contains both
 collectors and every supporting module; no repository checkout, npm install, or

@@ -1,5 +1,15 @@
 # Adopt the CI gate with installed tools
 
+For Node projects on releases after v2.2.1, the simplest setup is the npm
+package: add `typescript-crap` as a dev dependency, so `npm ci` installs the
+scanner and the matching helpers, and run `npx ts-crap ...` or
+`npx typescript-crap coverage --framework vitest --scan` (or `--framework jest`)
+in CI. The coverage command needs Node.js
+24 or later in the CI job (the scanner alone runs on any maintained Node.js).
+Until the first release after v2.2.1 is published, npm has only a `0.0.0`
+placeholder. The rest of this page uses the release archives, which also suit
+non-Node pipelines.
+
 Use a published CLI and matching `ts-crap-coverage-helpers.zip` from the same
 release. The [copyable workflow](../examples/ci/github-actions.yml) targets the
 published [v1.0.0 release](https://github.com/RuiCostafrg/typescript-crap/releases/tag/v1.0.0),

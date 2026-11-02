@@ -1,6 +1,9 @@
 # Linux distribution strategy
 
-Drafted 2026-10-30 for discussion. Nothing here is implemented yet. See
+Drafted 2026-10-30 for discussion. Status (2026-11-02): B (installer
+hardening), C (GitHub Action) and A (npm package `typescript-crap`) are
+implemented and ship in the first release after v2.2.1; D is planned for
+v2.4.0. See
 [ROADMAP_V2_3.md](ROADMAP_V2_3.md) for the feature roadmap and
 [LINUX_DISTRIBUTION.md](LINUX_DISTRIBUTION.md) for what ships today.
 
@@ -28,7 +31,7 @@ help a TypeScript developer pin the tool per project.
 | Manual archives (`.tar.xz`) | ✅ GNU and static musl | Each has a `.sha256` and GitHub build provenance (`gh attestation verify`). |
 | Debian packages (`.deb`) | ✅ amd64, arm64 | Release assets installed with `apt install ./file.deb`. There is no APT repository, so there are no `apt upgrade` updates. |
 | Homebrew tap | ✅ Linux x86-64 | Owner-approved tap PRs; provenance is checked before every update. |
-| npm | ❌ | The name `ts-crap` belongs to an unrelated package. |
+| npm | ❌ (✅ `typescript-crap` from the next release) | The name `ts-crap` belongs to an unrelated package, so the package is `typescript-crap`; the command is still `ts-crap`. |
 | crates.io / cargo-binstall | ❌ | Planned in the roadmap (item 2.6). |
 | APT/RPM repo, AUR, Nix, container image, GitHub Action | ❌ | — |
 
@@ -234,13 +237,13 @@ review for little benefit.
 | Later | GHCR image (H), AUR/Nix (G), RPM (F), APT repository (E) | Add when users ask for them. |
 | No | Snap/Flatpak (I) | Poor fit for a CLI. |
 
-Schedule (owner decision, 2026-10-30; see [WORK_PLAN.md](WORK_PLAN.md)):
+Schedule (owner decision, 2026-10-30, updated 2026-11-02; see
+[WORK_PLAN.md](WORK_PLAN.md)):
 
-- B and C are being implemented now and ship in the first release after they
-  merge.
-- A waits for the owner's npm account. The Vitest/Jest one-step command then
-  becomes `npx <package> coverage --framework vitest`, where `<package>` is the
-  npm name the owner chooses.
+- B and C are merged and ship in the first release after v2.2.1.
+- A is merged as `typescript-crap` and ships in the same release. The
+  Vitest/Jest one-step command is then
+  `npx typescript-crap coverage --framework vitest --scan`.
 - D stays in v2.4.0.
 
 ## Decisions needed from the owner
@@ -253,11 +256,13 @@ Decided on 2026-10-31:
 - **GitHub Action reference:** document SHA, release tag and `@v2`; recommend
   the full commit SHA.
 
+Decided on 2026-11-01:
+
+- **npm package name:** `typescript-crap`, with platform packages
+  `typescript-crap-{linux-x64,linux-arm64,darwin-x64,darwin-arm64,win32-x64}`.
+  The account exists with 2FA and trusted publishing.
+
 Still open:
 
-1. **npm package name:**
-   - `typescript-crap` (recommended: free and matches the repository)
-   - `@ruicostafrg/ts-crap` (needs an npm user or organization `ruicostafrg`)
-   - another name
-2. **Whether to pursue an APT repository** despite the signing-key requirement,
+1. **Whether to pursue an APT repository** despite the signing-key requirement,
    or keep `.deb` assets as direct downloads only (recommended for now).

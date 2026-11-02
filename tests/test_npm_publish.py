@@ -78,7 +78,7 @@ class PublishJobShapeTests(unittest.TestCase):
         self.assertIn('scripts/verify-npm-packages.py --assets release-assets --packages npm-packages', assemble)
 
     def test_npm_cli_is_pinned_by_sha512_and_installed_without_scripts(self):
-        script = step(job('publish-npm'), 'Install the pinned npm CLI (trusted publishing needs npm 11.5.1 or later)')
+        script = step(job('publish-npm'), 'Install the pinned npm CLI (staged trusted publishing needs npm 12)')
         self.assertIn('https://registry.npmjs.org/npm/-/npm-12.2.1.tgz', script)
         self.assertRegex(script, r'echo "[0-9a-f]{128}  \$RUNNER_TEMP/npm-12\.2\.1\.tgz" \| sha512sum --check')
         self.assertIn('npm install -g --ignore-scripts', script)
@@ -99,6 +99,10 @@ class PublishJobScriptTests(unittest.TestCase):
         self.bin.mkdir()
         self.calls = self.root / 'calls'
         self.calls.write_text('')
+        self.summary = self.root / 'summary.md'
+        self.stage_ids = self.root / 'stage-ids'
+        self.pending = self.root / 'pending'
+        self.pending.mkdir()
         # gh serves the release assets from disk; attestation can be made to fail per asset.
         (self.bin / 'gh').write_text(
             '#!/bin/bash\necho "gh $*" >> "$CALLS"\n'
@@ -116,8 +120,18 @@ class PublishJobScriptTests(unittest.TestCase):
             'if [[ "$1" == view ]]; then f="$PUBLISHED/${2%@*}"\n'
             '  if [[ ! -f "$f" ]]; then printf "npm error code E404\\nnpm error 404 No match found for version %s\\n" "${2##*@}" >&2; exit 1; fi\n'
             '  if [[ "$3" == version ]]; then echo "${2##*@}"; else cat "$f"; fi; exit 0; fi\n'
-            'if [[ "$1" == publish ]]; then n=$(basename "$2"); n=${n%-$VERSION.tgz}\n'
-            '  echo "sha512-$(openssl dgst -sha512 -binary "$2" | base64 -w0)" > "$PUBLISHED/$n"; fi\n')
+            # Like npm 12: a tarball path without ./ or / is a GitHub shorthand and is refused.
+            'if [[ "$1 $2" == "stage publish" && "$3" != ./* && "$3" != /* ]]; then\n'
+            '  printf "npm error code EALLOWGIT\\nnpm error Refusing to fetch \\"github:%s\\"\\n" "$3" >&2; exit 1; fi\n'
+            # Staged versions are private, so npm view keeps returning E404 for them.
+            'if [[ "$1 $2" == "stage publish" ]]; then n=$(basename "$3"); n=${n%.tgz}\n'
+            '  if [[ "$n" == *"$FAIL_STAGE"* && -n "$FAIL_STAGE" ]]; then echo "npm error code E403" >&2; exit 1; fi\n'
+            # Like the registry: a version that is still staged can't be staged again.
+            '  if [[ -e "$PENDING/$n" ]]; then echo "npm error You cannot publish over the previously staged version" >&2; exit 1; fi\n'
+            '  : > "$PENDING/$n"\n'
+            # Unpredictable ids, recorded so tests can check the job copies npm's ids.
+            '  if [[ -z "$NO_STAGE_ID" ]]; then id=$(openssl rand -hex 8); echo "${n%-*}@${n##*-} $id" >> "$STAGE_IDS"\n'
+            '    echo "+ ${n%-*}@${n##*-} (staged with id $id)"; else echo "+ ${n%-*}@${n##*-} (staged)"; fi; fi\n')
         (self.bin / 'sleep').write_text('#!/bin/sh\nexit 0\n')
         for name in ('gh', 'npm', 'sleep'):
             (self.bin / name).chmod(0o755)
@@ -127,6 +141,10 @@ class PublishJobScriptTests(unittest.TestCase):
         env = dict(os.environ, PATH=f'{self.bin}:{os.environ["PATH"]}', CALLS=str(self.calls), ASSETS=str(self.assets),
                    PUBLISHED=str(self.published), TAG=tag or f'v{VERSION}', VERSION=(tag or f'v{VERSION}')[1:], GITHUB_REPOSITORY='RuiCostafrg/typescript-crap',
                    **{'UNATTESTED': '', **environment})
+        # Always a private file: hosted runners already set GITHUB_STEP_SUMMARY.
+        env['GITHUB_STEP_SUMMARY'] = str(self.summary)
+        env['STAGE_IDS'] = str(self.stage_ids)
+        env['PENDING'] = str(self.pending)
         return subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', script], cwd=self.work, env=env,
                               capture_output=True, text=True, timeout=120)
 
@@ -206,18 +224,26 @@ class PublishJobScriptTests(unittest.TestCase):
         self.tarball('typescript-crap-linux-x64').unlink()
         self.assertNotEqual(self.verify().returncode, 0)
 
-    def publish(self, tag=None):
-        return self.run_step('Publish platform packages, then the main package, with provenance', tag=tag)
+    def publish(self, tag=None, **environment):
+        return self.run_step('Stage platform packages, then the main package, with provenance', tag=tag, **environment)
 
     def published_calls(self):
-        return [line for line in self.calls.read_text().splitlines() if line.startswith('npm publish')]
+        return [line for line in self.calls.read_text().splitlines() if line.startswith('npm stage publish')]
 
-    def test_publishes_platform_packages_first_and_the_main_package_last_with_provenance(self):
+    def test_stages_platform_packages_first_and_the_main_package_last_with_provenance(self):
         result = self.publish()
         self.assertEqual(result.returncode, 0, result.stderr)
         expected = [npm.platform_name(t) for t in npm.TARGETS] + ['typescript-crap']
         self.assertEqual(self.published_calls(), [
-            f'npm publish npm-packages/{name}-{VERSION}.tgz --access public --provenance --tag latest' for name in expected])
+            f'npm stage publish ./npm-packages/{name}-{VERSION}.tgz --access public --provenance --tag latest' for name in expected])
+        # Nothing is published directly; the summary lists every stage id for the owner's 2FA approval.
+        self.assertNotIn('npm publish', self.calls.read_text())
+        summary = self.summary.read_text()
+        self.assertIn('npm stage approve', summary)
+        issued = dict(line.split() for line in self.stage_ids.read_text().splitlines())
+        self.assertEqual(sorted(issued), sorted(f'{name}@{VERSION}' for name in expected))
+        rows = [line for line in summary.splitlines() if line.startswith('| typescript-crap')]
+        self.assertEqual(rows, [f'| {name}@{VERSION} | {issued[f"{name}@{VERSION}"]} |' for name in expected])
 
     def test_prereleases_use_the_next_dist_tag(self):
         for path in (self.work / 'npm-packages').iterdir():
@@ -243,26 +269,26 @@ class PublishJobScriptTests(unittest.TestCase):
     def dist_tag_is(self, tag):
         for name in [npm.platform_name(t) for t in npm.TARGETS] + ['typescript-crap']:
             (self.published / name).unlink(missing_ok=True)
+        for staged in self.pending.iterdir():  # each check starts with nothing staged
+            staged.unlink()
         self.calls.write_text('')
         result = self.publish()
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = self.published_calls()
         return len(calls) == 6 and all(call.endswith(f'--tag {tag}') for call in calls)
 
-    def test_main_package_waits_until_the_registry_serves_every_platform_package(self):
-        # A registry that never serves linux-arm64 stops before the main package.
-        npm_stub = (self.bin / 'npm').read_text().replace(
-            'if [[ "$3" == version ]]', 'if [[ "$3" == version && "$2" != typescript-crap-linux-arm64@* ]]')
-        npm_stub = npm_stub.replace('then echo "${2##*@}"; else cat "$f"; fi',
-                                    'then echo "${2##*@}"; elif [[ "$3" != version ]]; then cat "$f"; fi')
-        (self.bin / 'npm').write_text(npm_stub)
-        result = self.publish()
+    def test_a_failed_stage_stops_before_the_main_package(self):
+        result = self.publish(FAIL_STAGE='typescript-crap-linux-arm64')
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(f'not served yet: typescript-crap-linux-arm64@{VERSION}', result.stdout)
-        self.assertEqual(sum('version' == line.split()[-1] and 'linux-arm64' in line
-                             for line in self.calls.read_text().splitlines()), 30)
-        self.assertEqual(len(self.published_calls()), 5)
-        self.assertNotIn('npm-packages/typescript-crap-' + VERSION, ' '.join(self.published_calls()))
+        staged = ' '.join(self.published_calls())
+        self.assertIn('linux-arm64', staged)
+        self.assertNotIn(f'npm-packages/typescript-crap-{VERSION}.tgz', staged)
+
+    def test_a_missing_stage_id_stops_the_job(self):
+        result = self.publish(NO_STAGE_ID='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('did not report a stage id', result.stdout)
+        self.assertEqual(len(self.published_calls()), 1)
 
     def test_an_empty_latest_dist_tag_stops_before_publishing(self):
         (self.published / 'latest').write_text('')
@@ -291,14 +317,25 @@ class PublishJobScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f'{name}@{VERSION} is already published with identical contents', result.stdout)
         self.assertEqual(len(self.published_calls()), 5)
+        # Staged versions stay pending until the owner acts, so a plain rerun stops at the first one.
+        self.calls.write_text('')
+        result = self.publish()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('previously staged version', result.stderr)
+        self.assertEqual(len(self.published_calls()), 1)
+        # After the owner rejects the pending stages, a rerun stops at a conflicting published version.
+        for staged in self.pending.iterdir():
+            staged.unlink()
         self.calls.write_text('')
         (self.published / 'typescript-crap-darwin-x64').write_text('sha512-different\n')
         result = self.publish()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('already published with different contents', result.stdout)
-        # The first run's packages are now identical and skipped; publishing stops at
-        # the conflict, so nothing after it, and never the main package, is published.
-        self.assertEqual(self.published_calls(), [])
+        # Staged versions stay private, so a rerun stages them again; it stops at the
+        # conflicting package, so neither it nor the main package is staged.
+        staged = ' '.join(self.published_calls())
+        self.assertNotIn(f'typescript-crap-darwin-x64-{VERSION}.tgz', staged)
+        self.assertNotIn(f'npm-packages/typescript-crap-{VERSION}.tgz', staged)
 
 
 if __name__ == '__main__':

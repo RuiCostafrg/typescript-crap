@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 2.3.2 — 2026-11-02
+
+First release published to npm. The v2.3.0 and v2.3.1 GitHub releases,
+installers, Homebrew formula and GitHub Action are unaffected.
+
+### Changed
+
+- npm packages are staged instead of published directly: the release workflow
+  runs `npm stage publish` (trusted publishing, with provenance), and nothing is
+  public until the owner approves each staged version with 2FA, platform
+  packages first. The job summary lists every stage id. The npm trusted
+  publisher allows only staged publishing.
+
+## 2.3.1 — 2026-11-02
+
+The GitHub release is published. Its npm publish was rejected because the npm
+trusted publisher allows only staged publishing, so npm starts at 2.3.2.
+
 ### Added
 
 - `excluded_directories` in `ts-crap.json` replaces the built-in excluded
@@ -13,7 +31,17 @@
   provider. Each pair must give exactly the `babel-jest`/`babel` CRAP results.
   The docs include a configuration snippet for every supported combination.
 
+### Fixed
+
+- The release workflow publishes npm packages from `./npm-packages/…`. npm 12
+  read the bare `npm-packages/…` path as a GitHub shorthand and refused the
+  git fetch, so v2.3.0 never reached npm. CI now dry-runs the exact publish
+  command with the release's pinned npm CLI on every change.
+
 ## 2.3.0 — 2026-11-02
+
+The GitHub release is published. Its npm publish failed before any package
+was uploaded, so npm starts at 2.3.2.
 
 ### Added
 

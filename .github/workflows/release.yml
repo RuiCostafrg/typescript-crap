@@ -250,7 +250,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.22.2
-      - name: Install the pinned npm CLI (trusted publishing needs npm 11.5.1 or later)
+      - name: Install the pinned npm CLI (staged trusted publishing needs npm 12)
         shell: bash
         run: |
           curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/npm-12.2.1.tgz" https://registry.npmjs.org/npm/-/npm-12.2.1.tgz
@@ -320,7 +320,7 @@ jobs:
             and (.optionalDependencies | keys) == (["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64"] | map("typescript-crap-" + .))
             and (.optionalDependencies | all(. == $version))' "$work/main/package/package.json" >/dev/null
           echo "npm packages $version match the attested $TAG release assets"
-      - name: Publish platform packages, then the main package, with provenance
+      - name: Stage platform packages, then the main package, with provenance
         shell: bash
         env:
           TAG: ${{ needs.plan.outputs.tag }}
@@ -356,9 +356,11 @@ jobs:
             rm -f "$errors"
             printf '%s' "$output"
           }
-          publish() {
-            local name=$1 file integrity published
-            file="npm-packages/$name-$version.tgz"
+          summary=${GITHUB_STEP_SUMMARY:-/dev/null}
+          stage() {
+            local name=$1 file integrity published output id
+            # The ./ prefix is required: npm reads "dir/file.tgz" as a GitHub shorthand.
+            file="./npm-packages/$name-$version.tgz"
             integrity=$(openssl dgst -sha512 -binary "$file" | base64 -w0)
             # npm versions are immutable, so a rerun skips identical packages and stops on any difference.
             published=$(view "$name@$version" dist.integrity)
@@ -367,19 +369,27 @@ jobs:
               echo "$name@$version is already published with identical contents"
               return
             fi
-            npm publish "$file" --access public --provenance --tag "$dist_tag"
+            # Staged versions stay private until the owner approves them with 2FA; the trusted
+            # publisher allows only npm stage publish.
+            output=$(npm stage publish "$file" --access public --provenance --tag "$dist_tag")
+            printf '%s\n' "$output"
+            id=$(sed -n 's/^+ .* (staged with id \(.*\))$/\1/p' <<< "$output")
+            [[ -n "$id" ]] || { echo "::error::npm did not report a stage id for $name@$version"; exit 1; }
+            printf '| %s@%s | %s |\n' "$name" "$version" "$id" >> "$summary"
           }
-          # Platform packages first, so the main package never names a missing version.
-          for platform in "${platforms[@]}"; do publish "typescript-crap-$platform"; done
-          # Wait up to five minutes in total for the registry to serve every platform version.
-          for attempt in $(seq 30); do
-            missing=()
-            for platform in "${platforms[@]}"; do
-              served=$(npm view "typescript-crap-$platform@$version" version 2>/dev/null || true)
-              [[ "$served" == "$version" ]] || missing+=("typescript-crap-$platform@$version")
-            done
-            (( ${#missing[@]} == 0 )) && break
-            if (( attempt == 30 )); then echo "::error::not served yet: ${missing[*]}"; exit 1; fi
-            sleep 10
-          done
-          publish typescript-crap
+          echo "## npm packages staged for approval (dist-tag $dist_tag)" >> "$summary"
+          cat >> "$summary" <<'SUMMARY'
+
+          Nothing is public until approved. Approve the five platform packages first,
+          on npmjs.com or with npm stage approve ID (2FA). Approve typescript-crap only
+          once npm view shows every platform version: approved early, it installs
+          without a binary. Approve releases newest first, because the dist-tag below
+          was fixed at staging.
+
+          | Package | Stage id |
+          | --- | --- |
+          SUMMARY
+          # Platform packages first, so approving them first never leaves the main package
+          # naming a missing version.
+          for platform in "${platforms[@]}"; do stage "typescript-crap-$platform"; done
+          stage typescript-crap

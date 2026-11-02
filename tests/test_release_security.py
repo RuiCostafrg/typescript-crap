@@ -1,4 +1,5 @@
 """Security regressions for untrusted release bytes and archive metadata."""
+import re
 import hashlib
 import importlib.util
 import io
@@ -58,6 +59,25 @@ class ReleaseSecurityTests(unittest.TestCase):
                         for name, command in zip(required, commands):
                             self.assertIn(f'/{name}/runs?head_sha=exact-source-sha&event=push', command)
                             self.assertIn('head_branch == "main"', command)
+
+    def test_npm_publish_and_its_ci_dry_run_use_local_tarball_paths(self):
+        """npm 12 reads a bare dir/file.tgz as a GitHub shorthand; only ./ paths publish."""
+        release_yml = (ROOT / '.github/workflows/release.yml').read_text()
+        self.assertIn('file="./npm-packages/$name-$version.tgz"', release_yml)
+        self.assertNotIn('file="npm-packages/', release_yml)
+        self.assertIn('npm stage publish "$file"', release_yml)
+        # The trusted publisher allows only staged publishing; the owner approves with 2FA.
+        self.assertNotRegex(release_yml, r'\bnpm publish\b')
+        ci = (ROOT / '.github/workflows/npm-package.yml').read_text()
+        self.assertIn('npm stage publish --dry-run --force "./npm-packages/$name-$VERSION.tgz"', ci)
+        # --force belongs only to the dry run; the real publish must keep npm's protections.
+        self.assertNotIn('--force', release_yml)
+        # The dry run must use the same pinned npm CLI as the publish job.
+        pinned = 'https://registry.npmjs.org/npm/-/npm-12.2.1.tgz'
+        self.assertIn(pinned, release_yml)
+        self.assertIn(pinned, ci)
+        digest = re.search(r'echo "([0-9a-f]{128})  \$RUNNER_TEMP/npm-12\.2\.1\.tgz"', release_yml).group(1)
+        self.assertIn(digest, ci)
 
     def test_tool_download_rejects_tampering_before_writing_executable(self):
         with tempfile.TemporaryDirectory() as temporary:

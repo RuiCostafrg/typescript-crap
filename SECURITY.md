@@ -52,8 +52,10 @@ cannot enable or verify them.
   npm 12.2.1 from a SHA-512-pinned tarball. It publishes only tarballs that the
   GitHub publish job attested, after checking every npm executable byte for byte
   against the attested release archive and the helpers against the attested
-  helper bundle. Platform packages publish first, and the main package only
-  once the registry serves them. An older stable version gets the `backport`
+  helper bundle. It runs `npm stage publish` only (the trusted publisher allows
+  nothing else): every version stays private until the owner approves it with
+  2FA on npmjs.com or with `npm stage approve`, platform packages before the
+  main package. The job summary lists each stage id. An older stable version gets the `backport`
   dist-tag, so it never moves `latest` back. The
   packages contain no install scripts; Linux uses the static musl executables.
 - npm versions can't be republished with different contents, but npm offers no

@@ -29,7 +29,7 @@ class ReleaseSecurityTests(unittest.TestCase):
         preflight = workflow.split('          git merge-base --is-ancestor', 1)[1]
         preflight = 'git merge-base --is-ancestor' + preflight.split('      - name:', 1)[0]
         required = ['ci.yml', 'coverage.yml', 'mutation.yml',
-                    'installation.yml', 'verification.yml', 'linux-distribution.yml']
+                    'installation.yml', 'verification.yml', 'linux-distribution.yml', 'npm-package.yml']
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             (directory / 'git').write_text('#!/bin/bash\nexit 0\n')

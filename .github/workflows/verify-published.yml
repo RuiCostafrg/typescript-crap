@@ -18,6 +18,10 @@ on:
         description: Distinct previous published upgrade fixture without v
         type: string
         required: true
+      verify-npm:
+        description: Install the published npm packages (enable for releases published to npm)
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -184,3 +188,10 @@ jobs:
           path: linux-report.json
           if-no-files-found: warn
           retention-days: 14
+
+  npm:
+    if: inputs.verify-npm && github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    uses: ./.github/workflows/npm-install.yml
+    with:
+      version: ${{ inputs.version }}
+      registry: true

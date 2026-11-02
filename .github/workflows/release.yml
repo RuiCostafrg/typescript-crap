@@ -36,7 +36,7 @@ jobs:
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
           if [[ "$EVENT" == push ]]; then
             [[ "$REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
-            for workflow in ci.yml coverage.yml mutation.yml installation.yml verification.yml linux-distribution.yml; do
+            for workflow in ci.yml coverage.yml mutation.yml installation.yml verification.yml linux-distribution.yml npm-package.yml; do
               gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$GITHUB_SHA&event=push" \
                 --jq '[.workflow_runs[] | select(.head_branch == "main")] | sort_by(.run_number, .run_attempt) | last | .conclusion == "success"' | grep -Fx true
             done
@@ -162,14 +162,29 @@ jobs:
           version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
           python3 scripts/linux-packages.py --assets target/distrib --version "$version" --epoch "$(git log -1 --format=%ct)"
           python3 scripts/prepare-release.py target/distrib release-assets
+          # npm packages repackage the verified release assets; every byte is rechecked.
+          python3 scripts/npm-packages.py --assets release-assets --version "$version" --output npm-packages
+          python3 scripts/verify-npm-packages.py --assets release-assets --packages npm-packages --version "$version"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-assets
           path: release-assets/*
           if-no-files-found: error
           retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-packages
+          path: npm-packages/*
+          if-no-files-found: error
+          # publish-npm waits for a second approval and may be rerun alone.
+          retention-days: 30
+  verify-npm:
+    needs: [plan, assemble]
+    uses: ./.github/workflows/npm-install.yml
+    with:
+      version: ${{ fromJson(needs.plan.outputs.manifest).releases[0].app_version }}
   publish:
-    needs: [plan, assemble, verify]
+    needs: [plan, assemble, verify, verify-npm]
     if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -185,9 +200,17 @@ jobs:
         with:
           name: release-assets
           path: release-assets
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-packages
+          path: npm-packages
+      # The npm tarballs are attested here but not attached to the release;
+      # the publish-npm job releases only tarballs that verify against this workflow.
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
-          subject-path: release-assets/*
+          subject-path: |
+            release-assets/*
+            npm-packages/*
           create-storage-record: false
       - name: Publish verified assets
         env:
@@ -199,3 +222,145 @@ jobs:
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
             --title "ts-crap $TAG" --generate-notes "${flags[@]}" release-assets/*
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+  publish-npm:
+    # A separate job with only OIDC for npm trusted publishing: it cannot write
+    # to the repository, and it starts only after the attested GitHub release
+    # exists and the owner approves the release environment a second time.
+    needs: [plan, publish]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: read
+      attestations: read
+      id-token: write
+    steps:
+      # No checkout, compiled binary, downloaded script, or cargo-dist runs in
+      # this job. The only downloaded tool is the npm CLI, pinned by SHA-512.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-packages
+          path: npm-packages
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.2
+      - name: Install the pinned npm CLI (trusted publishing needs npm 11.5.1 or later)
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/npm-12.2.1.tgz" https://registry.npmjs.org/npm/-/npm-12.2.1.tgz
+          echo "6ca0a6151553fc107e60f1186d9c10d57508dcde6de31292a54d4cc4e8e8ef3de25b3281274657442d7115d10df930bb3794ddcb0681cdfd9d317189abf7b63d  $RUNNER_TEMP/npm-12.2.1.tgz" | sha512sum --check
+          npm install -g --ignore-scripts --no-audit --no-fund "$RUNNER_TEMP/npm-12.2.1.tgz"
+          [[ "$(npm --version)" == 12.2.1 ]]
+      - name: Compare every npm executable and helper with the attested release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          version=${TAG#v}
+          identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@refs/tags/$TAG"
+          work=$(mktemp -d)
+          declare -A archives=(
+            [linux-x64]=ts-crap-x86_64-unknown-linux-musl.tar.xz [linux-arm64]=ts-crap-aarch64-unknown-linux-musl.tar.xz
+            [darwin-x64]=ts-crap-x86_64-apple-darwin.tar.xz [darwin-arm64]=ts-crap-aarch64-apple-darwin.tar.xz
+            [win32-x64]=ts-crap-x86_64-pc-windows-msvc.zip)
+          expected=("typescript-crap-$version.tgz")
+          patterns=(--pattern ts-crap-coverage-helpers.zip)
+          for platform in "${!archives[@]}"; do
+            expected+=("typescript-crap-$platform-$version.tgz")
+            patterns+=(--pattern "${archives[$platform]}")
+          done
+          [[ "$(ls npm-packages | sort)" == "$(printf '%s\n' "${expected[@]}" | sort)" ]] \
+            || { echo "::error::npm-packages must hold exactly: ${expected[*]}"; exit 1; }
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$work/release" "${patterns[@]}"
+          # The release assets and the npm tarballs themselves were attested by the publish job.
+          for asset in "$work"/release/* npm-packages/*.tgz; do
+            gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY" --cert-identity "$identity" \
+              --source-ref "refs/tags/$TAG" --deny-self-hosted-runners >/dev/null
+          done
+          for tarball in npm-packages/*.tgz; do
+            entries=$(tar -tzf "$tarball")
+            if grep -Ev '^package/([^/.][^/]*/)*[^/.][^/]*$' <<< "$entries"; then
+              echo "::error::unexpected entry in $tarball"
+              exit 1
+            fi
+          done
+          for platform in "${!archives[@]}"; do
+            archive=${archives[$platform]}
+            directory="$work/$platform"
+            mkdir -p "$directory/archive" "$directory/npm"
+            if [[ "$archive" == *.zip ]]; then
+              binary=ts-crap.exe
+              unzip -q "$work/release/$archive" "$binary" -d "$directory/archive"
+              archived="$directory/archive/$binary"
+            else
+              binary=ts-crap
+              tar -xJf "$work/release/$archive" -C "$directory/archive" "${archive%.tar.xz}/$binary"
+              archived="$directory/archive/${archive%.tar.xz}/$binary"
+            fi
+            tar -xzf "npm-packages/typescript-crap-$platform-$version.tgz" -C "$directory/npm" package/package.json "package/bin/$binary"
+            cmp "$archived" "$directory/npm/package/bin/$binary"
+            jq -e --arg name "typescript-crap-$platform" --arg version "$version" \
+              '.name == $name and .version == $version and ((has("scripts") or has("dependencies") or has("bin")) | not)' \
+              "$directory/npm/package/package.json" >/dev/null
+          done
+          mkdir "$work/main" "$work/helpers"
+          tar -xzf "npm-packages/typescript-crap-$version.tgz" -C "$work/main"
+          unzip -q "$work/release/ts-crap-coverage-helpers.zip" -d "$work/helpers"
+          diff -r "$work/helpers/ts-crap-coverage-helpers" "$work/main/package/coverage"
+          jq -e --arg version "$version" '
+            .name == "typescript-crap" and .version == $version
+            and ((has("scripts") or has("dependencies")) | not)
+            and (.optionalDependencies | keys) == (["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64"] | map("typescript-crap-" + .))
+            and (.optionalDependencies | all(. == $version))' "$work/main/package/package.json" >/dev/null
+          echo "npm packages $version match the attested $TAG release assets"
+      - name: Publish platform packages, then the main package, with provenance
+        shell: bash
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          version=${TAG#v}
+          platforms=(linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64)
+          dist_tag=latest
+          if [[ "$version" == *-* ]]; then
+            dist_tag=next
+          else
+            # A stable release older than the current latest (a backport) must not move latest back.
+            current=$(npm view typescript-crap dist-tags.latest 2>/dev/null || true)
+            older() {  # Is stable X.Y.Z $1 lower than stable X.Y.Z $2?
+              local IFS=. i a b
+              read -r -a a <<< "$1"
+              read -r -a b <<< "$2"
+              for i in 0 1 2; do
+                if (( 10#${a[i]} != 10#${b[i]} )); then (( 10#${a[i]} < 10#${b[i]} )); return; fi
+              done
+              return 1
+            }
+            if [[ "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && older "$version" "$current"; then
+              dist_tag=backport
+            fi
+          fi
+          publish() {
+            local name=$1 file integrity published
+            file="npm-packages/$name-$version.tgz"
+            integrity=$(openssl dgst -sha512 -binary "$file" | base64 -w0)
+            # npm versions are immutable, so a rerun skips identical packages and stops on any difference.
+            published=$(npm view "$name@$version" dist.integrity 2>/dev/null || true)
+            if [[ -n "$published" ]]; then
+              [[ "$published" == "sha512-$integrity" ]] || { echo "::error::$name@$version is already published with different contents"; exit 1; }
+              echo "$name@$version is already published with identical contents"
+              return
+            fi
+            npm publish "$file" --access public --provenance --tag "$dist_tag"
+          }
+          # Platform packages first, so the main package never names a missing version.
+          for platform in "${platforms[@]}"; do publish "typescript-crap-$platform"; done
+          for platform in "${platforms[@]}"; do
+            for attempt in $(seq 30); do
+              [[ "$(npm view "typescript-crap-$platform@$version" version 2>/dev/null || true)" == "$version" ]] && break
+              if (( attempt == 30 )); then echo "::error::typescript-crap-$platform@$version is not served yet"; exit 1; fi
+              sleep 10
+            done
+          done
+          publish typescript-crap

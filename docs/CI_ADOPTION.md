@@ -243,8 +243,10 @@ tampered, misbound and unattested assets with a fake `gh`.
 helper bytes, and exercises reviewed baseline creation, empty PRs, comment-only
 changes, a regression, deterministic fresh repeats, JSON/SARIF artifacts on exit 1,
 and stale-input rejection while preserving prior artifacts. It verifies the
-baseline stays unchanged. CI runs it with both direct Node and actual Vitest JSON
-collection; release archive verification runs it with the packaged CLI/helpers.
+baseline stays unchanged. CI runs it with direct Node, actual Vitest JSON
+collection, and Jest through the one-step `coverage-run.mjs` command that
+[the Jest workflow](../examples/ci/github-actions-jest.yml) uses; release archive
+verification runs it with the packaged CLI/helpers.
 
 ```sh
 python3 scripts/bundle-coverage.py target/helper-bundle
@@ -255,6 +257,10 @@ python3 scripts/verify-ci-guide.py \
 python3 scripts/verify-ci-guide.py \
   --archive target/helper-bundle/ts-crap-coverage-helpers.zip \
   --scanner target/debug/ts-crap --vitest tests/tooling/node_modules/vitest/vitest.mjs
+# One-step Jest collection (same tooling install):
+python3 scripts/verify-ci-guide.py \
+  --archive target/helper-bundle/ts-crap-coverage-helpers.zip \
+  --scanner target/debug/ts-crap --jest tests/tooling/node_modules/jest/bin/jest.js
 ```
 
 A [clean published-tool run](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40494926411)

@@ -52,6 +52,7 @@ npm ci --ignore-scripts --prefix tests/tooling
 node scripts/verify-contracts.mjs target/debug/ts-crap
 python3 scripts/bundle-coverage.py target/helper-bundle
 python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap --vitest tests/tooling/node_modules/vitest/vitest.mjs
+python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap --jest tests/tooling/node_modules/jest/bin/jest.js
 ```
 
 [Independent adoption validation](docs/ADOPTION.md) documents the pinned upstream

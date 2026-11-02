@@ -62,6 +62,9 @@ npx ts-crap --root . --threshold 30                   # or pnpm exec / yarn / bu
   `@vitest/coverage-v8` or `@vitest/coverage-istanbul`), so Yarn Plug'n'Play projects
   set `nodeLinker: node-modules` first (see
   [coverage helpers](docs/COVERAGE_HELPERS.md#install-with-npm)).
+- Framework quickstarts: [Vitest](docs/VITEST.md) and [Jest](docs/JEST.md) cover
+  configuration, the one-step command, `package.json` scripts, GitHub Actions and
+  troubleshooting.
 - For a one-off run without installing, use `npx typescript-crap@VERSION`, not
   `npx ts-crap`: the npm name `ts-crap` belongs to an unrelated package.
 - Packages are published from the release workflow with npm trusted publishing

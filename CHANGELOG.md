@@ -4,6 +4,11 @@
 
 ### Added
 
+- Vitest and Jest quickstarts (`docs/VITEST.md`, `docs/JEST.md`) covering setup,
+  the one-step command, JSON or LCOV, `package.json` scripts, GitHub Actions and
+  troubleshooting, linked from the README.
+- A Jest variant of the copyable CI workflow (`examples/ci/github-actions-jest.yml`),
+  which CI executes through `verify-ci-guide.py --jest` with the installed helpers.
 - Jest `ts-jest` and `@swc/jest` transformer fixtures and the Jest `v8` coverage
   provider. Each pair must give exactly the `babel-jest`/`babel` CRAP results.
   The docs include a configuration snippet for every supported combination.

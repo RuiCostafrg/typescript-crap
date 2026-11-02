@@ -78,8 +78,10 @@ must exist, and an invalid list is an error. See the README's
 Both helpers reject destinations at `ROOT/ts-crap.json`, whether or not it
 already exists. If the scanner uses an alternative policy, pass the same
 caller-relative `--config FILE` to the helper before `--` to protect that path as
-well. The default remains reserved. This option protects files from publication;
-it does not apply scanner policy to collection or forward arguments to tests.
+well. The default remains reserved. The helpers also read that file's
+`excluded_directories` (see above), so pass the same `--config` to the helper and
+the scanner. Other policy keys belong to the scanner, and the option never
+forwards arguments to tests.
 For imports, it protects both raw input and native output. Existing directory
 aliases and resolved config symlink targets are included in the checks.
 Protected filename case variants are reserved on every platform for portability.

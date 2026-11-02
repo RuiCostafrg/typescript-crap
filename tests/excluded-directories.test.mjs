@@ -111,3 +111,25 @@ test('native collection follows the policy and the scanner accepts the result', 
   const report = JSON.parse(scan.stdout);
   assert.deepEqual(report.functions.map(f => [f.path, f.coverage]), [['src/build/b.mts', 1]]);
 });
+
+test('the helper rejects every policy document the scanner rejects', async t => {
+  const root = await project(t);
+  const file = path.join(root, 'ts-crap.json');
+  const cases = [
+    ['null', /top-level value must be a JSON object/],
+    ['[]', /top-level value must be a JSON object/],
+    ['"text"', /top-level value must be a JSON object/],
+    ['{"excluded_directories":["build"]}', /unsupported version undefined/],
+    ['{"version":2,"excluded_directories":["build"]}', /unsupported version 2/],
+    ['{"version":1,"excluded_directories":null}', /excluded_directories must be an array/],
+  ];
+  for (const [text, message] of cases) {
+    await fs.writeFile(file, text);
+    await assert.rejects(policyExclusions(root), message, text);
+  }
+  // Invalid UTF-8 and a byte-order mark are rejected, never decoded leniently.
+  await fs.writeFile(file, Buffer.concat([Buffer.from('{"version":1,"x":"'), Buffer.from([0xff]), Buffer.from('"}')]));
+  await assert.rejects(policyExclusions(root), /Invalid project configuration/);
+  await fs.writeFile(file, '﻿{"version":1}');
+  await assert.rejects(policyExclusions(root), /Invalid project configuration/);
+});

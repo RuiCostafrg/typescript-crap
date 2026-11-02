@@ -483,3 +483,33 @@ fn excluded_directories_entries_must_be_unique_single_names() {
         .failed
     );
 }
+
+#[test]
+/// Exclusions name directories only: a source file with an excluded name is still scanned.
+fn excluded_directory_names_never_match_source_files() {
+    // A directory named `index.ts` is excluded; a file named `index.ts` is not.
+    let project = common::project(&[("src/index.ts", SOURCE), ("lib/index.ts/inner.ts", SOURCE)]);
+    let root = project.path();
+    config(
+        root,
+        json!({"version":1,"excluded_directories":["index.ts"]}),
+    );
+    assert_eq!(paths(&cli(root, &[], 0)), ["src/index.ts"]);
+    assert_eq!(paths(&cli(root, &["src/index.ts"], 0)), ["src/index.ts"]);
+}
+
+#[test]
+fn excluded_directories_reject_an_explicit_null() {
+    let project = common::project(&[("a.ts", SOURCE)]);
+    let root = project.path();
+    config(root, json!({"version":1,"excluded_directories":null}));
+    let error = scan(&ScanOptions {
+        root: root.into(),
+        ..Default::default()
+    })
+    .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("invalid project configuration"),
+        "{error:#}"
+    );
+}

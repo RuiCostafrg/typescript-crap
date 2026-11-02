@@ -14,8 +14,8 @@ export const DEFAULT_EXCLUDED_DIRECTORIES = Object.freeze(['node_modules', '.git
  */
 export async function policyExclusions(root, config) {
   const file = config === undefined ? path.join(root, 'ts-crap.json') : path.resolve(config);
-  let text;
-  try { text = await fs.readFile(file, 'utf8'); }
+  let bytes;
+  try { bytes = await fs.readFile(file); }
   catch (error) {
     // A dangling default link is a present but unreadable policy, as in the scanner.
     const absent = error.code === 'ENOENT' && config === undefined
@@ -24,9 +24,14 @@ export async function policyExclusions(root, config) {
     throw new Error(`Cannot read project configuration ${file}: ${error.message}`);
   }
   let policy;
-  try { policy = parseUniqueJson(text); }
+  // Decode strictly, as the scanner does: replaced bytes must not change the policy.
+  try { policy = parseUniqueJson(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes)); }
   catch (error) { throw new Error(`Invalid project configuration ${file}: ${error.message}`); }
-  const names = policy?.excluded_directories;
+  if (policy === null || typeof policy !== 'object' || Array.isArray(policy)) {
+    throw new Error(`Invalid project configuration ${file}: the top-level value must be a JSON object`);
+  }
+  if (policy.version !== 1) throw new Error(`Invalid project configuration ${file}: unsupported version ${JSON.stringify(policy.version)}`);
+  const names = policy.excluded_directories;
   if (names === undefined) return [...DEFAULT_EXCLUDED_DIRECTORIES];
   if (!Array.isArray(names)) throw new Error(`Invalid project configuration ${file}: excluded_directories must be an array`);
   const seen = new Set();

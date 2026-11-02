@@ -18,8 +18,15 @@ struct Config {
     #[serde(default)]
     fail_on_empty: bool,
     /// Directory names skipped anywhere under the root; replaces the default list.
-    #[serde(default)]
+    /// Omitted means the defaults; an explicit null is invalid, as in the schema.
+    #[serde(default, deserialize_with = "present_list")]
     excluded_directories: Option<Vec<String>>,
+}
+
+fn present_list<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<String>>, D::Error> {
+    Vec::deserialize(deserializer).map(Some)
 }
 
 /// Directory names skipped during source selection unless configuration replaces them.

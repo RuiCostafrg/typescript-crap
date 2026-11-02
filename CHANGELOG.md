@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.3.0 — 2026-11-02
+
 ### Added
 
 - Jest `ts-jest` and `@swc/jest` transformer fixtures and the Jest `v8` coverage
@@ -16,7 +18,8 @@
   with npm trusted publishing and provenance, after each executable is checked
   against the attested release archive. CI installs them with npm, pnpm, Yarn
   and Bun on Linux (Ubuntu, Debian, Alpine, Fedora; x64 and arm64), macOS and
-  Windows, before and after publishing.
+  Windows before publishing, and the published-release check
+  (`verify-published.yml` with `verify-npm=true`) repeats them from the registry.
 - `coverage-run.mjs`, a one-step Vitest/Jest coverage command in the helper
   bundle. It detects the framework from config filenames or the `jest` key in
   `package.json`, without evaluating them. It uses a fresh private

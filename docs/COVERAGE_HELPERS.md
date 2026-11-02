@@ -2,9 +2,8 @@
 
 ## Install with npm
 
-Releases after v2.2.1 include the helpers in the npm package `typescript-crap`,
-in `node_modules/typescript-crap/coverage/`. (Until the first such release, npm
-only has a `0.0.0` placeholder; use the standalone bundle below.) They are byte-identical to the
+Releases from v2.3.0 include the helpers in the npm package `typescript-crap`,
+in `node_modules/typescript-crap/coverage/`. They are byte-identical to the
 release's `ts-crap-coverage-helpers.zip`, and the package's scanner is the same
 version, so nothing needs to be matched by hand:
 

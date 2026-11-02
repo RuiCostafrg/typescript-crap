@@ -5,12 +5,11 @@ import gzip
 import importlib.util
 import io
 import json
-import os
 from pathlib import Path
+import secrets
 import shutil
 import struct
 import tarfile
-import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -177,12 +176,11 @@ def build(assets, version, output):
     built = packages(assets, version)
     if output.exists() or output.is_symlink():
         raise FileExistsError(f'output already exists: {output}')
-    staging = Path(tempfile.mkdtemp(prefix='.npm-packages-', dir=output.parent))
+    # A plain mkdir under a random name: the kernel applies the umask and any
+    # default ACL, exactly as for output.mkdir(), and the rename stays atomic.
+    staging = output.parent / f'.npm-packages-{secrets.token_hex(8)}'
+    staging.mkdir()
     try:
-        # mkdtemp is owner-only; give the result the mode mkdir() would have.
-        mask = os.umask(0)
-        os.umask(mask)
-        staging.chmod(0o777 & ~mask)
         for name, data in built.items():
             (staging / name).write_bytes(data)
         staging.rename(output)

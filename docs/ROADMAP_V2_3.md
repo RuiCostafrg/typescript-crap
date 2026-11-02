@@ -1,7 +1,7 @@
 # Roadmap after v2.2.1
 
-Drafted 2026-10-30 against `main` at `9034757` (v2.2.1). Nothing here is
-implemented yet; each item lists its acceptance criteria and an effort
+Drafted 2026-10-30 against `main` at `9034757` (v2.2.1). Progress is tracked
+in [WORK_PLAN.md](WORK_PLAN.md); each item lists its acceptance criteria and an effort
 estimate (S ≈ ½–1 day, M ≈ 1–3 days, L ≈ 3+ days, including tests and docs).
 
 ## Scope decisions
@@ -157,8 +157,9 @@ follows [WORK_PLAN.md](WORK_PLAN.md):
 - Installer hardening and the GitHub Action are merged, and each ships in the
   first release after v2.2.1.
 - The npm package `typescript-crap` is merged and ships in that release too. The
-  Vitest/Jest one-step command (1.1) is then
-  `npx typescript-crap coverage --framework vitest|jest|auto`, and it stays in
+  Vitest/Jest one-step command (1.1) is then, for example,
+  `npx typescript-crap coverage --framework vitest --scan` (or `jest`, or
+  `auto`), and it stays in
   the coverage helper bundle as `coverage-run.mjs`.
 - crates.io (2.6) stays in v2.4.0.
 

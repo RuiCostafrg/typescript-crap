@@ -250,7 +250,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.22.2
-      - name: Install the pinned npm CLI (trusted publishing needs npm 11.5.1 or later)
+      - name: Install the pinned npm CLI (staged trusted publishing needs npm 12)
         shell: bash
         run: |
           curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/npm-12.2.1.tgz" https://registry.npmjs.org/npm/-/npm-12.2.1.tgz
@@ -375,17 +375,17 @@ jobs:
             printf '%s\n' "$output"
             id=$(sed -n 's/^+ .* (staged with id \(.*\))$/\1/p' <<< "$output")
             [[ -n "$id" ]] || { echo "::error::npm did not report a stage id for $name@$version"; exit 1; }
-            printf '| `%s@%s` | `%s` |\n' "$name" "$version" "$id" >> "$summary"
+            printf '| %s@%s | %s |\n' "$name" "$version" "$id" >> "$summary"
           }
-          {
-            echo "## npm packages staged for approval (tag \`$dist_tag\`)"
-            echo
-            echo 'Nothing is public until approved. Approve the platform packages first, then'
-            echo '`typescript-crap`, on npmjs.com or with `npm stage approve <id>` (2FA).'
-            echo
-            echo '| Package | Stage id |'
-            echo '| --- | --- |'
-          } >> "$summary"
+          echo "## npm packages staged for approval (dist-tag $dist_tag)" >> "$summary"
+          cat >> "$summary" <<'SUMMARY'
+
+          Nothing is public until approved. Approve the platform packages first, then
+          typescript-crap, on npmjs.com or with npm stage approve ID (2FA).
+
+          | Package | Stage id |
+          | --- | --- |
+          SUMMARY
           # Platform packages first, so approving them first never leaves the main package
           # naming a missing version.
           for platform in "${platforms[@]}"; do stage "typescript-crap-$platform"; done

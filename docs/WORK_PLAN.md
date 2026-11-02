@@ -163,7 +163,10 @@ or read them directly:
    cause (registry outage, npm settings), fix the cause and rerun only
    that job within 30 days (the `npm-packages` artifact retention): versions
    already published with identical contents are skipped. A version that is
-   still staged can't be staged again: approve or `npm stage reject` it first. Trusted publishing
+   still staged can't be staged again: approve or `npm stage reject` it first.
+   The dist-tag is fixed when a version is staged and is chosen against the
+   approved `latest`, so approve releases newest first; if an older backport
+   was staged while a newer release was unapproved, reject and re-stage it. Trusted publishing
    can't change dist-tags, so if a backport rerun skips packages published
    before a newer release, add the tag by hand:
    `npm dist-tag add typescript-crap-<platform>@X.Y.Z backport`.

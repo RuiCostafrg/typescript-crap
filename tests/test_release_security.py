@@ -67,7 +67,7 @@ class ReleaseSecurityTests(unittest.TestCase):
         self.assertNotIn('file="npm-packages/', release_yml)
         self.assertIn('npm stage publish "$file"', release_yml)
         # The trusted publisher allows only staged publishing; the owner approves with 2FA.
-        self.assertNotRegex(release_yml, r'(?m)^\s*npm publish ')
+        self.assertNotRegex(release_yml, r'\bnpm publish\b')
         ci = (ROOT / '.github/workflows/npm-package.yml').read_text()
         self.assertIn('npm stage publish --dry-run --force "./npm-packages/$name-$VERSION.tgz"', ci)
         # --force belongs only to the dry run; the real publish must keep npm's protections.

@@ -78,7 +78,7 @@ class PublishJobShapeTests(unittest.TestCase):
         self.assertIn('scripts/verify-npm-packages.py --assets release-assets --packages npm-packages', assemble)
 
     def test_npm_cli_is_pinned_by_sha512_and_installed_without_scripts(self):
-        script = step(job('publish-npm'), 'Install the pinned npm CLI (trusted publishing needs npm 11.5.1 or later)')
+        script = step(job('publish-npm'), 'Install the pinned npm CLI (staged trusted publishing needs npm 12)')
         self.assertIn('https://registry.npmjs.org/npm/-/npm-12.2.1.tgz', script)
         self.assertRegex(script, r'echo "[0-9a-f]{128}  \$RUNNER_TEMP/npm-12\.2\.1\.tgz" \| sha512sum --check')
         self.assertIn('npm install -g --ignore-scripts', script)
@@ -133,7 +133,8 @@ class PublishJobScriptTests(unittest.TestCase):
         env = dict(os.environ, PATH=f'{self.bin}:{os.environ["PATH"]}', CALLS=str(self.calls), ASSETS=str(self.assets),
                    PUBLISHED=str(self.published), TAG=tag or f'v{VERSION}', VERSION=(tag or f'v{VERSION}')[1:], GITHUB_REPOSITORY='RuiCostafrg/typescript-crap',
                    **{'UNATTESTED': '', **environment})
-        env.setdefault('GITHUB_STEP_SUMMARY', str(self.summary))
+        # Always a private file: hosted runners already set GITHUB_STEP_SUMMARY.
+        env['GITHUB_STEP_SUMMARY'] = str(self.summary)
         return subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', script], cwd=self.work, env=env,
                               capture_output=True, text=True, timeout=120)
 
@@ -230,7 +231,7 @@ class PublishJobScriptTests(unittest.TestCase):
         summary = self.summary.read_text()
         self.assertIn('npm stage approve', summary)
         for name in expected:
-            self.assertIn(f'| `{name}@{VERSION}` | `stg-{name}` |', summary)
+            self.assertIn(f'| {name}@{VERSION} | stg-{name} |', summary)
 
     def test_prereleases_use_the_next_dist_tag(self):
         for path in (self.work / 'npm-packages').iterdir():

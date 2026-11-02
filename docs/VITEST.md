@@ -18,6 +18,7 @@ you prefer the Istanbul provider. Without npm, download the scanner and the
 `ts-crap-coverage-helpers.zip` bundle from the
 [same release](COVERAGE_HELPERS.md#install-and-compatibility) and replace
 `npx typescript-crap coverage` below with `node /path/to/ts-crap-coverage-helpers/coverage-run.mjs`.
+With `--scan`, put the downloaded `ts-crap` on `PATH` or pass `--scanner /path/to/ts-crap`.
 
 ## 2. Configure
 
@@ -113,11 +114,12 @@ jobs:
       - run: npx typescript-crap coverage --framework vitest --scan
 ```
 
-Actions are pinned to commit SHAs, as in this repository's workflows. For a reviewed baseline,
-changed-file (`--diff`) gating and retained JSON/SARIF reports, start from
-[examples/ci/github-actions.yml](../examples/ci/github-actions.yml) and
-[CI_ADOPTION.md](CI_ADOPTION.md). CI executes that workflow's steps with real Vitest
-coverage.
+Actions are pinned to commit SHAs, as in this repository's workflows. For a
+reviewed baseline, changed-file (`--diff`) gating and retained JSON/SARIF reports,
+start from [examples/ci/github-actions.yml](../examples/ci/github-actions.yml) and
+[CI_ADOPTION.md](CI_ADOPTION.md). CI runs that workflow's collection, baseline and
+gate commands with real Vitest coverage, using `scripts/verify-ci-guide.py` in a synthetic
+Git checkout with the installed helper bundle. The YAML file itself is not run.
 
 ## Troubleshooting
 

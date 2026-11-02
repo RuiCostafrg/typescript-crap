@@ -17,6 +17,7 @@ same version. The helpers need Node.js 24 or later. Without npm, download the
 scanner and the `ts-crap-coverage-helpers.zip` bundle from the
 [same release](COVERAGE_HELPERS.md#install-and-compatibility) and replace
 `npx typescript-crap coverage` below with `node /path/to/ts-crap-coverage-helpers/coverage-run.mjs`.
+With `--scan`, put the downloaded `ts-crap` on `PATH` or pass `--scanner /path/to/ts-crap`.
 
 ## 2. Configure
 
@@ -47,7 +48,7 @@ test and config files, which have no coverage and fail `--require-coverage`:
 {
   "version": 1,
   "include": ["src/**"],
-  "exclude": ["**/*.test.ts"],
+  "exclude": ["**/*.test.ts", "**/*.test.tsx"],
   "threshold": 30,
   "require_coverage": true
 }
@@ -118,11 +119,12 @@ jobs:
       - run: npx typescript-crap coverage --framework jest --scan -- --runInBand
 ```
 
-Actions are pinned to commit SHAs, as in this repository's workflows. For a reviewed baseline,
-changed-file (`--diff`) gating and retained JSON/SARIF reports, start from
-[examples/ci/github-actions-jest.yml](../examples/ci/github-actions-jest.yml) and
-[CI_ADOPTION.md](CI_ADOPTION.md). CI executes that workflow's one-step collection,
-baseline and gate steps with real Jest coverage.
+Actions are pinned to commit SHAs, as in this repository's workflows. For a
+reviewed baseline, changed-file (`--diff`) gating and retained JSON/SARIF reports,
+start from [examples/ci/github-actions-jest.yml](../examples/ci/github-actions-jest.yml) and
+[CI_ADOPTION.md](CI_ADOPTION.md). CI runs that workflow's collection, baseline and
+gate commands with real Jest coverage through the one-step command, using `scripts/verify-ci-guide.py` in a synthetic
+Git checkout with the installed helper bundle. The YAML file itself is not run.
 
 ## Troubleshooting
 

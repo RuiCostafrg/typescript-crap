@@ -35,8 +35,9 @@ cannot enable or verify them.
   settings. cargo-dist 0.33.1 archives are verified against committed SHA-256
   hashes before execution. No remote installer is piped into a shell in CI.
 - Builds and smoke tests have contents:read only. Only publish receives
-  contents:write, id-token:write and attestations:write, after owner approval in
-  the release environment, which accepts only v* tags and disallows admin bypass.
+  contents:write and attestations:write. Only publish and publish-npm receive
+  id-token:write, each after its own owner approval in the release environment,
+  which accepts only v* tags and disallows admin bypass.
 - Publishing uses a fresh hosted runner. It neither checks out source nor runs
   cargo-dist, built binaries, or downloaded scripts. Artifacts are data. GitHub
   provenance is generated with ephemeral OIDC credentials, then assets publish

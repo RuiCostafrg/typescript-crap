@@ -112,7 +112,7 @@ class PublishJobScriptTests(unittest.TestCase):
         self.published.mkdir()
         (self.bin / 'npm').write_text(
             '#!/bin/bash\necho "npm $*" >> "$CALLS"\n'
-            'if [[ "$1 $3" == "view dist-tags.latest" ]]; then [[ -f "$PUBLISHED/latest" ]] && cat "$PUBLISHED/latest"; exit 0; fi\n'
+            'if [[ "$1 $3" == "view dist-tags.latest" ]]; then cat "$PUBLISHED/latest" 2>/dev/null || echo 0.0.0; exit 0; fi\n'
             'if [[ "$1" == view ]]; then f="$PUBLISHED/${2%@*}"; [[ -f "$f" ]] || exit 0\n'
             '  if [[ "$3" == version ]]; then echo "${2##*@}"; else cat "$f"; fi; exit 0; fi\n'
             'if [[ "$1" == publish ]]; then n=$(basename "$2"); n=${n%-$VERSION.tgz}\n'
@@ -262,6 +262,13 @@ class PublishJobScriptTests(unittest.TestCase):
                              for line in self.calls.read_text().splitlines()), 30)
         self.assertEqual(len(self.published_calls()), 5)
         self.assertNotIn('npm-packages/typescript-crap-' + VERSION, ' '.join(self.published_calls()))
+
+    def test_an_empty_latest_dist_tag_stops_before_publishing(self):
+        (self.published / 'latest').write_text('')
+        result = self.publish()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('cannot read the latest dist-tag', result.stdout)
+        self.assertEqual(self.published_calls(), [])
 
     def test_registry_lookup_errors_stop_before_publishing(self):
         stub = (self.bin / 'npm').read_text()

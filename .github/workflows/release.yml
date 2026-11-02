@@ -334,6 +334,7 @@ jobs:
             # A stable release older than the current latest (a backport) must not move latest back.
             # Every package exists (0.0.0 placeholders), so any lookup failure is a real error.
             current=$(npm view typescript-crap dist-tags.latest)
+            [[ -n "$current" ]] || { echo "::error::cannot read the latest dist-tag of typescript-crap"; exit 1; }
             older() {  # Is stable X.Y.Z $1 lower than stable X.Y.Z $2?
               local IFS=. i a b
               read -r -a a <<< "$1"

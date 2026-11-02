@@ -124,9 +124,20 @@ const INSTALL = {
   jest: 'npm install --save-dev jest',
 };
 
+/** The nearest directory at or above ROOT with a Yarn Plug'n'Play runtime, or null. */
+export function yarnPnpRoot(root) {
+  for (let directory = root; ; directory = path.dirname(directory)) {
+    if (existsSync(path.join(directory, '.pnp.cjs')) || existsSync(path.join(directory, '.pnp.js'))) return directory;
+    if (path.dirname(directory) === directory) return null;
+  }
+}
+
 export function frameworkBinary(root, framework) {
   const found = findPackage(root, framework);
   if (!found) {
+    // Yarn Plug'n'Play installs have no node_modules for the helpers to run from.
+    const pnp = yarnPnpRoot(root);
+    if (pnp) throw new Error(`Cannot find ${framework} in node_modules: ${pnp} uses Yarn Plug'n'Play, which the coverage helpers do not support; set nodeLinker: node-modules in .yarnrc.yml and run yarn install`);
     throw new Error(`Cannot find ${framework} installed in ${root} or its parent directories; install it first (${INSTALL[framework]}) or run from the project that depends on it`);
   }
   const bin = typeof found.manifest.bin === 'string' ? found.manifest.bin : found.manifest.bin?.[framework];
@@ -207,6 +218,21 @@ export function formatCommand(args, platform = process.platform) {
   return args.map(value => shellQuote(value, platform)).join(' ');
 }
 
+/**
+ * Words that start the printed scanner command: `ts-crap`, or the JSON string
+ * array in TS_CRAP_SCANNER_COMMAND (the npm launcher sets `npx typescript-crap@VERSION`).
+ */
+export function scannerCommand(environment = process.env) {
+  const value = environment.TS_CRAP_SCANNER_COMMAND;
+  if (value === undefined || value === '') return ['ts-crap'];
+  let words;
+  try { words = JSON.parse(value); } catch { words = null; }
+  if (!Array.isArray(words) || !words.length || words.some(word => typeof word !== 'string' || word === '')) {
+    throw new UsageError('TS_CRAP_SCANNER_COMMAND must be a JSON array of non-empty strings');
+  }
+  return words;
+}
+
 export function scannerArguments({ root, output, config }) {
   return ['--root', root, '--coverage', output, '--require-coverage', ...(config ? ['--config', config] : [])];
 }
@@ -259,6 +285,7 @@ async function main() {
   const root = await fs.realpath(options.root).catch(error => {
     throw new Error(`Cannot resolve --root ${options.root}: ${error.message}`);
   });
+  const printed = scannerCommand();
   const framework = options.framework === 'auto' ? detectFramework(root) : options.framework;
   const binary = frameworkBinary(root, framework);
   checkProvider(framework, options.provider);
@@ -291,7 +318,7 @@ async function main() {
   const scan = scannerArguments({ root, output, config });
   console.error(`ts-crap coverage-run: native coverage written to ${output}`);
   if (!options.scan) {
-    console.log(formatCommand(['ts-crap', ...scan]));
+    console.log(formatCommand([...printed, ...scan]));
     return;
   }
   process.exitCode = await run(scanner, scan);

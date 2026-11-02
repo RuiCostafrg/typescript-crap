@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   checkExtraArguments, checkProvider, detectFramework, findPackage, formatCommand, frameworkArguments, frameworkBinary,
-  helperVersion, parseArguments, reportName, scannerArguments, shellQuote, UsageError, vitestProvider,
+  helperVersion, parseArguments, reportName, yarnPnpRoot, scannerArguments, scannerCommand, shellQuote, UsageError, vitestProvider,
 } from '../scripts/coverage-run.mjs';
 
 const helper = fileURLToPath(new URL('../scripts/coverage-run.mjs', import.meta.url));
@@ -207,6 +207,40 @@ test('scanner command and quoting are copy-paste safe', () => {
   assert.equal(shellQuote('C:\\$(x)\\$y', 'win32'), "'C:\\$(x)\\$y'", 'PowerShell keeps single-quoted text literal');
   assert.deepEqual(scannerArguments({ root: '/r', output: '/o.json' }), ['--root', '/r', '--coverage', '/o.json', '--require-coverage']);
   assert.deepEqual(scannerArguments({ root: '/r', output: '/o', config: '/c.json' }).slice(-2), ['--config', '/c.json']);
+});
+
+test('a Yarn Plug\'n\'Play project gets a node_modules hint instead of an install hint', async t => {
+  const root = await project(t, { '.pnp.cjs': '', 'packages/app/vitest.config.ts': '' });
+  const app = path.join(root, 'packages', 'app');
+  assert.equal(yarnPnpRoot(app), root);
+  if (!unlessAncestorVitest(t)) return;
+  assert.throws(() => frameworkBinary(app, 'vitest'),
+    new RegExp(`${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} uses Yarn Plug'n'Play.*nodeLinker: node-modules`));
+  const plain = await project(t);
+  if (!yarnPnpRoot(plain) && unlessAncestor(t, ['jest'])) {
+    assert.throws(() => frameworkBinary(plain, 'jest'), /install it first \(npm install --save-dev jest\)/);
+  }
+});
+
+test('the printed scanner command starts with ts-crap or the launcher\'s JSON words', async t => {
+  assert.deepEqual(scannerCommand({}), ['ts-crap']);
+  assert.deepEqual(scannerCommand({ TS_CRAP_SCANNER_COMMAND: '' }), ['ts-crap']);
+  assert.deepEqual(scannerCommand({ TS_CRAP_SCANNER_COMMAND: '["npx","typescript-crap@2.3.0"]' }), ['npx', 'typescript-crap@2.3.0']);
+  for (const value of ['npx typescript-crap', '[]', '["npx", 1]', '["npx", ""]', '{"a":1}', '"ts-crap"']) {
+    assert.throws(() => scannerCommand({ TS_CRAP_SCANNER_COMMAND: value }), UsageError, value);
+  }
+  const root = await withFramework(t, 'vitest');
+  const output = path.join(root, 'native.json');
+  const printed = runHelper(root, ['--framework', 'vitest', '--output', output],
+    { TS_CRAP_SCANNER_COMMAND: '["npx","typescript-crap@2.3.0"]' });
+  assert.equal(printed.status, 0, printed.stderr);
+  assert.equal(printed.stdout.trim(), formatCommand(['npx', 'typescript-crap@2.3.0', ...scannerArguments({ root, output })]));
+  // An invalid value fails before any test runs.
+  await fs.rm(path.join(root, 'framework-args.json'));
+  const invalid = runHelper(root, ['--framework', 'vitest'], { TS_CRAP_SCANNER_COMMAND: 'npx typescript-crap' });
+  assert.equal(invalid.status, 2);
+  assert.match(invalid.stderr, /TS_CRAP_SCANNER_COMMAND must be a JSON array/);
+  await assert.rejects(fs.access(path.join(root, 'framework-args.json')), { code: 'ENOENT' });
 });
 
 test('helper version comes from bundled metadata, else the checkout manifest', async t => {

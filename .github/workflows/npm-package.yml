@@ -1,0 +1,126 @@
+name: npm package
+# Builds the five npm platform executables from this source in the release
+# archive layout, packs the npm packages from those archives exactly as release
+# assembly does, and installs the packed packages with every package manager.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: npm-package-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  archives:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    name: Archive (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-26.04-arm
+            target: aarch64-unknown-linux-musl
+          - runner: macos-26-intel
+            target: x86_64-apple-darwin
+          - runner: macos-26
+            target: aarch64-apple-darwin
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.90.0
+          targets: ${{ matrix.target }}
+      - name: Native musl C compiler
+        if: contains(matrix.target, 'musl')
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y musl-tools
+          {
+            echo 'CC=musl-gcc'
+            echo 'CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc'
+            echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc'
+          } >> "$GITHUB_ENV"
+      - name: Build and archive in the release layout
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          cargo build --locked --profile dist --target "$TARGET"
+          python3 - "$TARGET" <<'PY'
+          import hashlib, pathlib, sys, tarfile, zipfile
+          target = sys.argv[1]
+          binary = pathlib.Path('target', target, 'dist', 'ts-crap.exe' if 'windows' in target else 'ts-crap')
+          notices = [pathlib.Path(p) for p in ('LICENSE', 'README.md', 'CHANGELOG.md', 'packaging/licenses/musl-COPYRIGHT')]
+          out = pathlib.Path('target/npm-archives')
+          out.mkdir(parents=True)
+          if 'windows' in target:
+              path = out / f'ts-crap-{target}.zip'
+              with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as archive:
+                  for file in [binary, *notices]:
+                      archive.write(file, file.name)
+          else:
+              path = out / f'ts-crap-{target}.tar.xz'
+              with tarfile.open(path, 'w:xz') as archive:
+                  for file in [binary, *notices]:
+                      archive.add(file, f'ts-crap-{target}/{file.name}')
+          (out / (path.name + '.sha256')).write_text(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n')
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-archive-${{ matrix.target }}
+          path: target/npm-archives/*
+          if-no-files-found: error
+          retention-days: 3
+  packages:
+    needs: archives
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.pack.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: npm-archive-*
+          path: target/npm-assets
+          merge-multiple: true
+      - name: Pack reproducibly from the archives and verify every byte
+        id: pack
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          python3 scripts/bundle-coverage.py target/npm-assets
+          python3 scripts/npm-packages.py --assets target/npm-assets --version "$version" --output target/npm-packages
+          python3 scripts/npm-packages.py --assets target/npm-assets --version "$version" --output target/npm-packages-again
+          diff -r target/npm-packages target/npm-packages-again
+          python3 scripts/verify-npm-packages.py --assets target/npm-assets --packages target/npm-packages --version "$version"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-assets
+          path: target/npm-assets/*
+          if-no-files-found: error
+          retention-days: 3
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-packages
+          path: target/npm-packages/*
+          if-no-files-found: error
+          retention-days: 7
+  install:
+    needs: packages
+    uses: ./.github/workflows/npm-install.yml
+    with:
+      version: ${{ needs.packages.outputs.version }}
+      assets-artifact: npm-assets

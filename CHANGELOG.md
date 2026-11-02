@@ -4,6 +4,9 @@
 
 ### Added
 
+- Jest `ts-jest` and `@swc/jest` transformer fixtures and the Jest `v8` coverage
+  provider. Each pair must give exactly the `babel-jest`/`babel` CRAP results.
+  The docs include a configuration snippet for every supported combination.
 - npm package `typescript-crap`: `npm install --save-dev typescript-crap`,
   then `npx ts-crap`. Platform packages carry the release executables (static
   musl on Linux), selected by `os` and `cpu`, with no install scripts. The main

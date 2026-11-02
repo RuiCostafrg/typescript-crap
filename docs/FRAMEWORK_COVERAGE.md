@@ -55,6 +55,74 @@ For each combination, the suite asserts:
 - Editing source after collection causes a scanner SHA-256 mismatch (exit 2).
   Editing source during collection makes the importer reject publication (exit 2).
 
+## Jest transformers and coverage providers
+
+The shared fixture also runs Jest 30 with `ts-jest` 29.4.15 (TypeScript 5.9.3)
+and `@swc/jest` 0.2.39 (`@swc/core` 1.16.20), each with both coverage providers,
+through `coverage-run.mjs`. For JSON and LCOV, every pair must give the scanner
+exactly the same functions, coverage and CRAP scores as `babel-jest` with the
+`babel` provider, for a full and a partial run. A failing test must still publish
+nothing. `@swc/core` has no Android binary, so the suite skips `@swc/jest` only on
+Android; every CI platform runs it.
+
+Each snippet is a complete `jest.config.cjs`. Pick the provider at run time with
+`coverage-run.mjs --framework jest --provider babel|v8`, or set
+`coverageProvider` in the config.
+
+`babel-jest` (strips types with the Babel TypeScript preset):
+
+```js
+module.exports = {
+  testEnvironment: 'node',
+  transform: { '^.+\\.tsx?$': ['babel-jest', {
+    presets: ['@babel/preset-typescript'],
+    plugins: ['@babel/plugin-transform-modules-commonjs'],
+  }] },
+  collectCoverageFrom: ['src/**/*.ts'],
+};
+```
+
+`ts-jest` (transpile only; keep type checking in `tsc`):
+
+```js
+module.exports = {
+  testEnvironment: 'node',
+  transform: { '^.+\\.tsx?$': ['ts-jest', {
+    diagnostics: false,
+    tsconfig: { module: 'commonjs', target: 'es2022', esModuleInterop: true },
+  }] },
+  collectCoverageFrom: ['src/**/*.ts'],
+};
+```
+
+`@swc/jest` (inline source maps let coverage remap to TypeScript):
+
+```js
+module.exports = {
+  testEnvironment: 'node',
+  transform: { '^.+\\.tsx?$': ['@swc/jest', {
+    jsc: { parser: { syntax: 'typescript' }, target: 'es2022' },
+    module: { type: 'commonjs' },
+    sourceMaps: 'inline',
+  }] },
+  collectCoverageFrom: ['src/**/*.ts'],
+};
+```
+
+Then collect and scan in one step:
+
+```sh
+node coverage-run.mjs --framework jest --provider v8 --scan -- --config jest.config.cjs
+```
+
+Vitest needs no transformer configuration. Both providers are tested on every
+supported major. Choose one with `--provider`:
+
+```sh
+node coverage-run.mjs --framework vitest --provider v8 --scan
+node coverage-run.mjs --framework vitest --provider istanbul --scan
+```
+
 ## Version matrix
 
 [`tests/fixtures/framework-versions`](../tests/fixtures/framework-versions)

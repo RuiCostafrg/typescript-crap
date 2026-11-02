@@ -90,6 +90,8 @@ try {
     assert.match(mismatched.stderr, /not a Jest coverage provider; use babel or v8/);
   }
 
+  // Jest babel-jest/babel reports per format: other transformers and providers must match them.
+  const jestBaseline = {};
   const combinations = [['jest', 'babel'], ['vitest', 'istanbul'], ['vitest', 'v8']]
     .filter(([framework]) => installed[framework]);
   for (const [framework, provider] of combinations) {
@@ -170,6 +172,7 @@ try {
       assert.equal(uncalled.coverage, 0, label);
       assert.equal(uncalled.crap, uncalled.complexity ** 2 + uncalled.complexity, label);
       assert(partialReport.functions.find(f => f.name === 'price').crap > 4, label);
+      if (framework === 'jest') jestBaseline[format] = { full: fullReport, partial: partialReport };
       const native = JSON.parse(await fs.readFile(partial.output, 'utf8'));
       assert(Object.values(native.files).some(file => Object.values(file.lines).includes(0)), label);
 
@@ -238,6 +241,43 @@ try {
       await assert.rejects(fs.access(changed.output), { code: 'ENOENT' });
       await fs.writeFile(source, original);
       console.log(`PASS ${label}: full, uncovered, fresh repeat, reuse rejected, stale and changed source rejected`);
+    }
+  }
+
+  // Jest transformers x coverage providers through the one-step command (roadmap 1.4).
+  // Each must give the scanner exactly the baseline's functions, coverage and CRAP.
+  const transformers = [['babel-jest', 'jest.config.cjs'], ['ts-jest', 'jest.ts-jest.config.cjs'], ['@swc/jest', 'jest.swc.config.cjs']];
+  for (const [transformer, config] of installed.jest ? transformers : []) {
+    try { await fs.access(path.join(root, 'node_modules', transformer, 'package.json')); }
+    catch { continue; } // Version fixtures install babel-jest only.
+    // @swc/core publishes no Android binary; every CI platform must run it.
+    if (transformer === '@swc/jest' && process.platform === 'android') {
+      console.log(`SKIP jest ${installed.jest}/${transformer}: @swc/core has no ${process.platform} binary`);
+      continue;
+    }
+    const version = JSON.parse(await fs.readFile(path.join(root, 'node_modules', transformer, 'package.json'), 'utf8')).version;
+    for (const provider of ['babel', 'v8']) {
+      if (transformer === 'babel-jest' && provider === 'babel') continue; // The baseline itself.
+      for (const format of ['istanbul', 'lcov']) {
+        const label = `jest ${installed.jest}/${transformer} ${version}/${provider}/${format}`;
+        const oneStep = async (name, expected, env = {}) => {
+          const output = path.join(await fs.mkdtemp(path.join(root, 'coverage', `jest-${name}-`)), 'native.json');
+          const result = run(process.execPath, [path.join(repository, 'scripts/coverage-run.mjs'), '--framework', 'jest',
+            '--provider', provider, '--format', format === 'istanbul' ? 'json' : 'lcov', '--root', root, '--output', output,
+            '--', '--config', config, '--runInBand'], expected, env);
+          return { output, result };
+        };
+        const report = (output, expected) => JSON.parse(run(scanner, ['--root', root, 'packages/core/src', 'packages/service/src',
+          '--coverage', output, '--require-coverage', '--threshold', '4', '--format', 'json'], expected).stdout);
+        const full = await oneStep('transform-full', 0);
+        assert.deepEqual(report(full.output, 0), jestBaseline[format].full, `${label}: full run must match babel-jest/babel`);
+        const partial = await oneStep('transform-partial', 0, { FIXTURE_PARTIAL: '1' });
+        assert.deepEqual(report(partial.output, 1), jestBaseline[format].partial, `${label}: partial run must match babel-jest/babel`);
+        const failed = await oneStep('transform-failing', 2, { FIXTURE_FAIL: '1' });
+        assert.match(failed.result.stderr, /actual test failure/, label);
+        await assert.rejects(fs.access(failed.output), { code: 'ENOENT' }, label);
+        console.log(`PASS ${label}: full and partial CRAP match the babel-jest/babel baseline; failing tests publish nothing`);
+      }
     }
   }
 } catch (error) {

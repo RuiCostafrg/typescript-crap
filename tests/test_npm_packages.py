@@ -9,6 +9,7 @@ import struct
 import tarfile
 import tempfile
 import unittest
+import unittest.mock
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -210,6 +211,23 @@ class NpmPackageTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             npm.build(self.assets, VERSION, self.root / 'exists')
 
+    def test_failed_write_leaves_no_partial_output(self):
+        output = self.root / 'packages'
+        original = Path.write_bytes
+        calls = []
+
+        def failing(path, data):
+            calls.append(path)
+            if len(calls) == 3:
+                raise OSError('disk full')
+            return original(path, data)
+        with unittest.mock.patch.object(Path, 'write_bytes', failing), self.assertRaisesRegex(OSError, 'disk full'):
+            npm.build(self.assets, VERSION, output)
+        self.assertFalse(output.exists())
+        self.assertEqual([p.name for p in self.root.iterdir() if p.name.startswith('.npm-packages-')], [])
+        npm.build(self.assets, VERSION, output)
+        verifier.verify(self.assets, output, VERSION)
+
 
 class VerifyNpmPackagesTests(unittest.TestCase):
     def setUp(self):
@@ -374,12 +392,22 @@ class VerifyNpmInstallTests(unittest.TestCase):
         for manager in installer.MANAGERS:
             with self.subTest(manager=manager):
                 fields = installer.manifest(manager, '2.3.0', packages)
-                pinned = fields['pnpm']['overrides'] if manager == 'pnpm' else fields[field[manager]]
+                if manager == 'pnpm':
+                    self.assertNotIn('pnpm', fields)
+                    pinned = json.loads(installer.workspace_files(manager, '2.3.0', packages)['pnpm-workspace.yaml'])['overrides']
+                else:
+                    pinned = fields[field[manager]]
                 self.assertEqual(fields['dependencies']['typescript-crap'],
                                  'file:' + (packages / 'typescript-crap-2.3.0.tgz').resolve().as_posix())
                 self.assertEqual(sorted(pinned), sorted(npm.platform_name(t) for t in npm.TARGETS))
                 for name, spec in pinned.items():
                     self.assertEqual(spec, 'file:' + (packages / f'{name}-2.3.0.tgz').resolve().as_posix())
+
+    def test_workspace_files_mark_yarn_projects_and_pin_pnpm_only_when_packed(self):
+        self.assertEqual(installer.workspace_files('yarn', '2.3.0', None), {'yarn.lock': ''})
+        self.assertEqual(installer.workspace_files('pnpm', '2.3.0', None), {})
+        self.assertEqual(installer.workspace_files('npm', '2.3.0', Path('/p')), {})
+        self.assertEqual(installer.workspace_files('bun', '2.3.0', Path('/p')), {})
 
     def test_runs_never_download_the_unrelated_ts_crap_package(self):
         self.assertEqual(installer.RUN['npm'], ['npm', 'exec', '--no', '--'])

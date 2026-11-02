@@ -6,8 +6,10 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import shutil
 import struct
 import tarfile
+import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -170,10 +172,17 @@ def packages(assets, version):
 
 
 def build(assets, version, output):
+    """Write the tarballs to a new OUTPUT directory, all or nothing."""
     built = packages(assets, version)
-    output.mkdir()
-    for name, data in built.items():
-        (output / name).write_bytes(data)
+    if output.exists() or output.is_symlink():
+        raise FileExistsError(f'output already exists: {output}')
+    staging = Path(tempfile.mkdtemp(prefix='.npm-packages-', dir=output.parent))
+    try:
+        for name, data in built.items():
+            (staging / name).write_bytes(data)
+        staging.rename(output)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
     return [output / name for name in built]
 
 

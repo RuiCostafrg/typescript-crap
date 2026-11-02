@@ -124,9 +124,20 @@ const INSTALL = {
   jest: 'npm install --save-dev jest',
 };
 
+/** The nearest directory at or above ROOT with a Yarn Plug'n'Play runtime, or null. */
+export function yarnPnpRoot(root) {
+  for (let directory = root; ; directory = path.dirname(directory)) {
+    if (existsSync(path.join(directory, '.pnp.cjs')) || existsSync(path.join(directory, '.pnp.js'))) return directory;
+    if (path.dirname(directory) === directory) return null;
+  }
+}
+
 export function frameworkBinary(root, framework) {
   const found = findPackage(root, framework);
   if (!found) {
+    // Yarn Plug'n'Play installs have no node_modules for the helpers to run from.
+    const pnp = yarnPnpRoot(root);
+    if (pnp) throw new Error(`Cannot find ${framework} in node_modules: ${pnp} uses Yarn Plug'n'Play, which the coverage helpers do not support; set nodeLinker: node-modules in .yarnrc.yml and run yarn install`);
     throw new Error(`Cannot find ${framework} installed in ${root} or its parent directories; install it first (${INSTALL[framework]}) or run from the project that depends on it`);
   }
   const bin = typeof found.manifest.bin === 'string' ? found.manifest.bin : found.manifest.bin?.[framework];

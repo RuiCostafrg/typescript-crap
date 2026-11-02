@@ -68,7 +68,7 @@ def manifest(manager, version, packages):
     if manager == 'npm':
         fields['overrides'] = pinned
     elif manager == 'pnpm':
-        fields['pnpm'] = {'overrides': pinned}
+        pass  # pnpm 10+ reads overrides from pnpm-workspace.yaml; see workspace_files()
     elif manager == 'yarn':
         fields['resolutions'] = pinned
     else:
@@ -76,11 +76,25 @@ def manifest(manager, version, packages):
     return fields
 
 
+def workspace_files(manager, version, packages):
+    """Extra project files: pnpm's overrides (JSON is valid YAML) and Yarn Berry's project-root marker."""
+    if manager == 'yarn':
+        return {'yarn.lock': ''}
+    if manager == 'pnpm' and packages is not None:
+        pinned = {npm.platform_name(t): 'file:' + (packages / npm.tarball_name(npm.platform_name(t), version)).resolve().as_posix()
+                  for t in npm.TARGETS}
+        return {'pnpm-workspace.yaml': json.dumps({'overrides': pinned}, indent=2) + '\n'}
+    return {}
+
+
 def run(command, cwd, expected=0, timeout=600):
     executable = shutil.which(command[0])
     if executable is None:
         raise RuntimeError(f'{command[0]} is not installed')
     env = dict(os.environ, **ENVIRONMENT)
+    # Audited: argument vectors built in this script from fixed package-manager
+    # commands and local paths, never a shell or untrusted command text.
+    # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
     result = subprocess.run([executable, *command[1:]], cwd=cwd, capture_output=True, text=True,
                             timeout=timeout, env=env)
     if result.returncode != expected:
@@ -127,8 +141,8 @@ def verify(manager, version, assets, packages, scan_root, work, target):
     project = work / f'{manager}-project'
     project.mkdir()
     (project / 'package.json').write_text(json.dumps(manifest(manager, version, packages), indent=2) + '\n')
-    if manager == 'yarn':
-        (project / 'yarn.lock').write_text('')  # marks the project root for Yarn Berry
+    for name, text in workspace_files(manager, version, packages).items():
+        (project / name).write_text(text)
     run(INSTALL[manager], project)
     runner = RUN[manager]
     for command in ('ts-crap', 'typescript-crap'):

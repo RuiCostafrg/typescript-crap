@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   checkExtraArguments, checkProvider, detectFramework, findPackage, formatCommand, frameworkArguments, frameworkBinary,
-  helperVersion, parseArguments, reportName, scannerArguments, scannerCommand, shellQuote, UsageError, vitestProvider,
+  helperVersion, parseArguments, reportName, yarnPnpRoot, scannerArguments, scannerCommand, shellQuote, UsageError, vitestProvider,
 } from '../scripts/coverage-run.mjs';
 
 const helper = fileURLToPath(new URL('../scripts/coverage-run.mjs', import.meta.url));
@@ -207,6 +207,17 @@ test('scanner command and quoting are copy-paste safe', () => {
   assert.equal(shellQuote('C:\\$(x)\\$y', 'win32'), "'C:\\$(x)\\$y'", 'PowerShell keeps single-quoted text literal');
   assert.deepEqual(scannerArguments({ root: '/r', output: '/o.json' }), ['--root', '/r', '--coverage', '/o.json', '--require-coverage']);
   assert.deepEqual(scannerArguments({ root: '/r', output: '/o', config: '/c.json' }).slice(-2), ['--config', '/c.json']);
+});
+
+test('a Yarn Plug\'n\'Play project gets a node_modules hint instead of an install hint', async t => {
+  const root = await project(t, { '.pnp.cjs': '', 'packages/app/vitest.config.ts': '' });
+  const app = path.join(root, 'packages', 'app');
+  assert.equal(yarnPnpRoot(app), root);
+  if (!unlessAncestorVitest(t)) return;
+  assert.throws(() => frameworkBinary(app, 'vitest'),
+    new RegExp(`${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} uses Yarn Plug'n'Play.*nodeLinker: node-modules`));
+  const plain = await project(t);
+  if (!yarnPnpRoot(plain)) assert.throws(() => frameworkBinary(plain, 'jest'), /install it first \(npm install --save-dev jest\)/);
 });
 
 test('the printed scanner command starts with ts-crap or the launcher\'s JSON words', async t => {

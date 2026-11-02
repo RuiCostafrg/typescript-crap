@@ -10,7 +10,7 @@ version, so nothing needs to be matched by hand:
 
 ```sh
 npm install --save-dev typescript-crap
-npx typescript-crap coverage --framework vitest --scan      # one-step Vitest/Jest
+npx typescript-crap coverage --framework vitest --scan      # one-step; or --framework jest
 node node_modules/typescript-crap/coverage/coverage.mjs --root . --output native.json -- node test.mjs
 npx ts-crap --root . --coverage native.json --require-coverage
 ```

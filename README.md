@@ -57,7 +57,8 @@ npx ts-crap --root . --threshold 30                   # or pnpm exec / yarn / bu
   dependencies.
 - The package also contains the coverage helpers at the same version. The
   one-step Vitest/Jest command is
-  `npx typescript-crap coverage --framework vitest --scan`. It needs Node.js 24
+  `npx typescript-crap coverage --framework vitest --scan` (or
+  `--framework jest`; the default `auto` stops if both are configured). It needs Node.js 24
   or later and Vitest or Jest in `node_modules`, so Yarn Plug'n'Play projects
   set `nodeLinker: node-modules` first (see
   [coverage helpers](docs/COVERAGE_HELPERS.md#install-with-npm)).

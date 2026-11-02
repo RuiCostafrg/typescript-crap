@@ -159,7 +159,10 @@ or read them directly:
    formula.
 8. If `publish-npm` fails after the GitHub release, fix the cause and rerun only
    that job within 30 days (the `npm-packages` artifact retention): versions
-   already published with identical contents are skipped.
+   already published with identical contents are skipped. Trusted publishing
+   can't change dist-tags, so if a backport rerun skips packages published
+   before a newer release, add the tag by hand:
+   `npm dist-tag add typescript-crap-<platform>@X.Y.Z backport`.
    A published npm version can't change; deprecate it if it is bad.
 9. Release tags are immutable, so a failed release needs a new patch version.
    v2.2.0 was burned this way.

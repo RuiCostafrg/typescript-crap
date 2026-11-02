@@ -56,6 +56,7 @@ class PublishJobShapeTests(unittest.TestCase):
         self.assertIn("    if: needs.plan.outputs.publish == 'true'\n", text)
         self.assertIn('    environment: release\n', text)
         self.assertIn('    runs-on: ubuntu-26.04\n', text)
+        self.assertIn('    concurrency:\n      group: npm-publish\n      cancel-in-progress: false\n', text)
         permissions = text.split('    permissions:\n', 1)[1].split('    steps:\n', 1)[0]
         self.assertEqual(sorted(line.strip() for line in permissions.splitlines() if line.strip()),
                          ['attestations: read', 'contents: read', 'id-token: write'])
@@ -256,9 +257,23 @@ class PublishJobScriptTests(unittest.TestCase):
         (self.bin / 'npm').write_text(npm_stub)
         result = self.publish()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(f'typescript-crap-linux-arm64@{VERSION} is not served yet', result.stdout)
+        self.assertIn(f'not served yet: typescript-crap-linux-arm64@{VERSION}', result.stdout)
+        self.assertEqual(sum('version' == line.split()[-1] and 'linux-arm64' in line
+                             for line in self.calls.read_text().splitlines()), 30)
         self.assertEqual(len(self.published_calls()), 5)
         self.assertNotIn('npm-packages/typescript-crap-' + VERSION, ' '.join(self.published_calls()))
+
+    def test_registry_lookup_errors_stop_before_publishing(self):
+        stub = (self.bin / 'npm').read_text()
+        for failing in ('dist-tags.latest', 'dist.integrity'):
+            with self.subTest(lookup=failing):
+                (self.bin / 'npm').write_text(stub.replace(
+                    'echo "npm $*" >> "$CALLS"\n',
+                    f'echo "npm $*" >> "$CALLS"\nif [[ "$1 $3" == "view {failing}" ]]; then echo E500 >&2; exit 1; fi\n'))
+                self.calls.write_text('')
+                self.assertNotEqual(self.publish().returncode, 0)
+                self.assertEqual(self.published_calls(), [])
+        (self.bin / 'npm').write_text(stub)
 
     def test_rerun_skips_identical_published_versions_and_stops_on_different_ones(self):
         name = 'typescript-crap-linux-x64'

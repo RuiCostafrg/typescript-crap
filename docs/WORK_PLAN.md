@@ -39,8 +39,11 @@ when a stream changes state.
   - The owner will create the npm account. npm work starts once the account
     exists with 2FA and trusted publishing configured, matching the
     Distribution A gate above.
+- **Decided 2026-11-01:** the npm package is `typescript-crap`, with platform
+  packages `typescript-crap-{linux-x64,linux-arm64,darwin-x64,darwin-arm64,win32-x64}`.
+  The owner created npm account `lotinha` (2FA), published 0.0.0 placeholders and
+  configured trusted publishing for `release.yml` with environment `release`.
 - **Still open:**
-  - The npm package name (`typescript-crap` recommended; `ts-crap` is taken).
   - Whether to add an APT repository (recommendation: no, keep `.deb` assets
     as direct downloads).
 
@@ -50,7 +53,7 @@ when a stream changes state.
 | --- | --- | --- | --- | --- |
 | Roadmap v2.3 | `ROADMAP_V2_3.md` phases 1–3, in priority order (1.1 → 1.5, 2.1, 2.2, Phase 3, then later items) | Roadmap v2.3 implementation | `roadmap/` | 1.1 one-step command (#43) and 1.2 diagnostics (#46) merged; 1.3 version matrix in review |
 | Distribution B + C | Installer hardening and GitHub Action | Distribution: installer hardening + GitHub Action | `distribution/` | B docs/CI (#41), static musl default (#44) and GitHub Action (#42) merged; decisions recorded in #45. Next: exact `--cert-identity` in the repo's own verification commands |
-| Distribution A (npm) | npm package with per-platform binaries and bundled helpers | — | — | blocked on npm account |
+| Distribution A (npm) | npm package with per-platform binaries and bundled helpers | Distribution A: npm package | `distribution/npm-` | Packages and install verification (#48) merged; release publishing and published checks in review; user docs next |
 | Docs PRs | This file and the two plans; owner decisions | this coordinating thread | `docs/` | #40 merged; #45 decisions |
 
 Thread links are in T3: search thread titles above with `t3_thread_search`,
@@ -95,7 +98,7 @@ or read them directly:
    - Date the changelog.
    - Point `verify-release.yml` upgrade checks at the previous published version.
 2. Merge, then wait until `ci`, `coverage`, `mutation`, `installation`,
-   `verification` and `linux-distribution` all succeed on `main`.
+   `verification`, `linux-distribution` and `npm-package` all succeed on `main`.
 3. Tag on the merge commit: `git tag -a vX.Y.Z -m "ts-crap vX.Y.Z"`, then push
    the tag. This works through the owner-only tag ruleset bypass.
 4. Approve the `release` environment. The REST pending-deployments call
@@ -113,6 +116,12 @@ or read them directly:
        }
      }'
    ```
+
+   The environment asks twice. Approve `publish` first: it creates the GitHub
+   release. Then approve `publish-npm` with the same mutation (same run, same
+   environment). It re-verifies the npm packages against the attested release
+   assets and publishes them with npm trusted publishing. Check
+   `npm view typescript-crap@X.Y.Z` afterwards.
 
 5. After publishing, verify the downloaded assets in a fresh empty directory:
 
@@ -142,12 +151,20 @@ or read them directly:
 
    ```sh
    gh workflow run verify-published.yml --repo RuiCostafrg/typescript-crap \
-     -f version=X.Y.Z -f previous-version=PREVIOUS -f verify-guide=true -f verify-linux=true
+     -f version=X.Y.Z -f previous-version=PREVIOUS -f verify-guide=true -f verify-linux=true \
+     -f verify-npm=true
    ```
 
    Running it before the tap update fails the live-Homebrew jobs on the stale
    formula.
-8. Release tags are immutable, so a failed release needs a new patch version.
+8. If `publish-npm` fails after the GitHub release, fix the cause and rerun only
+   that job within 30 days (the `npm-packages` artifact retention): versions
+   already published with identical contents are skipped. Trusted publishing
+   can't change dist-tags, so if a backport rerun skips packages published
+   before a newer release, add the tag by hand:
+   `npm dist-tag add typescript-crap-<platform>@X.Y.Z backport`.
+   A published npm version can't change; deprecate it if it is bad.
+9. Release tags are immutable, so a failed release needs a new patch version.
    v2.2.0 was burned this way.
 
 ## Resume checklist

@@ -4,6 +4,16 @@
 
 ### Added
 
+- npm package `typescript-crap`: `npm install --save-dev typescript-crap`,
+  then `npx ts-crap`. Platform packages carry the release executables (static
+  musl on Linux), selected by `os` and `cpu`, with no install scripts. The main
+  package bundles the coverage helpers at the same version, and
+  `npx typescript-crap coverage --framework vitest|jest|auto` runs the one-step
+  coverage command (Node.js 24+). Packages publish from the release workflow
+  with npm trusted publishing and provenance, after each executable is checked
+  against the attested release archive. CI installs them with npm, pnpm, Yarn
+  and Bun on Linux (Ubuntu, Debian, Alpine, Fedora; x64 and arm64), macOS and
+  Windows, before and after publishing.
 - `coverage-run.mjs`, a one-step Vitest/Jest coverage command in the helper
   bundle. It detects the framework from config filenames or the `jest` key in
   `package.json`, without evaluating them. It uses a fresh private

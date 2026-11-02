@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
@@ -105,6 +106,24 @@ def run(command, cwd, expected=0, timeout=600):
     return result
 
 
+def attested_count(audit):
+    """How many installed packages `npm audit signatures` reports with verified attestations."""
+    match = re.search(r'(\d+) packages? ha(?:s|ve) (?:a )?verified attestations?', audit)
+    return int(match.group(1)) if match else 0
+
+
+def check_provenance(project):
+    """Registry signatures and trusted-publishing provenance for typescript-crap and its platform package."""
+    npm_major = int(run(['npm', '--version'], project).stdout.split('.')[0])
+    if npm_major < 11:
+        # Distribution npm 9 predates attestation checks; the host jobs run a current npm.
+        print(f'npm {npm_major}: skipping npm audit signatures (needs npm 11 or later)')
+        return
+    audit = run(['npm', 'audit', 'signatures'], project).stdout
+    if attested_count(audit) < 2:
+        raise ValueError(f'npm audit signatures did not verify provenance for both installed packages:\n{audit}')
+
+
 def fake_vitest_project(root):
     """A project with a stand-in Vitest that writes a real Istanbul report, as verify-coverage-bundle uses."""
     project = root / 'vitest-project'
@@ -146,6 +165,8 @@ def verify(manager, version, assets, packages, scan_root, work, target):
     for name, text in workspace_files(manager, version, packages).items():
         (project / name).write_text(text)
     run(INSTALL[manager], project)
+    if packages is None and manager == 'npm':
+        check_provenance(project)
     runner = RUN[manager]
     for command in ('ts-crap', 'typescript-crap'):
         result = run([*runner, command, '--version'], project)

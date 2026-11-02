@@ -428,6 +428,12 @@ class VerifyNpmInstallTests(unittest.TestCase):
         for manager in installer.MANAGERS:
             self.assertIn('typescript-crap@2.3.0', installer.ONE_OFF[manager]('typescript-crap@2.3.0'))
 
+    def test_provenance_count_reads_npm_audit_signatures_output(self):
+        self.assertEqual(installer.attested_count(
+            'audited 2 packages in 1s\n\n2 packages have verified registry signatures\n\n2 packages have verified attestations\n'), 2)
+        self.assertEqual(installer.attested_count('1 package has a verified attestation\n'), 1)
+        self.assertEqual(installer.attested_count('2 packages have verified registry signatures\n'), 0)
+
     def test_other_platform_packages_are_detected_in_every_layout(self):
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)

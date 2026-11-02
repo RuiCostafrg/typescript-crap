@@ -122,7 +122,9 @@ or read them directly:
    trusted publisher allows nothing else). Nothing is public yet: the owner
    approves each staged version with 2FA, on npmjs.com or with
    `npm stage approve <id>`, the five platform packages first and
-   `typescript-crap` last. The job summary lists the stage ids. Check
+   `typescript-crap` last, only after `npm view typescript-crap-<platform>@X.Y.Z`
+   shows all five (approved early, it installs without a binary). The job
+   summary lists the stage ids. Check
    `npm view typescript-crap@X.Y.Z` after approval.
 
 5. After publishing, verify the downloaded assets in a fresh empty directory:

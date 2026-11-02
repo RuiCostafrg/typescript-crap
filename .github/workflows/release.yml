@@ -380,8 +380,11 @@ jobs:
           echo "## npm packages staged for approval (dist-tag $dist_tag)" >> "$summary"
           cat >> "$summary" <<'SUMMARY'
 
-          Nothing is public until approved. Approve the platform packages first, then
-          typescript-crap, on npmjs.com or with npm stage approve ID (2FA).
+          Nothing is public until approved. Approve the five platform packages first,
+          on npmjs.com or with npm stage approve ID (2FA). Approve typescript-crap only
+          once npm view shows every platform version: approved early, it installs
+          without a binary. Approve releases newest first, because the dist-tag below
+          was fixed at staging.
 
           | Package | Stage id |
           | --- | --- |

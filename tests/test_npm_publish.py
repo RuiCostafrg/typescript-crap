@@ -100,6 +100,7 @@ class PublishJobScriptTests(unittest.TestCase):
         self.calls = self.root / 'calls'
         self.calls.write_text('')
         self.summary = self.root / 'summary.md'
+        self.stage_ids = self.root / 'stage-ids'
         # gh serves the release assets from disk; attestation can be made to fail per asset.
         (self.bin / 'gh').write_text(
             '#!/bin/bash\necho "gh $*" >> "$CALLS"\n'
@@ -123,7 +124,9 @@ class PublishJobScriptTests(unittest.TestCase):
             # Staged versions are private, so npm view keeps returning E404 for them.
             'if [[ "$1 $2" == "stage publish" ]]; then n=$(basename "$3"); n=${n%.tgz}\n'
             '  if [[ "$n" == *"$FAIL_STAGE"* && -n "$FAIL_STAGE" ]]; then echo "npm error code E403" >&2; exit 1; fi\n'
-            '  if [[ -z "$NO_STAGE_ID" ]]; then echo "+ ${n%-*}@${n##*-} (staged with id stg-${n%-*})"; else echo "+ ${n%-*}@${n##*-} (staged)"; fi; fi\n')
+            # Unpredictable ids, recorded so tests can check the job copies npm's ids.
+            '  if [[ -z "$NO_STAGE_ID" ]]; then id=$(openssl rand -hex 8); echo "${n%-*}@${n##*-} $id" >> "$STAGE_IDS"\n'
+            '    echo "+ ${n%-*}@${n##*-} (staged with id $id)"; else echo "+ ${n%-*}@${n##*-} (staged)"; fi; fi\n')
         (self.bin / 'sleep').write_text('#!/bin/sh\nexit 0\n')
         for name in ('gh', 'npm', 'sleep'):
             (self.bin / name).chmod(0o755)
@@ -135,6 +138,7 @@ class PublishJobScriptTests(unittest.TestCase):
                    **{'UNATTESTED': '', **environment})
         # Always a private file: hosted runners already set GITHUB_STEP_SUMMARY.
         env['GITHUB_STEP_SUMMARY'] = str(self.summary)
+        env['STAGE_IDS'] = str(self.stage_ids)
         return subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', script], cwd=self.work, env=env,
                               capture_output=True, text=True, timeout=120)
 
@@ -230,8 +234,10 @@ class PublishJobScriptTests(unittest.TestCase):
         self.assertNotIn('npm publish', self.calls.read_text())
         summary = self.summary.read_text()
         self.assertIn('npm stage approve', summary)
-        for name in expected:
-            self.assertIn(f'| {name}@{VERSION} | stg-{name} |', summary)
+        issued = dict(line.split() for line in self.stage_ids.read_text().splitlines())
+        self.assertEqual(sorted(issued), sorted(f'{name}@{VERSION}' for name in expected))
+        rows = [line for line in summary.splitlines() if line.startswith('| typescript-crap')]
+        self.assertEqual(rows, [f'| {name}@{VERSION} | {issued[f"{name}@{VERSION}"]} |' for name in expected])
 
     def test_prereleases_use_the_next_dist_tag(self):
         for path in (self.work / 'npm-packages').iterdir():

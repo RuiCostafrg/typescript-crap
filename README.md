@@ -24,6 +24,40 @@ architectures. See [Linux distribution](docs/LINUX_DISTRIBUTION.md) for package
 installation, verification, and the CI compatibility matrix. These assets are
 not present in v2.1.0 or earlier releases.
 
+TypeScript projects should usually install from npm, which pins the version in
+`package.json` and the lockfile. For other setups, use the shell installer,
+Homebrew, PowerShell, a manual download or the GitHub Action below.
+
+### npm (TypeScript projects)
+
+Releases after v2.2.1 are published to npm as
+[`typescript-crap`](https://www.npmjs.com/package/typescript-crap). The installed
+command is still `ts-crap`:
+
+```sh
+npm install --save-dev typescript-crap   # or pnpm add -D, yarn add -D, bun add -d
+npx ts-crap --root . --threshold 30
+```
+
+- The scanner comes from a platform package (`typescript-crap-linux-x64`,
+  `-linux-arm64`, `-darwin-x64`, `-darwin-arm64`, `-win32-x64`) that your
+  package manager selects by `os` and `cpu`. Linux uses the static musl build,
+  so glibc and musl distributions both work. Each executable is byte-identical
+  to the attested release archive.
+- There is no install script, so `--ignore-scripts`, pnpm, Yarn (including
+  Plug'n'Play), Bun, offline caches and registry mirrors all work. Don't omit
+  optional dependencies (`--omit=optional`): the platform packages are optional
+  dependencies.
+- The package also contains the coverage helpers at the same version. The
+  one-step Vitest/Jest command is
+  `npx typescript-crap coverage --framework vitest --scan` (Node.js 24 or later;
+  see [coverage helpers](docs/COVERAGE_HELPERS.md#install-with-npm)).
+- For a one-off run without installing, use `npx typescript-crap@VERSION`, not
+  `npx ts-crap`: the npm name `ts-crap` belongs to an unrelated package.
+- Packages are published from the release workflow with npm trusted publishing
+  and provenance. `npm audit signatures` checks them (see
+  [SECURITY.md](SECURITY.md#verifying-downloads)).
+
 ### macOS and Linux
 
 ```sh
@@ -298,6 +332,9 @@ multiline formatting. It is not branch or function-invocation coverage.
 
 ## Real coverage from TypeScript tests
 
+With the npm package, run `npx typescript-crap coverage` for the one-step
+Vitest/Jest command, or `node node_modules/typescript-crap/coverage/coverage.mjs`
+and `.../import-coverage.mjs` for the helpers below.
 Installed users can run `node "/tools/ts-crap-coverage-helpers/coverage.mjs"`
 or `node "/tools/ts-crap-coverage-helpers/import-coverage.mjs"` with the same options
 shown below; replace `/tools/ts-crap-coverage-helpers` with the extracted bundle

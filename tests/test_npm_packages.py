@@ -425,6 +425,8 @@ class VerifyNpmInstallTests(unittest.TestCase):
         self.assertIn('--ignore-scripts', installer.INSTALL['pnpm'])
         self.assertIn('--ignore-scripts', installer.INSTALL['bun'])
         self.assertEqual(installer.ENVIRONMENT['YARN_ENABLE_SCRIPTS'], 'false')
+        # Yarn 4.10+ quarantines versions younger than a day; checks run right after a release.
+        self.assertEqual(installer.ENVIRONMENT['YARN_NPM_MINIMAL_AGE_GATE'], '0')
         for manager in installer.MANAGERS:
             self.assertIn('typescript-crap@2.3.0', installer.ONE_OFF[manager]('typescript-crap@2.3.0'))
 

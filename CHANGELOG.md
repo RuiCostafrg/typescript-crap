@@ -10,6 +10,12 @@
   helpers read the same key, so collection skips the same directory names as
   the scanner. Omitting it keeps the defaults.
 
+### Fixed
+
+- The published-release npm check disables Yarn's one-day `npmMinimalAgeGate`
+  for its own install projects, so it passes right after a release. The README
+  explains the gate for Yarn 4.15+ users.
+
 ## 2.3.2 — 2026-11-02
 
 First release published to npm. The v2.3.0 and v2.3.1 GitHub releases,

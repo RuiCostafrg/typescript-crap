@@ -529,8 +529,9 @@ ancestor config is loaded, so results do not depend on the caller's directory.
 ```
 
 `excluded_directories` (ts-crap 2.4.0 or later) replaces the built-in excluded
-directory names. Each entry is one directory name, matched at any depth, with no
-separators, `.`, `..` or duplicates; `[]` excludes nothing. Omitting it keeps the
+directory names. Each entry is one non-empty directory name, matched at any depth. Path
+separators (`/`, `\`), NUL characters, `.`, `..` and duplicates are invalid;
+`[]` excludes nothing. Omitting it keeps the
 defaults `["node_modules", ".git", "target", "dist", "build", "coverage"]`. Keep
 `node_modules` and `.git` when you replace the list. The coverage helpers read
 this key from the same file (`ROOT/ts-crap.json` or `--config`), so they skip

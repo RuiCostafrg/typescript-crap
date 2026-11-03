@@ -44,6 +44,10 @@ npx ts-crap --root . --threshold 30                   # or pnpm exec / yarn / bu
   pick a newer release.
 - Under Yarn Plug'n'Play, run `yarn ts-crap`: `npx` can't see Plug'n'Play
   commands and would fetch the unrelated npm package `ts-crap` instead.
+- Yarn 4.15 and later won't install a version for its first day on npm
+  (`npmMinimalAgeGate` defaults to 1 day; earlier 4.x releases default to 0). To adopt a new release sooner, add
+  `typescript-crap` and `typescript-crap-*` to `npmPreapprovedPackages` in
+  `.yarnrc.yml`, or wait a day.
 
 - The scanner comes from a platform package (`typescript-crap-linux-x64`,
   `-linux-arm64`, `-darwin-x64`, `-darwin-arm64`, `-win32-x64`) that your

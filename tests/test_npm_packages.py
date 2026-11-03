@@ -419,6 +419,23 @@ class VerifyNpmInstallTests(unittest.TestCase):
         self.assertEqual(installer.workspace_files('npm', '2.3.0', Path('/p')), {})
         self.assertEqual(installer.workspace_files('bun', '2.3.0', Path('/p')), {})
 
+    @unittest.skipIf(os.name == 'nt', 'uses a POSIX shell stand-in for yarn')
+    def test_every_package_manager_command_runs_with_the_age_gate_off(self):
+        """run() hands ENVIRONMENT to the real subprocess, so Yarn installs fresh releases."""
+        with tempfile.TemporaryDirectory() as temporary:
+            probe = Path(temporary) / 'yarn'
+            probe.write_text('#!/bin/sh\nprintf %s "$YARN_NPM_MINIMAL_AGE_GATE"\n')
+            probe.chmod(0o755)
+            path = os.environ.get('PATH', '')
+            os.environ['PATH'] = f'{temporary}{os.pathsep}{path}'
+            previous = os.environ.pop('YARN_NPM_MINIMAL_AGE_GATE', None)
+            try:
+                self.assertEqual(installer.run(['yarn', 'install'], temporary).stdout, '0')
+            finally:
+                os.environ['PATH'] = path
+                if previous is not None:
+                    os.environ['YARN_NPM_MINIMAL_AGE_GATE'] = previous
+
     def test_runs_never_download_the_unrelated_ts_crap_package(self):
         self.assertEqual(installer.RUN['npm'], ['npm', 'exec', '--no', '--'])
         self.assertIn('--ignore-scripts', installer.INSTALL['npm'])

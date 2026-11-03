@@ -38,7 +38,7 @@ INSTALL = {
     'yarn': ['yarn', 'install'],  # YARN_ENABLE_SCRIPTS=false below
     'bun': ['bun', 'install', '--ignore-scripts'],
 }
-# Yarn 4.10+ quarantines npm versions younger than npmMinimalAgeGate (1 day by default),
+# Yarn quarantines npm versions younger than npmMinimalAgeGate (1 day by default from 4.15),
 # so a check right after a release would fail. These projects install only typescript-crap
 # and its platform packages, so the gate is off here; users keep Yarn's default.
 ENVIRONMENT = {'npm_config_update_notifier': 'false', 'npm_config_fund': 'false',

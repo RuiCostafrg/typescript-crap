@@ -127,9 +127,10 @@ installer matrix exercises the hosted runner's standard Homebrew prefix.
 
 After each new release, run that workflow with its version and an explicitly
 selected, distinct previous published upgrade fixture. There is no default
-previous version: use `version=2.3.0`, `previous-version=2.2.1`,
-`verify-linux=true` and `verify-npm=true` for v2.3.0 verification, so its musl,
-Debian and npm packages are checked. v2.2.1 rechecks use `version=2.2.1`,
+previous version: use `version=2.3.2`, `previous-version=2.2.1`,
+`verify-linux=true` and `verify-npm=true` for v2.3.2 verification, so its musl,
+Debian and npm packages are checked. v2.3.0 and v2.3.1 have no npm packages, so their
+rechecks use `verify-npm=false`. v2.2.1 rechecks use `version=2.2.1`,
 `previous-version=2.1.0` and `verify-linux=true`. Historical rechecks keep `verify-linux=false` and use `version=2.0.0`,
 `previous-version=1.0.0` for v2.0.0, or `version=1.0.0`, `previous-version=0.4.0`
 for v1.

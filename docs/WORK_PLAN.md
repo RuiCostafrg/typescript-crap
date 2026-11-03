@@ -24,7 +24,7 @@ when a stream changes state.
     with the roadmap. Each ships in the first release after it merges.
   - The Vitest/Jest one-step command ships in the coverage helper bundle
     (`ts-crap-coverage-helpers.zip`), and in the npm package as
-    `npx typescript-crap coverage` from v2.3.0.
+    `npx typescript-crap coverage` from v2.3.2.
 - **Distribution A (npm):** originally deferred until the owner's npm account
   existed. Unblocked on 2026-11-01 (below); merged in #48 and #49.
 - **Decided 2026-10-31:**
@@ -51,7 +51,7 @@ when a stream changes state.
 | --- | --- | --- | --- | --- |
 | Roadmap v2.3 | `ROADMAP_V2_3.md` phases 1–3, in priority order (1.1 → 1.5, 2.1, 2.2, Phase 3, then later items) | Roadmap v2.3 implementation | `roadmap/` | 1.1 one-step command (#43), 1.2 diagnostics (#46) and 1.3 version matrix (#47) merged and released in v2.3.0; 1.4 Jest transformers merged (#52, ships in v2.3.1); 1.5 quickstarts in review (targets v2.4.0) |
 | Distribution B + C | Installer hardening and GitHub Action | Distribution: installer hardening + GitHub Action | `distribution/` | B docs/CI (#41), static musl default (#44) and GitHub Action (#42) merged; decisions recorded in #45. Next: exact `--cert-identity` in the repo's own verification commands |
-| Distribution A (npm) | npm package with per-platform binaries and bundled helpers | Distribution A: npm package | `distribution/npm-` | Packages and install verification (#48), release publishing and published checks (#49) and user docs (#50) merged; ships in v2.3.0 (two `release` approvals; after publication, run verify-published with `verify-npm=true`) |
+| Distribution A (npm) | npm package with per-platform binaries and bundled helpers | Distribution A: npm package | `distribution/npm-` | Packages and install verification (#48), release publishing and published checks (#49) and user docs (#50) merged; ships in v2.3.2 with staged publishing (v2.3.0/v2.3.1 npm publishes failed) (two `release` approvals; after publication, run verify-published with `verify-npm=true`) |
 | Docs PRs | This file and the two plans; owner decisions | this coordinating thread | `docs/` | #40 merged; #45 decisions |
 
 Thread links are in T3: search thread titles above with `t3_thread_search`,
@@ -118,8 +118,14 @@ or read them directly:
    The environment asks twice. Approve `publish` first: it creates the GitHub
    release. Then approve `publish-npm` with the same mutation (same run, same
    environment). It re-verifies the npm packages against the attested release
-   assets and publishes them with npm trusted publishing. Check
-   `npm view typescript-crap@X.Y.Z` afterwards.
+   assets and stages them with npm trusted publishing (`npm stage publish`; the
+   trusted publisher allows nothing else). Nothing is public yet: the owner
+   approves each staged version with 2FA, on npmjs.com or with
+   `npm stage approve <id>`, the five platform packages first and
+   `typescript-crap` last, only after `npm view typescript-crap-<platform>@X.Y.Z`
+   shows all five (approved early, it installs without a binary). The job
+   summary lists the stage ids. Check
+   `npm view typescript-crap@X.Y.Z` after approval.
 
 5. After publishing, verify the downloaded assets in a fresh empty directory:
 
@@ -155,13 +161,22 @@ or read them directly:
 
    Running it before the tap update fails the live-Homebrew jobs on the stale
    formula.
-8. If `publish-npm` fails after the GitHub release, fix the cause and rerun only
+8. If `publish-npm` fails after the GitHub release because of an external
+   cause (registry outage, npm settings), fix the cause and rerun only
    that job within 30 days (the `npm-packages` artifact retention): versions
-   already published with identical contents are skipped. Trusted publishing
+   already published with identical contents are skipped. A version that is
+   still staged can't be staged again: approve or `npm stage reject` it first.
+   The dist-tag is fixed when a version is staged and is chosen against the
+   approved `latest`, so approve releases newest first; if an older backport
+   was staged while a newer release was unapproved, reject and re-stage it. Trusted publishing
    can't change dist-tags, so if a backport rerun skips packages published
    before a newer release, add the tag by hand:
    `npm dist-tag add typescript-crap-<platform>@X.Y.Z backport`.
    A published npm version can't change; deprecate it if it is bad.
+   A rerun uses the workflow file at the tag, so a bug in `release.yml`
+   itself can't be fixed by rerunning: fix it on `main` and cut a new patch
+   release. v2.3.0 (path bug) and v2.3.1 (direct publish, which the staged-only
+   trusted publisher refuses) reached GitHub but not npm; npm starts at 2.3.2.
 9. Release tags are immutable, so a failed release needs a new patch version.
    v2.2.0 was burned this way.
 

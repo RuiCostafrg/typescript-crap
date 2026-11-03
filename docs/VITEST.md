@@ -123,6 +123,9 @@ start from [examples/ci/github-actions.yml](../examples/ci/github-actions.yml) a
 [CI_ADOPTION.md](CI_ADOPTION.md). CI replays equivalent collection, baseline and gate
 commands with real Vitest coverage, using `scripts/verify-ci-guide.py` in a synthetic
 Git checkout with the installed helper bundle. The YAML file itself is not run.
+It collects and gates in one job, which suits trusted contributors; for untrusted
+PRs, split collection and gating as described in
+[CI_ADOPTION.md](CI_ADOPTION.md#gate-committed-pr-changes).
 
 ## Troubleshooting
 

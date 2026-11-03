@@ -228,7 +228,7 @@ Release tags are annotated, and the `^{}` suffix returns the commit rather
 than the tag object.
 
 For the owner's commits and PRs, [Action CI](../.github/workflows/github-action.yml)
-runs the action against the published v2.2.1 release on Ubuntu 26.04 and 24.04
+runs the action against the published v2.3.2 release on Ubuntu 26.04 and 24.04
 (x86-64 and ARM64), macOS Apple Silicon and Intel, and Windows x86-64. It
 checks the Linux binary is static, scans with SARIF, uploads to code scanning
 (on pushes to `main` and manual runs only, so PR runs keep read-only tokens),

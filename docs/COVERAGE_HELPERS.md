@@ -69,11 +69,22 @@ directory and `/project` with your project root. On Windows use Windows paths in
 the same quoted arguments. Output paths are relative to your calling directory;
 the child command runs inside the project root.
 
+Both helpers skip the same excluded directory names as the scanner. They do not
+apply `.gitignore` or skip hidden entries as the scanner's directory walk does,
+so they may record extra files the scanner never selects; those records are
+unused. They read only
+`excluded_directories` from `ROOT/ts-crap.json` (or `--config FILE`), and use the
+default list when the key or the default file is absent. An explicit `--config`
+must exist, and an invalid list is an error. See the README's
+[adoption gates](../README.md#adoption-gates-v02).
+
 Both helpers reject destinations at `ROOT/ts-crap.json`, whether or not it
 already exists. If the scanner uses an alternative policy, pass the same
 caller-relative `--config FILE` to the helper before `--` to protect that path as
-well. The default remains reserved. This option protects files from publication;
-it does not apply scanner policy to collection or forward arguments to tests.
+well. The default remains reserved. The helpers also read that file's
+`excluded_directories` (see above), so pass the same `--config` to the helper and
+the scanner. Other policy keys belong to the scanner, and the option never
+forwards arguments to tests.
 For imports, it protects both raw input and native output. Existing directory
 aliases and resolved config symlink targets are included in the checks.
 Protected filename case variants are reserved on every platform for portability.

@@ -272,9 +272,11 @@ from a nonempty passing scan. Thresholds must be finite and nonnegative.
 - Parses `.ts`, `.tsx`, `.mts`, and `.cts` using Tree-sitter—not regular
   expressions. Excludes `.d.ts`, `.d.mts`, and `.d.cts`.
 - Directory scans honor `.gitignore`/`.ignore`, skip hidden entries and symbolic
-  links, and skip `node_modules`, `.git`, `target`, `dist`, `build`, `coverage`.
+  links, and skip directories named `node_modules`, `.git`, `target`, `dist`,
+  `build` or `coverage` at any depth. `excluded_directories` in `ts-crap.json`
+  replaces that list, for example to scan a real `src/build/` directory.
   An explicitly named supported source file bypasses ignore rules but cannot
-  bypass those excluded directories. Missing explicit files are errors.
+  bypass the excluded directories. Missing explicit files are errors.
 - Diff/PR mode takes tracked changes directly from Git, so tracked ignored/hidden
   files cannot silently disappear from the gate (generated-directory exclusions
   still apply).
@@ -526,6 +528,25 @@ ancestor config is loaded, so results do not depend on the caller's directory.
   "threshold": 10,
   "require_coverage": true,
   "fail_on_empty": true
+}
+```
+
+`excluded_directories` (ts-crap 2.4.0 or later) replaces the built-in excluded
+directory names. Each entry is one non-empty directory name, matched at any depth. Path
+separators (`/`, `\`), NUL characters, `.`, `..` and duplicates are invalid;
+`[]` excludes nothing. Omitting it keeps the
+defaults `["node_modules", ".git", "target", "dist", "build", "coverage"]`. Keep
+`node_modules` and `.git` when you replace the list. The coverage helpers read
+this key from the same file (`ROOT/ts-crap.json` or `--config`), so they skip
+the same directory names as the scanner. They do not apply `.gitignore` or skip
+hidden entries, so they may record extra files the scanner never selects; those
+records are unused. Older scanners reject the key as unknown.
+
+```json
+{
+  "version": 1,
+  "include": ["src/**"],
+  "excluded_directories": ["node_modules", ".git", "target", "dist", "coverage"]
 }
 ```
 

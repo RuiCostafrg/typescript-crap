@@ -158,7 +158,13 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
     let threshold = args.threshold.unwrap_or(rules.threshold);
     let require_coverage = args.require_coverage.unwrap_or(rules.require_coverage);
     let fail_on_empty = args.fail_on_empty.unwrap_or(rules.fail_on_empty);
-    let selection = selection::files(&root, &args.paths, args.diff.as_deref(), args.pr.as_deref())?;
+    let selection = selection::files(
+        &root,
+        &args.paths,
+        args.diff.as_deref(),
+        args.pr.as_deref(),
+        &rules.excluded_directories,
+    )?;
     let mut files = selection.paths;
     let mut identities = std::collections::BTreeSet::new();
     let mut selected = Vec::new();

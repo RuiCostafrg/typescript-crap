@@ -17,6 +17,48 @@ struct Config {
     require_coverage: bool,
     #[serde(default)]
     fail_on_empty: bool,
+    /// Directory names skipped anywhere under the root; replaces the default list.
+    /// Omitted means the defaults; an explicit null is invalid, as in the schema.
+    #[serde(default, deserialize_with = "present_list")]
+    excluded_directories: Option<Vec<String>>,
+}
+
+fn present_list<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<String>>, D::Error> {
+    Vec::deserialize(deserializer).map(Some)
+}
+
+/// Directory names skipped during source selection unless configuration replaces them.
+pub const DEFAULT_EXCLUDED_DIRECTORIES: [&str; 6] = [
+    "node_modules",
+    ".git",
+    "target",
+    "dist",
+    "build",
+    "coverage",
+];
+
+/// Each entry names one directory (a single path component), at most once.
+fn excluded_directories(names: Option<Vec<String>>) -> Result<Vec<String>> {
+    let Some(names) = names else {
+        return Ok(DEFAULT_EXCLUDED_DIRECTORIES.map(String::from).to_vec());
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    for name in &names {
+        if name.is_empty()
+            || name == "."
+            || name == ".."
+            || name.contains(['/', '\\'])
+            || name.contains('\0')
+        {
+            bail!("excluded_directories entries must be single directory names: {name:?}");
+        }
+        if !seen.insert(name.as_str()) {
+            bail!("duplicate excluded_directories entry: {name:?}");
+        }
+    }
+    Ok(names)
 }
 
 fn default_threshold() -> f64 {
@@ -30,6 +72,7 @@ pub struct Rules {
     pub threshold: f64,
     pub require_coverage: bool,
     pub fail_on_empty: bool,
+    pub excluded_directories: Vec<String>,
 }
 fn compile(patterns: &[String]) -> Result<GlobSet> {
     let mut builder = GlobSetBuilder::new();
@@ -73,6 +116,7 @@ impl Rules {
                     threshold: default_threshold(),
                     require_coverage: false,
                     fail_on_empty: false,
+                    excluded_directories: None,
                 }
             }
             Err(error) => return Err(error).context("cannot read project configuration"),
@@ -88,7 +132,10 @@ impl Rules {
         if !exclude.is_empty() {
             settings.exclude = exclude.to_vec();
         }
+        let excluded_directories = excluded_directories(settings.excluded_directories)
+            .context("invalid project configuration")?;
         Ok(Self {
+            excluded_directories,
             include: compile(&settings.include)?,
             exclude: compile(&settings.exclude)?,
             threshold: settings.threshold,

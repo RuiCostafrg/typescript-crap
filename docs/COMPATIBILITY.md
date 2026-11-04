@@ -85,6 +85,10 @@ owned tokens, excluding trivia and nested function bodies. Ambiguous baseline
 matches stay new findings. Renames follow the documented unique-identity and
 explicit OLD=NEW rules; threshold mismatches are errors.
 
+Config v1 gained the optional `excluded_directories` key in 2.4.0. Omitting it
+keeps the built-in list, so existing configs are unchanged. A config that uses it
+needs ts-crap 2.4.0 or later, because older readers reject unknown fields.
+
 Breaking an input document's meaning requires a new document version, an explicit
 reader or conversion path, and migration instructions. A new application major
 may keep a document version only if its interpretation is unchanged. A scoring or

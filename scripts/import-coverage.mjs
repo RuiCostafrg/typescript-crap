@@ -301,37 +301,82 @@ function lcov(raw, root) {
     })),
   );
 }
+// Discover reports only after the collection command has created fresh inputs.
+async function reportInputs(inputs, format) {
+  const reports = [];
+  const paths = new Set();
+  const identities = new Set();
+  async function visit(filename, explicit = false) {
+    const stat = await fs.lstat(filename, { bigint: true }).catch((error) => {
+      if (error.code !== "ENOENT") throw error;
+      throw new Error(
+        `Coverage command succeeded but wrote no report at ${filename}. Likely causes: coverage is not enabled (pass --coverage), the reporter does not emit ${format === "istanbul" ? "Istanbul JSON" : "LCOV"} (use ${reporterHint(format)}), or the reporter writes elsewhere (set Vitest --coverage.reportsDirectory or Jest --coverageDirectory to the directory containing --input)`,
+      );
+    });
+    if (stat.isSymbolicLink())
+      throw new Error(`Coverage input cannot be a symbolic link: ${filename}`);
+    if (stat.isDirectory()) {
+      for (const name of (await fs.readdir(filename)).sort())
+        await visit(path.join(filename, name));
+      return;
+    }
+    if (!stat.isFile())
+      throw new Error(`Coverage input must be a regular file or directory: ${filename}`);
+    const matches =
+      format === "istanbul" ? /\.json$/i.test(filename) : /\.(?:info|lcov)$/i.test(filename);
+    if (!explicit && !matches) return;
+    const canonical = await fs.realpath(filename);
+    const identity = `${stat.dev}:${stat.ino}`;
+    if (paths.has(canonical) || (stat.ino !== 0n && identities.has(identity))) {
+      throw new Error(`Duplicate coverage input: ${filename}`);
+    }
+    paths.add(canonical);
+    if (stat.ino !== 0n) identities.add(identity);
+    reports.push(filename);
+  }
+  for (const input of inputs) {
+    const before = reports.length;
+    await visit(input, true);
+    if (reports.length === before)
+      throw new Error(`No ${format} report files in coverage input: ${input}`);
+  }
+  return reports;
+}
 async function main() {
   const argv = process.argv.slice(2),
     separator = argv.indexOf("--");
   const options = {};
+  const rawInputs = [];
   if (separator < 0 || separator % 2)
     throw new Error(
-      "Expected --root ROOT --format istanbul|lcov --input RAW --output NATIVE -- COMMAND",
+      "Expected --root ROOT --format istanbul|lcov --input RAW [--input RAW...] --output NATIVE -- COMMAND",
     );
   for (let i = 0; i < separator; i += 2) {
     if (
       !["--root", "--format", "--input", "--output", "--config"].includes(argv[i]) ||
       !argv[i + 1] ||
-      options[argv[i]]
+      (argv[i] !== "--input" && options[argv[i]])
     )
       throw new Error("Invalid or duplicate import option");
-    options[argv[i]] = argv[i + 1];
+    if (argv[i] === "--input") rawInputs.push(argv[i + 1]);
+    else options[argv[i]] = argv[i + 1];
   }
   if (
     !options["--root"] ||
-    !options["--input"] ||
+    !rawInputs.length ||
     !options["--output"] ||
     !["istanbul", "lcov"].includes(options["--format"]) ||
     !argv[separator + 1]
   )
     throw new Error("Missing required import options or command");
   const root = await fs.realpath(options["--root"]);
-  const input = path.resolve(options["--input"]),
-    output = path.resolve(options["--output"]);
-  const protectConfig = () => protectConfigDestinations(root, [input, output], options["--config"]);
+  const inputs = rawInputs.map((input) => path.resolve(input));
+  const output = path.resolve(options["--output"]);
+  if (new Set(inputs).size !== inputs.length) throw new Error("Duplicate coverage input");
+  const protectConfig = () =>
+    protectConfigDestinations(root, [...inputs, output], options["--config"]);
   await protectConfig();
-  if (input === output || supported(input) || supported(output))
+  if (inputs.some((input) => input === output || supported(input)) || supported(output))
     throw new Error("Coverage inputs/outputs must differ and cannot be TypeScript");
   // Import selection excludes declarations; post-command hashes below enforce
   // unchanged source. Fresh input/output destinations remain importer-only policy.
@@ -344,7 +389,7 @@ async function main() {
     excludedDirectories,
   });
   // Do not accept a pre-existing report as fresh evidence or overwrite its aliases.
-  for (const destination of [input, output]) {
+  for (const destination of [...inputs, output]) {
     try {
       await fs.lstat(destination);
       throw new Error(`Coverage destination already exists: ${destination}; use a fresh path`);
@@ -389,19 +434,24 @@ async function main() {
     );
   }
   const format = options["--format"];
-  const raw = await fs.readFile(input, "utf8").catch((error) => {
-    if (error.code !== "ENOENT") throw error;
-    throw new Error(
-      `Coverage command succeeded but wrote no report at ${input}. Likely causes: coverage is not enabled (pass --coverage), the reporter does not emit ${format === "istanbul" ? "Istanbul JSON" : "LCOV"} (use ${reporterHint(format)}), or the reporter writes elsewhere (set Vitest --coverage.reportsDirectory or Jest --coverageDirectory to the directory containing --input)`,
-    );
-  });
-  const records = format === "istanbul" ? istanbul(parseUniqueJson(raw)) : lcov(raw, root);
-  if (!records.some((record) => record.hits.length)) {
-    throw new Error(
-      `Empty imported coverage in ${input}. Likely causes: no tests ran, or coverage include does not match your sources (Vitest coverage.include, Jest collectCoverageFrom, for example "src/**/*.ts")`,
-    );
+  const reports = await reportInputs(inputs, format);
+  for (const input of reports) {
+    try {
+      const raw = await fs.readFile(input, "utf8");
+      const records = format === "istanbul" ? istanbul(parseUniqueJson(raw)) : lcov(raw, root);
+      if (!records.some((record) => record.hits.length)) {
+        throw new Error(
+          `Empty imported coverage in ${input}. Likely causes: no tests ran, or coverage include does not match your sources (Vitest coverage.include, Jest collectCoverageFrom, for example "src/**/*.ts")`,
+        );
+      }
+      // Reduce overlaps independently in each report before adding its line counts.
+      await convert(root, files, records);
+    } catch (error) {
+      // Preserve existing single-file diagnostics; name the failing batch member.
+      if (inputs.length === 1 && input === inputs[0]) throw error;
+      throw new Error(`Could not import coverage from ${input}: ${error.message}`);
+    }
   }
-  await convert(root, files, records);
   const result = { version: 1, files: {} };
   for (const [absolute, file] of files) {
     if (digest(await fs.readFile(absolute)) !== file.sha256)

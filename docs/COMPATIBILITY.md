@@ -127,6 +127,12 @@ Other versions in these majors are expected to work but are not tested. A
 failing matrix entry names its framework and exact version. Coverage results
 are compared within a release, not across framework versions.
 
+The 2.4.0 coverage importer additionally accepts repeated `--input` flags or a
+fresh directory of raw reports. The existing one-file command and native coverage
+schema are unchanged. Each input's line reduction remains conservative before
+independent report counts add; the command must collect all inputs after the
+source snapshot. Symbolic links and duplicate report identities are rejected.
+
 ## Rust API and dependencies
 
 The public Rust API follows SemVer starting with 1.0.0. Removing/renaming public

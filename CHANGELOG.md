@@ -4,6 +4,10 @@
 
 ### Added
 
+- The coverage importer accepts repeated `--input` files or a fresh report
+  directory, conservatively reduces each report before adding independent counts,
+  and rejects duplicate evidence or invalid inputs without publishing a report.
+
 - Pinned oxlint/oxfmt checks for the repository’s own `.mjs` files and an
   explicit `node --test` CI step, alongside the existing Rust checks.
 

@@ -157,6 +157,46 @@ For LCOV, use `--format lcov --input /project/coverage/lcov.info`, with a comman
 that emits LCOV (for example `npx vitest run --coverage --coverage.reporter=lcov`).
 Install/configure the test framework and coverage reporter in your project first.
 
+### Multiple reports and fresh directories
+
+From ts-crap 2.4.0, repeat `--input` to import reports from independent projects
+or shards in one source snapshot, or pass a directory created by the command:
+
+```sh
+node /tools/ts-crap-coverage-helpers/import-coverage.mjs --root . --format istanbul \
+  --input .coverage-run/project-a/coverage-final.json \
+  --input .coverage-run/project-b/coverage-final.json \
+  --output imported-coverage.json -- node scripts/collect-projects.mjs
+# Alternatively: --input .coverage-run instead of the two input flags.
+```
+
+The command must run and wait for all project/shard test processes, fail if any
+fails, and create those reports in fresh paths. The importer does **not** accept
+coverage collected before it started. For an input directory, the directory itself
+must not exist before the command. Discovery is recursive and deterministic:
+Istanbul selects `.json` files; LCOV selects `.info` or `.lcov` files. Keep only
+raw coverage reports with those extensions there. Explicit file inputs retain
+support for arbitrary file names. Every input uses the same `--format`; source
+paths in every report must be absolute or relative to the common `--root`.
+
+Each report first reduces overlapping statements/mappings conservatively, then
+its independent line counts add to the other reports. A line remains zero if
+none of the reports establishes positive coverage for that entire line; disjoint
+partial statements on one line are not promoted into complete line coverage.
+LCOV test names are local to each report. Missing source records remain missing;
+coverage counts are never invented for absent files. Duplicate selections (including
+canonical aliases or hard-linked copies of the same selected report), symbolic
+links, empty inputs, invalid reports, count overflow and changed sources fail
+without publishing a native report. Batch diagnostics
+name the report that failed. Existing one-file commands and native schemas stay
+unchanged.
+
+This is the importer foundation for roadmap 1.6. Executed Vitest/Jest workspace
+and shard recipes are the follow-up; this example's collection script is supplied
+by the project. Preserve framework percentage thresholds when collecting shards:
+merge and check those thresholds separately, because ts-crap gates CRAP and
+coverage evidence rather than framework coverage percentages.
+
 LCOV `TN:` test groups are aggregated independently. Repeated records for the
 same test name and resolved `SF:` source add execution counts before mapping;
 missing/empty `TN:` belongs to the unnamed group for that record, without

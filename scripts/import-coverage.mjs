@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Collect Istanbul (Jest/Vitest/nyc) or LCOV with a pre-execution source snapshot.
 import { parseUniqueJson } from "./strict-json.mjs";
-import { protectConfigDestinations, publishReport } from "./coverage-publish.mjs";
+import { coverageLocation, protectConfigDestinations, publishReport } from "./coverage-publish.mjs";
 import {
   DEFAULT_EXCLUDED_DIRECTORIES,
   digest,
@@ -9,9 +9,10 @@ import {
   snapshot,
 } from "./coverage-snapshot.mjs";
 import { spawn } from "node:child_process";
-import { existsSync, lstatSync } from "node:fs";
+import { constants as fsConstants, existsSync, lstatSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 const REMAP_HINT =
@@ -301,8 +302,101 @@ function lcov(raw, root) {
     })),
   );
 }
+// Cooperative reservations live outside report directories, which reporters may
+// delete on startup. Publish complete metadata atomically, then check overlaps.
+async function reserveInputs(inputs) {
+  const owner = process.getuid?.() ?? digest(Buffer.from(os.userInfo().username));
+  const directory = path.join(await fs.realpath(os.tmpdir()), `ts-crap-import-locks-${owner}`);
+  await fs.mkdir(directory, { mode: 0o700 }).catch((error) => {
+    if (error.code !== "EEXIST") throw error;
+  });
+  const info = await fs.lstat(directory);
+  if (!info.isDirectory() || (process.getuid && info.uid !== process.getuid())) {
+    throw new Error(`Unsafe coverage reservation directory: ${directory}`);
+  }
+  // Fold case conservatively so case-insensitive volumes cannot bypass a claim.
+  const keys = [...new Set(inputs.map((input) => input.toLowerCase()))].sort();
+  const staging = await fs.mkdtemp(path.join(directory, "lease-"));
+  const metadata = path.join(staging, "reservation");
+  const owned = [];
+  let identity;
+  const release = async () => {
+    try {
+      for (const filename of owned) {
+        const current = await fs.lstat(filename, { bigint: true }).catch((error) => {
+          if (error.code !== "ENOENT") throw error;
+        });
+        if (current && current.dev === identity.dev && current.ino === identity.ino) {
+          await fs.unlink(filename);
+        }
+      }
+    } finally {
+      await fs.rm(metadata, { force: true });
+      await fs.rmdir(staging);
+    }
+  };
+  const contains = (parent, child) =>
+    parent === child || child.startsWith(parent.endsWith(path.sep) ? parent : parent + path.sep);
+  try {
+    await fs.writeFile(metadata, JSON.stringify({ token: staging, inputs: keys }), {
+      flag: "wx",
+      mode: 0o600,
+    });
+    identity = await fs.stat(metadata, { bigint: true });
+    for (const key of keys) {
+      const filename = path.join(directory, `${digest(Buffer.from(key))}.lock`);
+      try {
+        await fs.link(metadata, filename);
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+        throw new Error(
+          `Coverage input is reserved by another active or abandoned import: ${key}; use a unique private run directory`,
+        );
+      }
+      owned.push(filename);
+    }
+    for (const name of await fs.readdir(directory)) {
+      if (!name.endsWith(".lock")) continue;
+      const filename = path.join(directory, name);
+      const text = await fs.readFile(filename, "utf8").catch((error) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+      if (text === undefined) continue;
+      const claim = parseUniqueJson(text);
+      if (claim.token === staging) continue;
+      if (!Array.isArray(claim.inputs) || claim.inputs.some((input) => typeof input !== "string")) {
+        throw new Error(`Invalid coverage reservation: ${filename}`);
+      }
+      if (
+        claim.inputs.some((other) =>
+          keys.some((key) => contains(key, other) || contains(other, key)),
+        )
+      ) {
+        throw new Error(
+          "Coverage inputs overlap another active or abandoned import; use a unique private run directory",
+        );
+      }
+    }
+    return release;
+  } catch (error) {
+    await release();
+    throw error;
+  }
+}
+
+async function requireFresh(destinations) {
+  for (const destination of destinations) {
+    try {
+      await fs.lstat(destination);
+      throw new Error(`Coverage destination already exists: ${destination}; use a fresh path`);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+}
+
 // Discover reports only after the collection command has created fresh inputs.
-async function reportInputs(inputs, format) {
+async function reportInputs(inputs, format, locations) {
   const reports = [];
   const paths = new Set();
   const identities = new Set();
@@ -322,6 +416,8 @@ async function reportInputs(inputs, format) {
     }
     if (!stat.isFile())
       throw new Error(`Coverage input must be a regular file or directory: ${filename}`);
+    if (explicit && supported(filename))
+      throw new Error("Coverage file inputs cannot be TypeScript");
     const matches =
       format === "istanbul" ? /\.json$/i.test(filename) : /\.(?:info|lcov)$/i.test(filename);
     if (!explicit && !matches) return;
@@ -332,16 +428,71 @@ async function reportInputs(inputs, format) {
     }
     paths.add(canonical);
     if (stat.ino !== 0n) identities.add(identity);
-    reports.push(filename);
+    reports.push({ filename, stat });
   }
-  for (const input of inputs) {
+  for (const [index, input] of inputs.entries()) {
+    // Existing aliases were already resolved. Walk the captured route to reject
+    // new parent links; resolving that route again also normalizes filesystem case.
+    const expected = locations[index];
+    let parent = path.parse(expected).root;
+    for (const part of path
+      .relative(parent, path.dirname(expected))
+      .split(path.sep)
+      .filter(Boolean)) {
+      parent = path.join(parent, part);
+      const entry = await fs.lstat(parent).catch((error) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+      if (!entry) break;
+      if (entry.isSymbolicLink())
+        throw new Error(`Coverage input parent changed through a symbolic link: ${input}`);
+    }
+    if ((await coverageLocation(input)) !== (await coverageLocation(expected))) {
+      throw new Error(`Coverage input parent changed through a symbolic link: ${input}`);
+    }
     const before = reports.length;
-    await visit(input, true);
+    await visit(locations[index], true);
     if (reports.length === before)
       throw new Error(`No ${format} report files in coverage input: ${input}`);
   }
   return reports;
 }
+// Bind reads to the discovered file, not a path a writer can replace. On systems
+// without O_NOFOLLOW, path and descriptor identity are both checked before bytes
+// are read; collectors must still finish all writers before returning.
+async function readReport({ filename, stat: expected }) {
+  if (expected.ino === 0n) throw new Error(`Cannot verify coverage input identity: ${filename}`);
+  const changed = () => new Error(`Coverage input changed after discovery: ${filename}`);
+  const handle = await fs
+    .open(
+      filename,
+      fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) | (fsConstants.O_NONBLOCK ?? 0),
+    )
+    .catch((error) => {
+      if (["ENOENT", "ELOOP"].includes(error.code)) throw changed();
+      throw error;
+    });
+  const matches = (actual) =>
+    actual.isFile() &&
+    actual.dev === expected.dev &&
+    actual.ino === expected.ino &&
+    actual.size === expected.size &&
+    actual.mtimeNs === expected.mtimeNs &&
+    actual.ctimeNs === expected.ctimeNs;
+  try {
+    if (
+      !matches(await handle.stat({ bigint: true })) ||
+      !matches(await fs.lstat(filename, { bigint: true }))
+    )
+      throw changed();
+    const raw = await handle.readFile("utf8");
+    if (!matches(await handle.stat({ bigint: true }))) throw changed();
+    return raw;
+  } finally {
+    await handle.close();
+  }
+}
+
 async function main() {
   const argv = process.argv.slice(2),
     separator = argv.indexOf("--");
@@ -376,7 +527,7 @@ async function main() {
   const protectConfig = () =>
     protectConfigDestinations(root, [...inputs, output], options["--config"]);
   await protectConfig();
-  if (inputs.some((input) => input === output || supported(input)) || supported(output))
+  if (inputs.includes(output) || supported(output))
     throw new Error("Coverage inputs/outputs must differ and cannot be TypeScript");
   // Import selection excludes declarations; post-command hashes below enforce
   // unchanged source. Fresh input/output destinations remain importer-only policy.
@@ -388,83 +539,87 @@ async function main() {
     compareNames: (a, b) => (a < b ? -1 : a > b ? 1 : 0),
     excludedDirectories,
   });
-  // Do not accept a pre-existing report as fresh evidence or overwrite its aliases.
-  for (const destination of [...inputs, output]) {
-    try {
-      await fs.lstat(destination);
-      throw new Error(`Coverage destination already exists: ${destination}; use a fresh path`);
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
-    }
-  }
-  const status = await new Promise((resolve, reject) => {
-    const child = spawn(argv[separator + 1], argv.slice(separator + 2), {
-      cwd: root,
-      stdio: "inherit",
-    });
-    // Pass termination to the test command and wait for it. A cancelled run never
-    // publishes, even when the command handles the signal and exits successfully.
-    let cancelled;
-    const forwards = ["SIGINT", "SIGTERM", "SIGHUP"].map((signal) => [
-      signal,
-      () => {
-        cancelled ??= signal;
-        child.kill(signal);
-      },
-    ]);
-    for (const [signal, forward] of forwards) process.on(signal, forward);
-    const stop = () => {
-      for (const [signal, forward] of forwards) process.off(signal, forward);
-    };
-    child.on("error", (error) => {
-      stop();
-      reject(error);
-    });
-    child.on("exit", (code, signal) => {
-      stop();
-      if (cancelled)
-        reject(new Error(`Coverage collection cancelled by ${cancelled}; no report written`));
-      else if (signal) reject(new Error(`Coverage command terminated: ${signal}`));
-      else resolve(code);
-    });
-  });
-  if (status !== 0) {
-    throw new Error(
-      `Coverage command failed: ${status}; no native coverage was published (any raw report it wrote is not imported). Fix the failing tests or coverage thresholds, then rerun with fresh paths`,
-    );
-  }
-  const format = options["--format"];
-  const reports = await reportInputs(inputs, format);
-  for (const input of reports) {
-    try {
-      const raw = await fs.readFile(input, "utf8");
-      const records = format === "istanbul" ? istanbul(parseUniqueJson(raw)) : lcov(raw, root);
-      if (!records.some((record) => record.hits.length)) {
-        throw new Error(
-          `Empty imported coverage in ${input}. Likely causes: no tests ran, or coverage include does not match your sources (Vitest coverage.include, Jest collectCoverageFrom, for example "src/**/*.ts")`,
-        );
-      }
-      // Reduce overlaps independently in each report before adding its line counts.
-      await convert(root, files, records);
-    } catch (error) {
-      // Preserve existing single-file diagnostics; name the failing batch member.
-      if (inputs.length === 1 && input === inputs[0]) throw error;
-      throw new Error(`Could not import coverage from ${input}: ${error.message}`);
-    }
-  }
+  // Canonicalize existing aliases once, then reject collector-created redirects.
+  const locations = await Promise.all(inputs.map(coverageLocation));
+  await requireFresh([...inputs, output]);
+  const release = await reserveInputs(locations);
   const result = { version: 1, files: {} };
-  for (const [absolute, file] of files) {
-    if (digest(await fs.readFile(absolute)) !== file.sha256)
-      throw new Error(`Source changed during coverage collection: ${absolute}`);
-    // Missing records remain missing evidence, never invented zero-hit coverage.
-    if (Object.keys(file.lines).length)
-      result.files[path.relative(root, absolute).split(path.sep).join("/")] = {
-        sha256: file.sha256,
-        lines: file.lines,
+  try {
+    // A competing collector may have finished between the initial check and claim.
+    await requireFresh([...inputs, output]);
+    const status = await new Promise((resolve, reject) => {
+      const child = spawn(argv[separator + 1], argv.slice(separator + 2), {
+        cwd: root,
+        stdio: "inherit",
+      });
+      // Pass termination to the test command and wait for it. A cancelled run never
+      // publishes, even when the command handles the signal and exits successfully.
+      let cancelled;
+      const forwards = ["SIGINT", "SIGTERM", "SIGHUP"].map((signal) => [
+        signal,
+        () => {
+          cancelled ??= signal;
+          child.kill(signal);
+        },
+      ]);
+      for (const [signal, forward] of forwards) process.on(signal, forward);
+      const stop = () => {
+        for (const [signal, forward] of forwards) process.off(signal, forward);
       };
+      child.on("error", (error) => {
+        stop();
+        reject(error);
+      });
+      child.on("exit", (code, signal) => {
+        stop();
+        if (cancelled)
+          reject(new Error(`Coverage collection cancelled by ${cancelled}; no report written`));
+        else if (signal) reject(new Error(`Coverage command terminated: ${signal}`));
+        else resolve(code);
+      });
+    });
+    if (status !== 0) {
+      throw new Error(
+        `Coverage command failed: ${status}; no native coverage was published (any raw report it wrote is not imported). Fix the failing tests or coverage thresholds, then rerun with fresh paths`,
+      );
+    }
+    const format = options["--format"];
+    const reports = await reportInputs(inputs, format, locations);
+    for (const report of reports) {
+      const input = report.filename;
+      try {
+        const raw = await readReport(report);
+        const records = format === "istanbul" ? istanbul(parseUniqueJson(raw)) : lcov(raw, root);
+        if (!records.some((record) => record.hits.length)) {
+          throw new Error(
+            `Empty imported coverage in ${input}. Likely causes: no tests ran, or coverage include does not match your sources (Vitest coverage.include, Jest collectCoverageFrom, for example "src/**/*.ts")`,
+          );
+        }
+        // Reduce overlaps independently in each report before adding its line counts.
+        await convert(root, files, records);
+      } catch (error) {
+        // Preserve existing single-file diagnostics; name the failing batch member.
+        if (inputs.length === 1 && input === locations[0]) throw error;
+        throw new Error(`Could not import coverage from ${input}: ${error.message}`);
+      }
+    }
+    for (const [absolute, file] of files) {
+      if (digest(await fs.readFile(absolute)) !== file.sha256)
+        throw new Error(`Source changed during coverage collection: ${absolute}`);
+      // Missing records remain missing evidence, never invented zero-hit coverage.
+      if (Object.keys(file.lines).length)
+        result.files[path.relative(root, absolute).split(path.sep).join("/")] = {
+          sha256: file.sha256,
+          lines: file.lines,
+        };
+    }
+    // A fresh destination is required, so never replace an existing entry.
+    await publishReport(output, `${JSON.stringify(result, null, 2)}\n`, {
+      validate: protectConfig,
+    });
+  } finally {
+    await release();
   }
-  // A fresh destination is required, so never replace an existing entry.
-  await publishReport(output, `${JSON.stringify(result, null, 2)}\n`, { validate: protectConfig });
   // Advice only: the scanner decides completeness for the files it selects.
   const absent = [...files.keys()]
     .map((absolute) => path.relative(root, absolute).split(path.sep).join("/"))

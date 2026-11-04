@@ -12,6 +12,9 @@ async function location(filename) {
   }
 }
 
+// Shared with the importer to anchor destinations before a collector runs.
+export { location as coverageLocation };
+
 /** Reserve default and caller-selected policy paths without loading configuration. */
 export async function protectConfigDestinations(root, destinations, config) {
   const protectedPaths = [path.join(root, "ts-crap.json")];

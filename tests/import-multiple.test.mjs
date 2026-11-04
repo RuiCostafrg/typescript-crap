@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import os from "node:os";
@@ -39,7 +39,7 @@ function collect(
   root,
   inputs,
   reports,
-  { format = "istanbul", extra = "", output = "native.json" } = {},
+  { format = "istanbul", extra = "", output = "native.json", preload } = {},
 ) {
   const script = `const fs=require('node:fs'),path=require('node:path');
     for(const [name,text] of Object.entries(${JSON.stringify(reports)})) {
@@ -48,6 +48,7 @@ function collect(
   return spawnSync(
     process.execPath,
     [
+      ...(preload ? ["--require", preload] : []),
       helper,
       "--root",
       root,
@@ -265,4 +266,339 @@ test("hard-linked copies of one report cannot double its counts", async (t) => {
     { extra: "fs.linkSync('run/a.json','run/b.json');" },
   );
   await unpublished(root, result, /Duplicate coverage input/);
+});
+
+test("fresh directories may use TypeScript suffixes while file inputs cannot", async (t) => {
+  for (const suffix of ["ts", "tsx", "mts", "cts"]) {
+    const root = await project(t);
+    const directory = `run.${suffix}`;
+    const result = collect(root, [directory], { [`${directory}/coverage.json`]: istanbul(first) });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual((await native(root)).files[first].lines, { 2: 1 });
+  }
+  const root = await project(t);
+  await unpublished(
+    root,
+    collect(root, ["raw.ts"], { "raw.ts": istanbul(first) }),
+    /file inputs cannot be TypeScript/,
+  );
+});
+
+async function directoryLinks(t, root) {
+  if (process.platform === "android") {
+    t.skip("Android/proot cannot resolve directory links; covered on hosted platforms");
+    return false;
+  }
+  await fs.mkdir(path.join(root, "real"));
+  try {
+    await fs.symlink(path.join(root, "real"), path.join(root, "alias"), "junction");
+  } catch (error) {
+    if (["EPERM", "EACCES", "ENOSYS", "ENOTSUP"].includes(error.code)) {
+      t.skip("directory links unavailable");
+      return false;
+    }
+    throw error;
+  }
+  return true;
+}
+
+test("existing parent aliases are anchored but collector-created redirects are rejected", async (t) => {
+  const root = await project(t);
+  if (!(await directoryLinks(t, root))) return;
+  const result = collect(root, ["alias/raw.json"], { "alias/raw.json": istanbul(first) });
+  assert.equal(result.status, 0, result.stderr);
+  await fs.rm(path.join(root, "native.json"));
+  await fs.unlink(path.join(root, "alias"));
+  const old = path.join(root, "real", "old.json");
+  await fs.writeFile(old, istanbul(first, [9]));
+  await unpublished(
+    root,
+    collect(
+      root,
+      ["alias/old.json"],
+      {},
+      { extra: `fs.symlinkSync(${JSON.stringify(path.join(root, "real"))},'alias','junction');` },
+    ),
+    /parent changed through a symbolic link/,
+  );
+  assert.equal(await fs.readFile(old, "utf8"), istanbul(first, [9]));
+});
+
+async function waitForFile(filename, child, diagnostics) {
+  const deadline = performance.now() + 30_000;
+  while (performance.now() < deadline) {
+    try {
+      await fs.access(filename);
+      return;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    assert.equal(child.exitCode, null, diagnostics());
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.fail("collector did not become ready within 30 seconds: " + diagnostics());
+}
+
+test(
+  "concurrent exact or overlapping inputs are reserved until publication",
+  { timeout: 120_000 },
+  async (t) => {
+    for (const [owned, competing] of [
+      ["run/a.json", "run/a.json"],
+      ["run", "run/a.json"],
+      ["run/a.json", "run"],
+    ]) {
+      const root = await project(t);
+      const script = `const fs=require('node:fs');
+      fs.mkdirSync('run',{recursive:true});fs.rmSync('run',{recursive:true});
+      fs.writeFileSync('ready','yes');
+      const timer=setInterval(()=>{if(!fs.existsSync('release'))return;
+        clearInterval(timer);fs.mkdirSync('run',{recursive:true});
+        fs.writeFileSync('run/a.json',${JSON.stringify(istanbul(first))});
+      },25);`;
+      const child = spawn(
+        process.execPath,
+        [
+          helper,
+          "--root",
+          root,
+          "--format",
+          "istanbul",
+          "--input",
+          path.join(root, owned),
+          "--output",
+          path.join(root, "native.json"),
+          "--",
+          process.execPath,
+          "-e",
+          script,
+        ],
+        { cwd: root, stdio: ["ignore", "ignore", "pipe"] },
+      );
+      let stderr = "";
+      child.stderr.on("data", (chunk) => (stderr += chunk));
+      let error;
+      child.once("error", (e) => (error = e));
+      const exited = new Promise((resolve) => child.once("close", resolve));
+      t.after(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+      });
+      await waitForFile(path.join(root, "ready"), child, () => String(error ?? stderr));
+      assert.ifError(error);
+      const rejected = collect(
+        root,
+        [competing],
+        { "second-started": "yes", "run/a.json": istanbul(first, [9]) },
+        { output: "other-native.json" },
+      );
+      assert.equal(rejected.status, 2, rejected.stderr);
+      assert.match(rejected.stderr, /reserved|overlap/);
+      await assert.rejects(fs.access(path.join(root, "second-started")), { code: "ENOENT" });
+      const isolated = collect(
+        root,
+        ["isolated/raw.json"],
+        { "isolated/raw.json": istanbul(second, [3]) },
+        { output: "isolated-native.json" },
+      );
+      assert.equal(isolated.status, 0, isolated.stderr);
+      await fs.writeFile(path.join(root, "release"), "yes");
+      assert.equal(await exited, 0, stderr);
+      assert.deepEqual((await native(root)).files[first].lines, { 2: 1 });
+      await assert.rejects(fs.access(path.join(root, "other-native.json")), { code: "ENOENT" });
+    }
+  },
+);
+
+test("failed collectors release their input reservations", async (t) => {
+  const root = await project(t);
+  await unpublished(
+    root,
+    collect(root, ["run/a.json"], {}, { extra: "process.exit(7);" }),
+    /Coverage command failed: 7/,
+  );
+  const result = collect(root, ["run/a.json"], { "run/a.json": istanbul(first) });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("racing starts cannot launch two overlapping collectors", { timeout: 120_000 }, async (t) => {
+  for (const [left, right, raw] of [
+    ["run", "run/a.json", "run/a.json"],
+    ["run/a.json", "run", "run/a.json"],
+    ["raw.json", "raw.json", "raw.json"],
+  ]) {
+    const root = await project(t);
+    const errors = ["", ""];
+    const children = [left, right].map((input, index) => {
+      const script = `const fs=require('node:fs'),path=require('node:path');
+        fs.writeFileSync('ready-${index}','yes');
+        const timer=setInterval(()=>{if(!fs.existsSync('go'))return;
+          clearInterval(timer);fs.mkdirSync(path.dirname(${JSON.stringify(raw)}),{recursive:true});
+          fs.writeFileSync(${JSON.stringify(raw)},${JSON.stringify(istanbul(first, [index + 1]))});
+        },25);`;
+      const child = spawn(
+        process.execPath,
+        [
+          helper,
+          "--root",
+          root,
+          "--format",
+          "istanbul",
+          "--input",
+          path.join(root, input),
+          "--output",
+          path.join(root, `native-${index}.json`),
+          "--",
+          process.execPath,
+          "-e",
+          script,
+        ],
+        { cwd: root, stdio: ["ignore", "ignore", "pipe"] },
+      );
+      child.stderr.on("data", (chunk) => (errors[index] += chunk));
+      child.once("error", (error) => (errors[index] += String(error)));
+      return child;
+    });
+    const exits = children.map((child) => new Promise((resolve) => child.once("close", resolve)));
+    t.after(() => {
+      for (const child of children)
+        if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+    });
+    let timeout;
+    // Neither collector writes a raw report before go. A rejected peer must
+    // therefore lose a reservation, rather than merely see a completed report.
+    const rejected = await Promise.race([
+      ...exits.map((exit, index) => exit.then((code) => ({ index, code }))),
+      new Promise((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("both overlapping collectors started")),
+          30_000,
+        );
+      }),
+    ]).finally(() => clearTimeout(timeout));
+    assert.equal(rejected.code, 2, errors[rejected.index]);
+    assert.match(errors[rejected.index], /reserved|overlap/);
+    await fs.writeFile(path.join(root, "go"), "yes");
+    const codes = await Promise.all(exits);
+    assert(codes.filter((code) => code === 0).length <= 1, JSON.stringify(codes));
+    for (const [index, code] of codes.entries()) {
+      if (code === 0)
+        assert.deepEqual((await native(root, `native-${index}.json`)).files[first].lines, {
+          2: index + 1,
+        });
+      else {
+        assert.equal(code, 2, errors[index]);
+        await assert.rejects(fs.access(path.join(root, `native-${index}.json`)), {
+          code: "ENOENT",
+        });
+      }
+    }
+  }
+});
+
+test("case-insensitive input spellings do not look like parent redirects", async (t) => {
+  const root = await project(t);
+  await fs.writeFile(path.join(root, "case-probe"), "yes");
+  try {
+    await fs.access(path.join(root, "CASE-PROBE"));
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      t.skip("case-sensitive filesystem");
+      return;
+    }
+    throw error;
+  }
+  const result = collect(root, ["RUN/RAW.JSON"], { "run/raw.json": istanbul(first) });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual((await native(root)).files[first].lines, { 2: 1 });
+});
+
+for (const mutation of ["replace", "in-place", "during-read"]) {
+  test(`descriptor validation rejects ${mutation} changes after discovery`, async (t) => {
+    const root = await project(t);
+    const preload = path.join(root, "replace-report.cjs");
+    const target = path.join(root, "run", "a.json");
+    const replacement = istanbul(first, [9]);
+    await fs.writeFile(
+      preload,
+      `
+    const fs=require('node:fs/promises'), original=fs.open;
+    fs.open=async(...args)=>{
+      if(args[0]===${JSON.stringify(target)}) {
+        ${mutation === "replace" ? `await fs.rename(args[0],args[0]+'.old');await fs.writeFile(args[0],${JSON.stringify(replacement)});` : ""}
+        ${mutation === "in-place" ? `await fs.writeFile(args[0],${JSON.stringify(replacement)});` : ""}
+        const handle=await original(...args);
+        ${mutation === "during-read" ? `const read=handle.readFile.bind(handle);handle.readFile=async(...options)=>{const raw=await read(...options);await fs.writeFile(args[0],${JSON.stringify(replacement)});return raw;};` : ""}
+        return handle;
+      }
+      return original(...args);
+    };
+    require('node:module').syncBuiltinESMExports();
+  `,
+    );
+    await unpublished(
+      root,
+      collect(root, ["run/a.json"], { "run/a.json": istanbul(first) }, { preload }),
+      /changed after discovery/,
+    );
+  });
+}
+
+test("descriptor fallback rejects a symlink replacement before reading its bytes", async (t) => {
+  const root = await project(t);
+  const target = path.join(root, "run", "a.json");
+  const replacement = path.join(root, "replacement.json");
+  await fs.writeFile(replacement, istanbul(first, [9]));
+  try {
+    await fs.symlink(replacement, path.join(root, "probe"));
+    await fs.unlink(path.join(root, "probe"));
+  } catch (error) {
+    if (["EPERM", "EACCES", "ENOSYS", "ENOTSUP"].includes(error.code)) {
+      t.skip("file symlinks unavailable");
+      return;
+    }
+    throw error;
+  }
+  const preload = path.join(root, "swap-link.cjs");
+  await fs.writeFile(
+    preload,
+    `
+    const fs=require('node:fs/promises'),constants=require('node:fs').constants,original=fs.open;
+    fs.open=async(...args)=>{
+      if(args[0]===${JSON.stringify(target)}) {
+        await fs.rename(args[0],args[0]+'.old');await fs.symlink(${JSON.stringify(replacement)},args[0]);
+        args[1]&=~(constants.O_NOFOLLOW??0);
+        const handle=await original(...args),read=handle.readFile.bind(handle);
+        handle.readFile=async(...options)=>{await fs.writeFile('replacement-bytes-read','yes');return read(...options);};
+        return handle;
+      }
+      return original(...args);
+    };
+    require('node:module').syncBuiltinESMExports();
+  `,
+  );
+  await unpublished(
+    root,
+    collect(root, ["run/a.json"], { "run/a.json": istanbul(first) }, { preload }),
+    /changed after discovery/,
+  );
+  await assert.rejects(fs.access(path.join(root, "replacement-bytes-read")), { code: "ENOENT" });
+});
+
+test("unverifiable report identity fails closed", async (t) => {
+  const root = await project(t);
+  const target = path.join(root, "run", "a.json");
+  const preload = path.join(root, "no-identity.cjs");
+  await fs.writeFile(
+    preload,
+    `
+    const fs=require('node:fs/promises'),original=fs.lstat;
+    fs.lstat=async(...args)=>{const stat=await original(...args);if(args[0]===${JSON.stringify(target)})stat.ino=0n;return stat;};
+    require('node:module').syncBuiltinESMExports();
+  `,
+  );
+  await unpublished(
+    root,
+    collect(root, ["run/a.json"], { "run/a.json": istanbul(first) }, { preload }),
+    /Cannot verify coverage input identity/,
+  );
 });

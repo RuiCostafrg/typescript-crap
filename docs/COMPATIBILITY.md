@@ -128,10 +128,14 @@ failing matrix entry names its framework and exact version. Coverage results
 are compared within a release, not across framework versions.
 
 The 2.4.0 coverage importer additionally accepts repeated `--input` flags or a
-fresh directory of raw reports. The existing one-file command and native coverage
-schema are unchanged. Each input's line reduction remains conservative before
-independent report counts add; the command must collect all inputs after the
+fresh directory of raw reports. One-file invocations using regular report files
+and the native coverage schema remain supported. This tightens prior behavior:
+explicit symlink report inputs created during collection were previously followed
+by `readFile`; 2.4.0 rejects them instead. Each input's line reduction remains
+conservative before independent report counts add; the command must collect all inputs after the
 source snapshot. Symbolic links and duplicate report identities are rejected.
+Report files must expose stable, nonzero filesystem identities for checked
+descriptor reads.
 
 ## Rust API and dependencies
 

@@ -748,8 +748,12 @@ for (const [signal, cleanupExit] of [
           stdio: "ignore",
         },
       );
-      const exited = new Promise((resolve, reject) => {
-        child.once("error", reject);
+      let spawnError;
+      const exited = new Promise((resolve) => {
+        child.once("error", (error) => {
+          spawnError = error;
+          resolve(null);
+        });
         child.once("exit", (code) => resolve(code));
       });
       t.after(() => {
@@ -769,6 +773,7 @@ for (const [signal, cleanupExit] of [
         } catch (error) {
           if (error.code !== "ENOENT") throw error;
         }
+        assert.ifError(spawnError);
         assert.ok(
           child.exitCode === null && child.signalCode === null,
           "coverage wrapper exited before the framework became ready",

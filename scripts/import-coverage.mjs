@@ -2,7 +2,7 @@
 // Collect Istanbul (Jest/Vitest/nyc) or LCOV with a pre-execution source snapshot.
 import { parseUniqueJson } from './strict-json.mjs';
 import { protectConfigDestinations, publishReport } from './coverage-publish.mjs';
-import { digest, snapshot } from './coverage-snapshot.mjs';
+import { DEFAULT_EXCLUDED_DIRECTORIES, digest, policyExclusions, snapshot } from './coverage-snapshot.mjs';
 import { spawn } from 'node:child_process';
 import { existsSync, lstatSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
@@ -16,6 +16,8 @@ const notMeasured = relative =>
   || /\.(tests?|specs?|mocks?|fixtures?)\.[cm]?tsx?$|(^|\/)[^/]*\.config\.[cm]?tsx?$/.test(relative);
 // Paths come from the checkout; never let a filename emit terminal controls.
 const display = text => text.replace(/[\u0000-\u001f\u007f-\u009f]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`);
+// The policy's excluded directory names, set once collection starts.
+let excludedDirectories = [...DEFAULT_EXCLUDED_DIRECTORIES];
 /** Explain why a source named by coverage is absent from the collected snapshot. */
 function snapshotHint(root, absolute) {
   const relative = path.relative(root, absolute);
@@ -35,7 +37,8 @@ function snapshotHint(root, absolute) {
   if (!existsSync(absolute)) {
     return 'it does not exist under --root (moved, renamed or deleted since the report was generated). Recollect coverage from the current sources';
   }
-  return 'it is under --root but in an excluded directory (node_modules, .git, target, dist, build, coverage), is a declaration file (.d.ts/.d.mts/.d.cts), or is not a .ts/.tsx/.mts/.cts source. Limit coverage to non-declaration TypeScript sources outside those directories';
+  const excluded = excludedDirectories.length ? excludedDirectories.join(', ') : 'none configured';
+  return `it is under --root but in an excluded directory (${excluded}), is a declaration file (.d.ts/.d.mts/.d.cts), or is not a .ts/.tsx/.mts/.cts source. Limit coverage to non-declaration TypeScript sources outside those directories`;
 }
 const reporterHint = format => format === 'istanbul'
   ? 'Vitest --coverage.reporter=json or Jest --coverageReporters=json'
@@ -239,8 +242,10 @@ async function main() {
   if (input === output || supported(input) || supported(output)) throw new Error('Coverage inputs/outputs must differ and cannot be TypeScript');
   // Import selection excludes declarations; post-command hashes below enforce
   // unchanged source. Fresh input/output destinations remain importer-only policy.
+  excludedDirectories = await policyExclusions(root, options['--config']);
   const files = await snapshot(root, {
     supported, sourceText: false, lineCount: true, compareNames: (a, b) => a < b ? -1 : a > b ? 1 : 0,
+    excludedDirectories,
   });
   // Do not accept a pre-existing report as fresh evidence or overwrite its aliases.
   for (const destination of [input, output]) {

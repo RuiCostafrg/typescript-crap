@@ -570,3 +570,43 @@ fn github_pr_lookup_uses_gh_and_refuses_a_mismatching_checkout() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("does not match PR head"));
 }
+
+#[test]
+fn diff_selection_respects_configured_excluded_directories() {
+    let dir = repo();
+    let root = dir.path();
+    let base = git(root, &["rev-parse", "HEAD"]);
+    fs::create_dir_all(root.join("src/build")).unwrap();
+    fs::write(
+        root.join("src/build/new.ts"),
+        "export function n() {\n  return 1;\n}\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "build source"]);
+    let scan = || {
+        ts_crap::scan(&ts_crap::ScanOptions {
+            root: root.into(),
+            diff: Some(base.clone()),
+            ..Default::default()
+        })
+        .unwrap()
+    };
+    assert!(
+        scan()
+            .functions
+            .iter()
+            .all(|f| f.path != "src/build/new.ts")
+    );
+    fs::write(
+        root.join("ts-crap.json"),
+        r#"{"version":1,"excluded_directories":["node_modules"]}"#,
+    )
+    .unwrap();
+    assert!(
+        scan()
+            .functions
+            .iter()
+            .any(|f| f.path == "src/build/new.ts")
+    );
+}

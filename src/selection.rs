@@ -27,16 +27,20 @@ fn supported(path: &Path) -> bool {
             .any(|ext| name.ends_with(ext))
 }
 
-fn excluded(path: &Path, root: &Path) -> bool {
-    path.strip_prefix(root)
-        .unwrap_or(path)
-        .components()
-        .any(|part| {
-            matches!(
-                part.as_os_str().to_str(),
-                Some("node_modules" | ".git" | "target" | "dist" | "build" | "coverage")
-            )
-        })
+/// Whether a directory component of `path` (below the root) is an excluded name.
+/// For a file, its own name is not a directory and never matches.
+fn excluded(path: &Path, root: &Path, names: &BTreeSet<String>, directory: bool) -> bool {
+    let relative = path.strip_prefix(root).unwrap_or(path);
+    let directories = if directory {
+        relative
+    } else {
+        relative.parent().unwrap_or(Path::new(""))
+    };
+    directories.components().any(|part| {
+        part.as_os_str()
+            .to_str()
+            .is_some_and(|part| names.contains(part))
+    })
 }
 
 fn checked(path: &Path, root: &Path) -> Result<PathBuf> {
@@ -84,7 +88,11 @@ fn oid(root: &Path, reference: &str) -> Result<String> {
     Ok(String::from_utf8(data)?.trim().to_string())
 }
 
-fn diff_files(root: &Path, reference: &str) -> Result<BTreeMap<PathBuf, String>> {
+fn diff_files(
+    root: &Path,
+    reference: &str,
+    names: &BTreeSet<String>,
+) -> Result<BTreeMap<PathBuf, String>> {
     let reference = oid(root, reference)?;
     let head = oid(root, "HEAD")?;
     let data = git(root, &["merge-base", &head, &reference])?;
@@ -123,7 +131,7 @@ fn diff_files(root: &Path, reference: &str) -> Result<BTreeMap<PathBuf, String>>
             .nth(3)
             .context("Git diff omitted HEAD object ID")?;
         let path = top.join(std::str::from_utf8(name).context("Git source path is not UTF-8")?);
-        if path.starts_with(root) && supported(&path) && !excluded(&path, root) {
+        if path.starts_with(root) && supported(&path) && !excluded(&path, root, names, false) {
             // A committed file absent from the worktree is stale, not a passing empty scan.
             result.insert(
                 checked(&path, root)
@@ -173,13 +181,17 @@ pub fn files(
     requested: &[PathBuf],
     diff: Option<&str>,
     pr: Option<&str>,
+    names: &[String],
 ) -> Result<Selection> {
+    // One set per scan: membership stays constant-time however long the list is.
+    let names: BTreeSet<String> = names.iter().cloned().collect();
+    let names = &names;
     // Git's tracked change set is authoritative in diff mode. A directory walk
     // would silently omit tracked ignored/hidden files and could hide gate failures.
     let changed = if let Some(pr) = pr {
-        Some(diff_files(root, &pr_base(root, pr)?)?)
+        Some(diff_files(root, &pr_base(root, pr)?, names)?)
     } else {
-        diff.map(|base| diff_files(root, base)).transpose()?
+        diff.map(|base| diff_files(root, base, names)).transpose()?
     };
     let mut all = BTreeSet::new();
     let default = vec![root.to_path_buf()];
@@ -199,7 +211,7 @@ pub fn files(
             if !supported(&path) {
                 bail!("not a supported TypeScript source: {}", path.display());
             }
-            if excluded(&path, root) {
+            if excluded(&path, root, names, false) {
                 bail!("source is in an excluded directory: {}", path.display());
             }
             all.insert(path);
@@ -219,7 +231,11 @@ pub fn files(
                 .follow_links(false)
                 .filter_entry({
                     let root = root.to_path_buf();
-                    move |entry| !excluded(entry.path(), &root)
+                    let names = names.clone();
+                    move |entry| {
+                        let directory = entry.file_type().is_some_and(|kind| kind.is_dir());
+                        !excluded(entry.path(), &root, &names, directory)
+                    }
                 });
             for entry in builder.build() {
                 let entry = entry.context("cannot walk source directory")?;

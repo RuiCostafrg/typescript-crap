@@ -352,3 +352,27 @@ fn saved_reports_omit_source_snippets_and_count_coverage_for_unparsable_files() 
         assert_eq!(json["completeness_failed"], true);
     }
 }
+
+#[test]
+fn syntax_reporting_honors_configured_excluded_directories() {
+    let project = common::project(&[("a.ts", VALID), ("src/build/broken.ts", BROKEN)]);
+    let root = project.path();
+    let args = ["--on-syntax-error", "report", "--format", "json"];
+    let output = run(root, &args);
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["files_scanned"], 1);
+    assert!(json.get("syntax_errors").is_none());
+    fs::write(
+        root.join("ts-crap.json"),
+        r#"{"version":1,"excluded_directories":[]}"#,
+    )
+    .unwrap();
+    let output = run(root, &args);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["files_scanned"], 2);
+    assert_eq!(json["syntax_errors"][0]["path"], "src/build/broken.ts");
+    assert_eq!(json["completeness_failed"], true);
+    assert_eq!(json["functions"].as_array().unwrap().len(), 1);
+}

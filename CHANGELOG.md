@@ -4,6 +4,9 @@
 
 ### Added
 
+- Pinned oxlint/oxfmt checks for the repository’s own `.mjs` files and an
+  explicit `node --test` CI step, alongside the existing Rust checks.
+
 - `excluded_directories` in `ts-crap.json` replaces the built-in excluded
   directory names (`node_modules`, `.git`, `target`, `dist`, `build`,
   `coverage`), for example to scan a real `src/build/` directory. The coverage

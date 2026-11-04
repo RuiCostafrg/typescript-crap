@@ -41,6 +41,13 @@ npm run format:check --prefix tests/tooling
 TS_CRAP_SCANNER="$PWD/target/debug/ts-crap" node --test tests/*.test.mjs
 ```
 
+For the Node tests in PowerShell, use the Windows scanner built by `cargo test`:
+
+```powershell
+$env:TS_CRAP_SCANNER = (Resolve-Path target/debug/ts-crap.exe).Path
+node --test tests/*.test.mjs
+```
+
 Repository JavaScript tooling is pinned in `tests/tooling/package-lock.json`:
 oxlint 1.90.0 and oxfmt 0.75.0 apply only to `scripts/*.mjs`,
 `tests/*.test.mjs` and `examples/**/*.mjs` (excluding dependency directories).

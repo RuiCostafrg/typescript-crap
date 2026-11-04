@@ -735,7 +735,7 @@ for (const [signal, cleanupExit] of [
 ]) {
   test(
     `${signal} reaches the framework, which stops, and nothing is published (cleanup exit ${cleanupExit})`,
-    { skip: process.platform === "win32" && "POSIX signals" },
+    { skip: process.platform === "win32" && "POSIX signals", timeout: 45_000 },
     async (t) => {
       const root = await withFramework(t, "jest");
       const output = path.join(root, "native.json");
@@ -744,21 +744,38 @@ for (const [signal, cleanupExit] of [
         [helper, "--root", root, "--framework", "jest", "--output", output],
         {
           cwd: root,
-          env: { ...process.env, FAKE_SLEEP: "5000", FAKE_SIGNAL_EXIT: cleanupExit },
+          env: { ...process.env, FAKE_SLEEP: "60000", FAKE_SIGNAL_EXIT: cleanupExit },
           stdio: "ignore",
         },
       );
-      const exited = new Promise((resolve) => child.on("exit", (code) => resolve(code)));
-      // Wait until the framework is running inside the importer, then cancel the wrapper only.
-      for (let i = 0; i < 400; i++) {
+      const exited = new Promise((resolve, reject) => {
+        child.once("error", reject);
+        child.once("exit", (code) => resolve(code));
+      });
+      t.after(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+      });
+      // Wait for a complete PID marker, written only after handlers are installed.
+      // Use a wall-clock deadline so slow process startup gets a clear failure.
+      const deadline = performance.now() + 30_000;
+      let pid;
+      while (performance.now() < deadline) {
         try {
-          await fs.access(path.join(root, "framework-pid"));
-          break;
-        } catch {
-          await new Promise((resolve) => setTimeout(resolve, 25));
+          const candidate = Number(await fs.readFile(path.join(root, "framework-pid"), "utf8"));
+          if (Number.isSafeInteger(candidate) && candidate > 0) {
+            pid = candidate;
+            break;
+          }
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error;
         }
+        assert.ok(
+          child.exitCode === null && child.signalCode === null,
+          "coverage wrapper exited before the framework became ready",
+        );
+        await new Promise((resolve) => setTimeout(resolve, 25));
       }
-      const pid = Number(await fs.readFile(path.join(root, "framework-pid"), "utf8"));
+      assert.ok(pid, "framework did not become ready within 30 seconds");
       child.kill(signal);
       assert.equal(await exited, 2);
       assert.equal(await fs.readFile(path.join(root, "framework-signal"), "utf8"), signal);

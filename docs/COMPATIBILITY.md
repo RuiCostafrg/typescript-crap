@@ -58,6 +58,12 @@ relabeling old imported evidence.
 - JSON and SARIF machine output remains independent of human row filtering/sort/top
   options. Reports are produced on valid gate failures. Input errors do not
   replace existing reports or baselines with a partial result.
+- `--on-syntax-error report` (2.4.0) is opt-in; the default `fail` keeps the
+  exit-2 abort and message. Report mode adds the JSON `syntax_errors` array (only
+  when nonempty), XML `<syntax-error>` elements, and located SARIF `TSCRAP002`
+  results; each unparsable file fails the completeness gate. In Rust, `scan_with`
+  with the `#[non_exhaustive]` `ScanExtensions` and `OnSyntaxError` types carries
+  the option, so `ScanOptions` keeps its fields and `scan` is unchanged.
 - Existing JSON fields retain names, types, units, and meaning. Minor releases may
   add output fields; consumers must ignore unknown output fields. Whitespace,
   object-key order, human tables/HTML markup, exact diagnostics, and displayed

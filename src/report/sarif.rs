@@ -85,6 +85,30 @@ impl Serialize for Results<'_> {
         for f in report.functions.iter().filter(|f| f.failed) {
             sequence.serialize_element(&finding(f, report.threshold))?;
         }
+        // Each unparsable file is located missing evidence under the completeness rule.
+        for e in &report.syntax_errors {
+            sequence.serialize_element(&Finding {
+                rule_id: "TSCRAP002",
+                level: "error",
+                message: Message {
+                    text: format!("Not scored: {}", e.message).into(),
+                },
+                partial_fingerprints: None,
+                locations: Some([Location {
+                    physical_location: PhysicalLocation {
+                        artifact_location: ArtifactLocation {
+                            uri: uri(&e.path),
+                            uri_base_id: "%SRCROOT%",
+                        },
+                        region: Region {
+                            start_line: e.line,
+                            start_column: e.column_utf16,
+                            end_line: e.line,
+                        },
+                    },
+                }]),
+            })?;
+        }
         if report.completeness_failed {
             sequence.serialize_element(&Finding {
                 rule_id: "TSCRAP002", level: "error",
@@ -95,16 +119,21 @@ impl Serialize for Results<'_> {
         sequence.end()
     }
 }
-fn finding(f: &FunctionScore, threshold: f64) -> Finding<'_> {
+/// Relative percent-encoded URI for a report path.
+fn uri(path: &str) -> String {
     use std::fmt::Write;
     let mut uri = String::new();
-    for byte in f.path.bytes() {
+    for byte in path.bytes() {
         if byte.is_ascii_alphanumeric() || b"-._~/".contains(&byte) {
             uri.push(char::from(byte));
         } else {
             let _ = write!(uri, "%{byte:02X}");
         }
     }
+    uri
+}
+fn finding(f: &FunctionScore, threshold: f64) -> Finding<'_> {
+    let uri = uri(&f.path);
     Finding {
         rule_id: "TSCRAP001",
         level: "error",

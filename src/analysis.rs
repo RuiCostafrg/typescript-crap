@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::collections::BTreeSet;
@@ -302,6 +302,29 @@ impl std::fmt::Debug for Analyzer {
     }
 }
 
+/// The first syntax error in a source. Displays the message `analyze` has always used.
+#[derive(Debug)]
+pub(crate) struct SyntaxError {
+    pub path: String,
+    pub line: usize,
+    /// One-based UTF-8 byte column.
+    pub column: usize,
+    pub column_utf16: usize,
+    pub snippet: String,
+}
+
+impl std::fmt::Display for SyntaxError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "invalid TypeScript syntax in {}:{}:{} (UTF-8 byte column): {}",
+            self.path, self.line, self.column, self.snippet
+        )
+    }
+}
+
+impl std::error::Error for SyntaxError {}
+
 impl Analyzer {
     pub fn analyze(&mut self, path: &str, source: &str) -> Result<Vec<Method>> {
         let tsx = path.ends_with(".tsx");
@@ -452,18 +475,23 @@ impl Analyzer {
                 node.has_error()
             });
             let position = issue.unwrap_or_else(|| tree.root_node().start_position());
-            let snippet: String = source
-                .lines()
-                .nth(position.row)
-                .unwrap_or("")
-                .chars()
-                .take(160)
-                .collect();
-            bail!(
-                "invalid TypeScript syntax in {path}:{}:{} (UTF-8 byte column): {snippet}",
-                position.row + 1,
-                position.column + 1
-            );
+            let line = source.lines().nth(position.row).unwrap_or("");
+            let snippet: String = line.chars().take(160).collect();
+            // UTF-16 units of the characters that start before the byte column.
+            let column_utf16 = line
+                .char_indices()
+                .take_while(|&(start, _)| start < position.column)
+                .map(|(_, c)| c.len_utf16())
+                .sum::<usize>()
+                + 1;
+            return Err(SyntaxError {
+                path: path.to_owned(),
+                line: position.row + 1,
+                column: position.column + 1,
+                column_utf16,
+                snippet,
+            }
+            .into());
         }
         let mut out = Vec::new();
         collect(tree.root_node(), source, &mut out);

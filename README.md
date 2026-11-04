@@ -263,6 +263,15 @@ escaped in CLI diagnostics.
 - **2:** invalid arguments, invalid TypeScript, missing/stale inputs or coverage,
   Git/gh errors, or report I/O errors.
 
+By default a selected file that does not parse aborts the whole scan (exit 2).
+`--on-syntax-error report` (ts-crap 2.4.0 or later) scores every other file
+instead and lists each unparsable file at its first syntax error. It appears as
+`syntax_errors` in JSON, a `Syntax errors` section in text and HTML, a
+`<syntax-error>` element in XML, and a located `TSCRAP002` result in SARIF. Any
+unparsable file fails the completeness gate (exit 1) whatever the coverage
+policy, and `--write-baseline` is refused until every selected file parses.
+Reports for scans without syntax errors are byte-identical in both modes.
+
 The default text report explicitly identifies empty selections. JSON/XML/HTML
 include file/function counts or records, so an empty result is distinguishable
 from a nonempty passing scan. Thresholds must be finite and nonnegative.

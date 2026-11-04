@@ -35,9 +35,20 @@ cargo test --locked -j 1
 cargo test --locked -j 1 --release
 cargo doc --locked --no-deps -j 1
 cargo bench --locked -j 1 --bench scan
-node --check scripts/coverage.mjs
-node --check scripts/coverage-hook.mjs
+npm ci --ignore-scripts --prefix tests/tooling
+npm run lint --prefix tests/tooling
+npm run format:check --prefix tests/tooling
+TS_CRAP_SCANNER="$PWD/target/debug/ts-crap" node --test tests/*.test.mjs
 ```
+
+Repository JavaScript tooling is pinned in `tests/tooling/package-lock.json`:
+oxlint 1.90.0 and oxfmt 0.75.0 apply only to `scripts/*.mjs`,
+`tests/*.test.mjs` and `examples/**/*.mjs` (excluding dependency directories).
+Use `npm run format --prefix tests/tooling` to format these files locally.
+CI checks formatting and never rewrites files. Tool updates must deliberately
+include any resulting formatting changes; Rust continues to use cargo fmt,
+strict Clippy and the existing mutation floor. The npm scripts expand the
+file patterns in Node, so the same scope works with Windows shells.
 
 For actual Jest/Vitest reporter integration, build the scanner and run
 `node scripts/test-framework-coverage.mjs target/debug/ts-crap` (add `.exe` on
@@ -73,7 +84,9 @@ cancelled. They require no publishing credentials or external coverage-service t
 
 - **`.github/workflows/ci.yml`**: push, PR, and manual runs; Rust 1.90/stable
   matrix; formatting, strict Clippy, debug/release tests, Python helper tests,
-  publishable-package content checks, rustdoc and Node syntax checks. The required
+  publishable-package content checks, rustdoc, npm launcher syntax checks and an
+  explicit Node unit-test step. The contracts-and-guide job also runs oxlint with
+  zero warnings and oxfmt in check mode. The required
   Rust 1.90 job also checks paired runtime/RSS performance regressions against the
   PR base (previous main commit on pushes); its artifacts retain all raw samples. Separate
   jobs run RustSec auditing and actionlint. macOS and Windows jobs run

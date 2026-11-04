@@ -44,6 +44,10 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: Debug tests
         run: cargo test --locked
+      - name: Node unit tests
+        run: node --test tests/*.test.mjs
+        env:
+          TS_CRAP_SCANNER: ${{ github.workspace }}/target/debug/ts-crap
       - name: Installed coverage helper bundle (Node 24)
         run: |
           python3 scripts/bundle-coverage.py target/helper-bundle
@@ -57,7 +61,8 @@ jobs:
         run: cargo doc --locked --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
-      - run: node --check scripts/coverage.mjs && node --check scripts/coverage-lines.mjs && node --check scripts/coverage-hook.mjs && node --check scripts/import-coverage.mjs && node --check scripts/coverage-run.mjs && for f in packaging/npm/bin/*.js packaging/npm/lib/*.js; do node --check "$f"; done
+      - name: npm launcher syntax
+        run: for f in packaging/npm/bin/*.js packaging/npm/lib/*.js; do node --check "$f"; done
       - name: Paired performance and memory regression checks
         if: matrix.rust == '1.90'
         shell: bash
@@ -214,6 +219,10 @@ jobs:
           cache: npm
           cache-dependency-path: tests/tooling/package-lock.json
       - run: npm ci --ignore-scripts --no-audit --no-fund --prefix tests/tooling
+      - name: Repository mjs lint (zero warnings)
+        run: npm run lint --prefix tests/tooling
+      - name: Repository mjs formatting
+        run: npm run format:check --prefix tests/tooling
       - run: cargo build --locked
       - name: Schemas and executable compatibility contract
         run: node scripts/verify-contracts.mjs target/debug/ts-crap

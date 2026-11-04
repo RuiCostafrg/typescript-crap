@@ -12,12 +12,12 @@ estimate (S ≈ ½–1 day, M ≈ 1–3 days, L ≈ 3+ days, including tests and
 - **Vitest and Jest are the priority frameworks.** Both already work through the
   coverage importer, but only one pinned version each, one Jest transformer and
   no one-step command. Phase 1 makes them first-class.
-- **Lint/format tooling.** The repo maintains 19 JavaScript (`.mjs`) files,
-  about 1,650 lines: 10 helper scripts, ~900 lines; 6 `node:test` suites,
-  ~680 lines; and 3 example tests, ~55 lines. They currently have no lint or format check; CI only runs
-  `node --check` on 4 of them (`.github/workflows/ci.yml:57`). That warrants
-  oxlint and oxfmt (Phase 3). Rust keeps `cargo fmt`, `clippy -D warnings` and
-  cargo-mutants (≥ 90 % kill rate) unchanged.
+- **Lint/format tooling.** oxlint and oxfmt apply only to repository-owned
+  `scripts/*.mjs`, `tests/*.test.mjs` and `examples/**/*.mjs`, excluding
+  dependency directories (currently 25 files, including the tooling runner).
+  Tool versions are pinned in `tests/tooling/package-lock.json`; Phase 3 adds
+  lint and format checks plus an explicit Node test step. Rust keeps
+  `cargo fmt`, `clippy -D warnings` and cargo-mutants (≥ 90 % kill rate).
 
 ## Current state of tests
 

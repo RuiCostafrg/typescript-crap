@@ -296,6 +296,7 @@ test(
     const result = collect(root, { raw: covered });
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stderr, /src\/evil\\u001b\[31m\\u000aforged\.ts/);
+    // oxlint-disable-next-line no-control-regex -- Assert the terminal escape byte never reaches stderr.
     assert.doesNotMatch(result.stderr, /\u001b/);
     assert.equal(
       result.stderr

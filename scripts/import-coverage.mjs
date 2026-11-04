@@ -23,6 +23,7 @@ const notMeasured = (relative) =>
 // Paths come from the checkout; never let a filename emit terminal controls.
 const display = (text) =>
   text.replace(
+    // oxlint-disable-next-line no-control-regex -- Escape filename control bytes before terminal output.
     /[\u0000-\u001f\u007f-\u009f]/g,
     (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
   );

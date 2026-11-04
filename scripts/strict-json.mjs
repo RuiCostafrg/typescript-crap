@@ -3,7 +3,8 @@
 export function parseUniqueJson(text) {
   const frames = [];
   const tokens =
-    /"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"|[{}\[\],:]|[^\s{}\[\],:"]+/gy;
+    // oxlint-disable-next-line no-control-regex -- JSON strings must reject unescaped control bytes.
+    /"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"|[{}[\],:]|[^\s{}[\],:"]+/gy;
   let offset = 0;
   while (offset < text.length) {
     if (/\s/.test(text[offset])) {

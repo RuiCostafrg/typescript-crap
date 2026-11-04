@@ -10,6 +10,12 @@
 - A Jest variant of the copyable CI workflow (`examples/ci/github-actions-jest.yml`),
   whose commands CI replays through `verify-ci-guide.py --jest` with the installed
   helpers.
+- `--on-syntax-error report` scores every parsable file instead of aborting the
+  scan, and lists each unparsable file in every report format (JSON
+  `syntax_errors`, text and HTML sections, XML `<syntax-error>`, located SARIF
+  `TSCRAP002`). Unparsable files fail the completeness gate, and baselines are
+  refused until they parse. The default `fail` is unchanged. Rust callers use
+  `scan_with` with `ScanExtensions`.
 
 ### Fixed
 

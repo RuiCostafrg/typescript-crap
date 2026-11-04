@@ -376,3 +376,140 @@ fn baseline_uses_resolved_threshold_and_cannot_suppress_configured_completeness(
     assert_eq!(report["completeness_failed"], true);
     assert_eq!(report["functions"][0]["failed"], false);
 }
+
+fn paths(report: &Value) -> Vec<String> {
+    let mut paths: Vec<String> = report["functions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["path"].as_str().unwrap().to_owned())
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
+#[test]
+/// A real nested build/ source directory is skipped by default and selectable by policy.
+fn excluded_directories_replace_the_default_list() {
+    let project = common::project(&[
+        ("src/a.ts", SOURCE),
+        ("src/build/b.ts", SOURCE),
+        ("src/dist/c.ts", SOURCE),
+        ("node_modules/pkg/d.ts", SOURCE),
+        ("coverage/e.ts", SOURCE),
+    ]);
+    let root = project.path();
+    assert_eq!(paths(&cli(root, &[], 0)), ["src/a.ts"]);
+    config(
+        root,
+        json!({"version":1,"excluded_directories":["node_modules","coverage","dist"]}),
+    );
+    assert_eq!(paths(&cli(root, &[], 0)), ["src/a.ts", "src/build/b.ts"]);
+    // An explicitly selected file in a still-excluded directory is an error, not a skip.
+    let output = Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+        .arg("--root")
+        .arg(root)
+        .arg("src/dist/c.ts")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("excluded directory"));
+    assert_eq!(
+        paths(&cli(root, &["src/build/b.ts"], 0)),
+        ["src/build/b.ts"]
+    );
+    // An empty list excludes nothing.
+    config(root, json!({"version":1,"excluded_directories":[]}));
+    assert_eq!(
+        paths(&cli(root, &[], 0)),
+        [
+            "coverage/e.ts",
+            "node_modules/pkg/d.ts",
+            "src/a.ts",
+            "src/build/b.ts",
+            "src/dist/c.ts"
+        ]
+    );
+    // The library API applies the same policy.
+    config(root, json!({"version":1,"excluded_directories":["src"]}));
+    let report = scan(&ScanOptions {
+        root: root.into(),
+        ..Default::default()
+    })
+    .unwrap();
+    let mut selected: Vec<_> = report.functions.iter().map(|f| f.path.as_str()).collect();
+    selected.dedup();
+    assert_eq!(selected, ["coverage/e.ts", "node_modules/pkg/d.ts"]);
+}
+
+#[test]
+fn excluded_directories_entries_must_be_unique_single_names() {
+    let project = common::project(&[("a.ts", SOURCE)]);
+    let root = project.path();
+    for names in [
+        json!([""]),
+        json!(["."]),
+        json!([".."]),
+        json!(["a/b"]),
+        json!(["a\\b"]),
+        json!(["a\u{0}b"]),
+        json!(["build", "build"]),
+        json!("build"),
+        json!([1]),
+    ] {
+        config(root, json!({"version":1,"excluded_directories":names}));
+        let error = scan(&ScanOptions {
+            root: root.into(),
+            ..Default::default()
+        })
+        .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("invalid project configuration"),
+            "{names}: {error:#}"
+        );
+    }
+    // Hidden names and names that merely contain dots are valid.
+    config(
+        root,
+        json!({"version":1,"excluded_directories":[".cache","v1.2",".git"]}),
+    );
+    assert!(
+        !scan(&ScanOptions {
+            root: root.into(),
+            ..Default::default()
+        })
+        .unwrap()
+        .failed
+    );
+}
+
+#[test]
+/// Exclusions name directories only: a source file with an excluded name is still scanned.
+fn excluded_directory_names_never_match_source_files() {
+    // A directory named `index.ts` is excluded; a file named `index.ts` is not.
+    let project = common::project(&[("src/index.ts", SOURCE), ("lib/index.ts/inner.ts", SOURCE)]);
+    let root = project.path();
+    config(
+        root,
+        json!({"version":1,"excluded_directories":["index.ts"]}),
+    );
+    assert_eq!(paths(&cli(root, &[], 0)), ["src/index.ts"]);
+    assert_eq!(paths(&cli(root, &["src/index.ts"], 0)), ["src/index.ts"]);
+}
+
+#[test]
+fn excluded_directories_reject_an_explicit_null() {
+    let project = common::project(&[("a.ts", SOURCE)]);
+    let root = project.path();
+    config(root, json!({"version":1,"excluded_directories":null}));
+    let error = scan(&ScanOptions {
+        root: root.into(),
+        ..Default::default()
+    })
+    .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("invalid project configuration"),
+        "{error:#}"
+    );
+}

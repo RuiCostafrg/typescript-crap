@@ -66,6 +66,9 @@ npx ts-crap --root . --threshold 30                   # or pnpm exec / yarn / bu
   `@vitest/coverage-v8` or `@vitest/coverage-istanbul`), so Yarn Plug'n'Play projects
   set `nodeLinker: node-modules` first (see
   [coverage helpers](docs/COVERAGE_HELPERS.md#install-with-npm)).
+- Framework quickstarts: [Vitest](docs/VITEST.md) and [Jest](docs/JEST.md) cover
+  configuration, the one-step command, `package.json` scripts, GitHub Actions and
+  troubleshooting.
 - For a one-off run without installing, use `npx typescript-crap@VERSION`, not
   `npx ts-crap`: the npm name `ts-crap` belongs to an unrelated package.
 - Packages are staged from the release workflow with npm trusted publishing
@@ -260,6 +263,15 @@ escaped in CLI diagnostics.
 - **2:** invalid arguments, invalid TypeScript, missing/stale inputs or coverage,
   Git/gh errors, or report I/O errors.
 
+By default a selected file that does not parse aborts the whole scan (exit 2).
+`--on-syntax-error report` (ts-crap 2.4.0 or later) scores every other file
+instead and lists each unparsable file at its first syntax error. It appears as
+`syntax_errors` in JSON, a `Syntax errors` section in text and HTML, a
+`<syntax-error>` element in XML, and a located `TSCRAP002` result in SARIF. Any
+unparsable file fails the completeness gate (exit 1) whatever the coverage
+policy, and `--write-baseline` is refused until every selected file parses.
+Reports for scans without syntax errors are byte-identical in both modes.
+
 The default text report explicitly identifies empty selections. JSON/XML/HTML
 include file/function counts or records, so an empty result is distinguishable
 from a nonempty passing scan. Thresholds must be finite and nonnegative.
@@ -269,9 +281,11 @@ from a nonempty passing scan. Thresholds must be finite and nonnegative.
 - Parses `.ts`, `.tsx`, `.mts`, and `.cts` using Tree-sitter—not regular
   expressions. Excludes `.d.ts`, `.d.mts`, and `.d.cts`.
 - Directory scans honor `.gitignore`/`.ignore`, skip hidden entries and symbolic
-  links, and skip `node_modules`, `.git`, `target`, `dist`, `build`, `coverage`.
+  links, and skip directories named `node_modules`, `.git`, `target`, `dist`,
+  `build` or `coverage` at any depth. `excluded_directories` in `ts-crap.json`
+  replaces that list, for example to scan a real `src/build/` directory.
   An explicitly named supported source file bypasses ignore rules but cannot
-  bypass those excluded directories. Missing explicit files are errors.
+  bypass the excluded directories. Missing explicit files are errors.
 - Diff/PR mode takes tracked changes directly from Git, so tracked ignored/hidden
   files cannot silently disappear from the gate (generated-directory exclusions
   still apply).
@@ -523,6 +537,25 @@ ancestor config is loaded, so results do not depend on the caller's directory.
   "threshold": 10,
   "require_coverage": true,
   "fail_on_empty": true
+}
+```
+
+`excluded_directories` (ts-crap 2.4.0 or later) replaces the built-in excluded
+directory names. Each entry is one non-empty directory name, matched at any depth. Path
+separators (`/`, `\`), NUL characters, `.`, `..` and duplicates are invalid;
+`[]` excludes nothing. Omitting it keeps the
+defaults `["node_modules", ".git", "target", "dist", "build", "coverage"]`. Keep
+`node_modules` and `.git` when you replace the list. The coverage helpers read
+this key from the same file (`ROOT/ts-crap.json` or `--config`), so they skip
+the same directory names as the scanner. They do not apply `.gitignore` or skip
+hidden entries, so they may record extra files the scanner never selects; those
+records are unused. Older scanners reject the key as unknown.
+
+```json
+{
+  "version": 1,
+  "include": ["src/**"],
+  "excluded_directories": ["node_modules", ".git", "target", "dist", "coverage"]
 }
 ```
 

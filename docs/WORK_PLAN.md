@@ -1,6 +1,6 @@
 # Work plan and handoff (post-v2.2.1)
 
-Last updated 2026-11-02. This file preserves decisions and the parallel work
+Last updated 2026-11-04. This file preserves decisions and the parallel work
 split so any session can resume after a context reset. Update the status table
 when a stream changes state.
 
@@ -49,7 +49,7 @@ when a stream changes state.
 
 | Stream | Scope | Thread | Branch prefix | Status |
 | --- | --- | --- | --- | --- |
-| Roadmap v2.3 | `ROADMAP_V2_3.md` phases 1–3, in priority order (1.1 → 1.5, 2.1, 2.2, Phase 3, then later items) | Roadmap v2.3 implementation | `roadmap/` | 1.1 one-step command (#43), 1.2 diagnostics (#46) and 1.3 version matrix (#47) merged and released in v2.3.0; 1.4 Jest transformers in review (targets v2.4.0) |
+| Roadmap v2.3 | `ROADMAP_V2_3.md` phases 1–3, in priority order (1.1 → 1.5, 2.1, 2.2, Phase 3, then later items) | Roadmap v2.3 implementation | `roadmap/` | 1.1–1.3 released in v2.3.0, 1.4 (#52) in v2.3.1; 1.5 quickstarts (#54) and 2.1 excluded directories (#55) merged; 2.2 syntax-error report (#59) in review (target v2.4.0); Phase 3 next |
 | Distribution B + C | Installer hardening and GitHub Action | Distribution: installer hardening + GitHub Action | `distribution/` | B docs/CI (#41), static musl default (#44) and GitHub Action (#42) merged; decisions recorded in #45. Next: exact `--cert-identity` in the repo's own verification commands |
 | Distribution A (npm) | npm package with per-platform binaries and bundled helpers | Distribution A: npm package | `distribution/npm-` | Shipped: `typescript-crap@2.3.2` (npm `latest`, provenance, staged publishing approved with 2FA); published-release npm checks pass with npm, pnpm, Yarn and Bun (#48–#50, #53, #56, #57) |
 | Docs PRs | This file and the two plans; owner decisions | this coordinating thread | `docs/` | #40 merged; #45 decisions |

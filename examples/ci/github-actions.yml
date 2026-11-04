@@ -1,4 +1,10 @@
 # Copy into .github/workflows/crap.yml after reviewing the matching guide.
+# Trust model: collection runs the PR's own test code in this job, before the
+# gate, with write access to the workspace, the downloaded tools and the reviewed
+# policy/baseline copies. Use it for trusted contributors. For untrusted PRs
+# (forks), collect in one job and gate in a fresh job: clean checkout of the
+# PR head, separately verified tools, policy and baseline from BASE_SHA, and only
+# the native coverage file passed between them. See docs/CI_ADOPTION.md.
 name: TypeScript CRAP gate
 on: pull_request
 permissions:

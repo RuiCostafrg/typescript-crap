@@ -95,6 +95,16 @@ pub fn render_to<W: Write>(
                 "Missing coverage: {} files, {} functions",
                 report.files_missing_coverage, report.functions_missing_coverage
             )?;
+            if !report.syntax_errors.is_empty() {
+                writeln!(
+                    s,
+                    "Syntax errors: {} files not scored (incomplete)",
+                    report.syntax_errors.len()
+                )?;
+                for e in &report.syntax_errors {
+                    writeln!(s, "  {}", terminal(&e.message))?;
+                }
+            }
             if report.functions.is_empty() {
                 s.write_all(b"No implemented TypeScript functions found in the selection.\n")?;
             }
@@ -131,6 +141,16 @@ pub fn render_to<W: Write>(
                     f.coverage,
                     f.crap,
                     f.failed
+                )?;
+            }
+            for e in &report.syntax_errors {
+                writeln!(
+                    s,
+                    "  <syntax-error path=\"{}\" line=\"{}\" column=\"{}\" message=\"{}\"/>",
+                    xml_attribute(&e.path),
+                    e.line,
+                    e.column,
+                    xml_attribute(&e.message)
                 )?;
             }
             s.write_all(b"</crap-report>\n")?;
@@ -170,6 +190,17 @@ pub fn render_to<W: Write>(
                 report.files_missing_coverage,
                 report.functions_missing_coverage
             )?;
+            if !report.syntax_errors.is_empty() {
+                write!(
+                    s,
+                    "<h2 class=\"fail\">Syntax errors: {} files not scored</h2><ul>",
+                    report.syntax_errors.len()
+                )?;
+                for e in &report.syntax_errors {
+                    write!(s, "<li><code>{}</code></li>", escape(&e.message))?;
+                }
+                s.write_all(b"</ul>")?;
+            }
             s.write_all(include_bytes!("report-filter.html"))?;
             s.write_all(b"</body></html>\n")?;
         }

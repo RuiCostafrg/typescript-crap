@@ -17,7 +17,9 @@ def run(args, cwd, expected=0):
     return result.stdout
 
 
-def verify(archive, scanner, vitest=None, output=None):
+def verify(archive, scanner, vitest=None, output=None, jest=None):
+    if vitest and jest:
+        raise ValueError('Choose --vitest or --jest, not both')
     archive,scanner=archive.resolve(),scanner.resolve()
     fields=Path(str(archive)+'.sha256').read_text().split()
     if len(fields)!=2 or fields[1].lstrip('*')!=archive.name or fields[0]!=hashlib.sha256(archive.read_bytes()).hexdigest():
@@ -40,7 +42,8 @@ def verify(archive, scanner, vitest=None, output=None):
         run(['git','init','--quiet',project],root)
         run(['git','config','user.name','CI guide verification'],project)
         run(['git','config','user.email','ci-guide@example.invalid'],project)
-        source=project/'src'/'price.mts';source.parent.mkdir()
+        # Jest runs CommonJS through babel-jest, so its guide uses a .ts source.
+        source=project/'src'/('price.ts' if jest else 'price.mts');source.parent.mkdir()
         original='export function price(q: number) {\n  if (q > 0) return q * 4;\n  return 0;\n}\n'
         source.write_bytes(original.encode())
         (project/'test.mjs').write_text("import {price} from './src/price.mts'; if(price(1)!==4) throw Error('incorrect price');\n")
@@ -49,6 +52,17 @@ def verify(archive, scanner, vitest=None, output=None):
             (project/'node_modules').symlink_to(vitest.parent.parent,target_is_directory=True)
             (project/'test.mjs').write_text("import {test,expect} from 'vitest'; import {price} from './src/price.mts'; test('price',()=>expect(price(1)).toBe(4));\n")
             (project/'vitest.config.mjs').write_text("import {defineConfig} from 'vitest/config'; export default defineConfig({test:{include:['test.mjs'],maxWorkers:1,coverage:{provider:'istanbul',include:['src/**/*.mts']}}});\n")
+        if jest:
+            jest=jest.resolve()
+            # jest/bin/jest.js -> node_modules; the one-step helper finds Jest there.
+            (project/'node_modules').symlink_to(jest.parent.parent.parent,target_is_directory=True)
+            (project/'test.mjs').unlink()
+            (project/'price.test.ts').write_text("import {price} from './src/price'; test('price',()=>expect(price(1)).toBe(4));\n")
+            (project/'jest.config.cjs').write_text(
+                "module.exports={testEnvironment:'node',testMatch:['<rootDir>/price.test.ts'],"
+                "transform:{'^.+\\\\.ts$':['babel-jest',{babelrc:false,configFile:false,"
+                "presets:['@babel/preset-typescript'],plugins:['@babel/plugin-transform-modules-commonjs']}]},"
+                "collectCoverageFrom:['src/**/*.ts']};\n")
         (project/'ts-crap.json').write_text(json.dumps({'version':1,'include':['src/**'],'threshold':2,'require_coverage':True,'fail_on_empty':False}))
         run(['git','add','.'],project);run(['git','commit','--quiet','-m','Base source and policy'],project)
         counter=0
@@ -56,7 +70,12 @@ def verify(archive, scanner, vitest=None, output=None):
             nonlocal counter
             counter+=1; directory=root/f'run-{counter}';directory.mkdir()
             native=directory/'native.json'
-            if vitest:
+            if jest:
+                # The guide's one-step command: framework flags and fresh paths come from the helper.
+                printed=run(['node',helpers/'coverage-run.mjs','--framework','jest','--provider','babel',
+                             '--format','json','--root',project,'--output',native,'--','--runInBand'],root)
+                if '--require-coverage' not in printed: raise ValueError('coverage-run did not print the scan command')
+            elif vitest:
                 run(['node',helpers/'import-coverage.mjs','--root',project,'--format','istanbul',
                      '--input',directory/'raw/coverage-final.json','--output',native,'--','node',vitest,
                      'run','--config','vitest.config.mjs','--coverage','--coverage.provider=istanbul',
@@ -82,11 +101,11 @@ def verify(archive, scanner, vitest=None, output=None):
             return report,sarif
         assert gate(directory,native,0)[0]['files_scanned']==0
         source.write_bytes((original+'// harmless selected change\n').encode())
-        run(['git','add','src/price.mts'],project);run(['git','commit','--quiet','-m','Comment-only PR'],project)
+        run(['git','add',source.relative_to(project).as_posix()],project);run(['git','commit','--quiet','-m','Comment-only PR'],project)
         directory,previous=collect();report,_=gate(directory,previous,0)
         assert len(report['functions'])==1
         source.write_bytes(original.replace('  if (q > 0)', '  if (q > 10) return q * 3;\n  if (q > 0)').encode())
-        run(['git','add','src/price.mts'],project);run(['git','commit','--quiet','-m','Regression PR'],project)
+        run(['git','add',source.relative_to(project).as_posix()],project);run(['git','commit','--quiet','-m','Regression PR'],project)
         directory,native=collect();report,sarif=gate(directory,native,1)
         assert report['functions'][0]['failed']
         assert any(result['ruleId']=='TSCRAP001' for result in sarif['runs'][0]['results'])
@@ -101,7 +120,8 @@ def verify(archive, scanner, vitest=None, output=None):
             output.mkdir(parents=True,exist_ok=True)
             for name in ['crap.json','crap.sarif']:
                 shutil.copyfile(directory/name,output/name)
-    print('PASS installed CI guide: reviewed baseline, empty/comment/regression PRs, fresh repeats, JSON/SARIF on failure, stale evidence rejection')
+    mode='Jest one-step' if jest else 'Vitest' if vitest else 'direct Node'
+    print(f'PASS installed CI guide ({mode}): reviewed baseline, empty/comment/regression PRs, fresh repeats, JSON/SARIF on failure, stale evidence rejection')
 
 
 if __name__=='__main__':
@@ -109,5 +129,6 @@ if __name__=='__main__':
     parser.add_argument('--archive',required=True,type=Path)
     parser.add_argument('--scanner',required=True,type=Path)
     parser.add_argument('--vitest',type=Path)
+    parser.add_argument('--jest',type=Path,help='node_modules/jest/bin/jest.js with babel-jest installed beside it')
     parser.add_argument('--output',type=Path)
-    args=parser.parse_args();verify(args.archive,args.scanner,args.vitest,args.output)
+    args=parser.parse_args();verify(args.archive,args.scanner,args.vitest,args.output,args.jest)

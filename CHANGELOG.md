@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Added
+
+- `excluded_directories` in `ts-crap.json` replaces the built-in excluded
+  directory names (`node_modules`, `.git`, `target`, `dist`, `build`,
+  `coverage`), for example to scan a real `src/build/` directory. The coverage
+  helpers read the same key, so collection skips the same directory names as
+  the scanner. Omitting it keeps the defaults.
+- Vitest and Jest quickstarts (`docs/VITEST.md`, `docs/JEST.md`) covering setup,
+  the one-step command, JSON or LCOV, `package.json` scripts, GitHub Actions and
+  troubleshooting, linked from the README.
+- A Jest variant of the copyable CI workflow (`examples/ci/github-actions-jest.yml`),
+  whose commands CI replays through `verify-ci-guide.py --jest` with the installed
+  helpers.
+- `--on-syntax-error report` scores every parsable file instead of aborting the
+  scan, and lists each unparsable file in every report format (JSON
+  `syntax_errors`, text and HTML sections, XML `<syntax-error>`, located SARIF
+  `TSCRAP002`). Unparsable files fail the completeness gate, and baselines are
+  refused until they parse. The default `fail` is unchanged. Rust callers use
+  `scan_with` with `ScanExtensions`.
+
 ### Fixed
 
 - The published-release npm check disables Yarn's one-day `npmMinimalAgeGate`

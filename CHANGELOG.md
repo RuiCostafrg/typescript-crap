@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- Vitest and Jest quickstarts (`docs/VITEST.md`, `docs/JEST.md`) covering setup,
+  the one-step command, JSON or LCOV, `package.json` scripts, GitHub Actions and
+  troubleshooting, linked from the README.
+- A Jest variant of the copyable CI workflow (`examples/ci/github-actions-jest.yml`),
+  whose commands CI replays through `verify-ci-guide.py --jest` with the installed
+  helpers.
+
 ### Fixed
 
 - The published-release npm check disables Yarn's one-day `npmMinimalAgeGate`

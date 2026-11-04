@@ -217,11 +217,12 @@ jobs:
       - run: cargo build --locked
       - name: Schemas and executable compatibility contract
         run: node scripts/verify-contracts.mjs target/debug/ts-crap
-      - name: Installed CI guide with direct Node and actual Vitest
+      - name: Installed CI guide with direct Node, actual Vitest and one-step Jest
         run: |
           python3 scripts/bundle-coverage.py target/helper-bundle
           python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap
           python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap --vitest tests/tooling/node_modules/vitest/vitest.mjs --output target/ci-guide-reports
+          python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap --jest tests/tooling/node_modules/jest/bin/jest.js
       - name: Retain the deliberately failing PR's reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

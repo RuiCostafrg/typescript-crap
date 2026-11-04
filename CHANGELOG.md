@@ -9,6 +9,12 @@
   `coverage`), for example to scan a real `src/build/` directory. The coverage
   helpers read the same key, so collection skips the same directory names as
   the scanner. Omitting it keeps the defaults.
+- Vitest and Jest quickstarts (`docs/VITEST.md`, `docs/JEST.md`) covering setup,
+  the one-step command, JSON or LCOV, `package.json` scripts, GitHub Actions and
+  troubleshooting, linked from the README.
+- A Jest variant of the copyable CI workflow (`examples/ci/github-actions-jest.yml`),
+  whose commands CI replays through `verify-ci-guide.py --jest` with the installed
+  helpers.
 
 ### Fixed
 

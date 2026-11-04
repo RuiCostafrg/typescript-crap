@@ -100,7 +100,25 @@ Git is required for diff mode. The `--pr` convenience lookup additionally requir
 authenticated `gh` and a checkout of that PR's exact head; the example uses an
 explicit base SHA so the gate itself needs no GitHub API credential. Collection
 executes trusted project commands with the runner's permissions, so use normal PR
-isolation and read-only permissions for untrusted contributions. Rust/compiler
+isolation and read-only permissions for untrusted contributions.
+
+The copyable workflows collect and gate in **one job**. The PR's test code runs
+before the gate with write access to the workspace, the downloaded `ts-crap` and
+helpers, and the policy and baseline copies taken from `BASE_SHA`. A malicious
+test could therefore change what the gate reads. That is acceptable for trusted
+contributors. For untrusted PRs such as forks, split the work:
+
+1. A collection job runs the tests and uploads only the native coverage file.
+2. A gate job, with no access to the collection workspace, does a clean checkout
+   of the exact PR head, downloads and verifies the release tools itself, takes
+   `ts-crap.json` and `crap-baseline.json` from `BASE_SHA`, and scans with the
+   downloaded coverage.
+
+This protects the tools, policy and baseline. The coverage itself still comes
+from the PR's tests: the scanner checks each record against the gate job's own
+source hashes, but test code can still inflate hit counts for those files.
+Coverage-based results for untrusted PRs are therefore advisory unless collection
+runs in an environment you trust. Rust/compiler
 installation is unnecessary for the downloaded CLI.
 
 ## GitHub Action
@@ -243,8 +261,13 @@ tampered, misbound and unattested assets with a fake `gh`.
 helper bytes, and exercises reviewed baseline creation, empty PRs, comment-only
 changes, a regression, deterministic fresh repeats, JSON/SARIF artifacts on exit 1,
 and stale-input rejection while preserving prior artifacts. It verifies the
-baseline stays unchanged. CI runs it with both direct Node and actual Vitest JSON
-collection; release archive verification runs it with the packaged CLI/helpers.
+baseline stays unchanged. CI runs it with direct Node, actual Vitest JSON
+collection, and Jest through the one-step `coverage-run.mjs` command that
+[the Jest workflow](../examples/ci/github-actions-jest.yml) uses. These runs replay
+equivalent collection, baseline and gate commands in a synthetic checkout with
+their own policy and baseline; the YAML files, including their `git show`,
+`--config` and artifact steps, are not executed themselves. Release archive
+verification runs it with the packaged CLI/helpers.
 
 ```sh
 python3 scripts/bundle-coverage.py target/helper-bundle
@@ -255,6 +278,10 @@ python3 scripts/verify-ci-guide.py \
 python3 scripts/verify-ci-guide.py \
   --archive target/helper-bundle/ts-crap-coverage-helpers.zip \
   --scanner target/debug/ts-crap --vitest tests/tooling/node_modules/vitest/vitest.mjs
+# One-step Jest collection (same tooling install):
+python3 scripts/verify-ci-guide.py \
+  --archive target/helper-bundle/ts-crap-coverage-helpers.zip \
+  --scanner target/debug/ts-crap --jest tests/tooling/node_modules/jest/bin/jest.js
 ```
 
 A [clean published-tool run](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40494926411)

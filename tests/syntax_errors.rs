@@ -83,8 +83,15 @@ fn report_mode_scores_the_rest_and_fails_completeness_under_any_policy() {
     )
     .unwrap();
     assert_eq!(report.files_scanned, 2);
+    assert_eq!(report.files_missing_coverage, 2);
     assert_eq!(report.functions.len(), 1);
     assert_eq!(report.functions[0].path, "a.ts");
+    assert!(report.completeness_failed && report.failed);
+    // The pure library capture API may snapshot scored functions, but applying
+    // that snapshot must never suppress a syntax completeness failure.
+    let baseline = ts_crap::baseline::Baseline::capture(&report);
+    let mut report = report;
+    baseline.apply(&mut report, &[]).unwrap();
     assert!(report.completeness_failed && report.failed);
     let [error] = &report.syntax_errors[..] else {
         panic!("{:?}", report.syntax_errors)
@@ -297,4 +304,51 @@ fn report_mode_rejects_invalid_coverage_for_unparsable_sources() {
         ],
     );
     assert_eq!(output.status.code(), Some(1), "{output:?}");
+}
+
+#[test]
+fn saved_reports_omit_source_snippets_and_count_coverage_for_unparsable_files() {
+    use sha2::{Digest, Sha256};
+    let source = "const privateValue = (; // source-snippet-must-stay-private\n";
+    let project = common::project(&[("b.ts", source)]);
+    let root = project.path();
+    let coverage = root.join("coverage.json");
+    fs::write(
+        &coverage,
+        serde_json::to_vec(&serde_json::json!({
+            "version": 1, "files": {"b.ts": {
+                "sha256": hex::encode(Sha256::digest(source.as_bytes())), "lines": {"1": 1}
+            }}
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    for format in ["text", "json", "xml", "html", "sarif"] {
+        let output = run(root, &["--on-syntax-error", "report", "--format", format]);
+        assert_eq!(output.status.code(), Some(1));
+        let text = stdout(&output);
+        assert!(text.contains("invalid TypeScript syntax"), "{text}");
+        assert!(!text.contains("source-snippet-must-stay-private"), "{text}");
+        assert!(!text.contains("privateValue"), "{text}");
+    }
+    for (args, missing) in [
+        (vec!["--on-syntax-error", "report", "--format", "json"], 1),
+        (
+            vec![
+                "--on-syntax-error",
+                "report",
+                "--format",
+                "json",
+                "--coverage",
+                coverage.to_str().unwrap(),
+            ],
+            0,
+        ),
+    ] {
+        let output = run(root, &args);
+        assert_eq!(output.status.code(), Some(1));
+        let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(json["files_missing_coverage"], missing);
+        assert_eq!(json["completeness_failed"], true);
+    }
 }

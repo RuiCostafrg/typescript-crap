@@ -246,15 +246,22 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
                     return Err(error);
                 };
                 // Reporting syntax errors must not hide stale or invalid coverage.
-                if let Some(coverage) = &coverage {
-                    coverage.for_source(&relative, &source)?;
-                }
+                let source_coverage = coverage
+                    .as_ref()
+                    .map(|coverage| coverage.for_source(&relative, &source))
+                    .transpose()?;
+                files_missing_coverage +=
+                    usize::from(source_coverage.as_ref().is_none_or(|c| !c.present()));
                 syntax_errors.push(UnparsedFile {
                     path: relative.clone(),
                     line: issue.line,
                     column: issue.column,
                     column_utf16: issue.column_utf16,
-                    message: issue.to_string(),
+                    // Saved reports may be shared independently of repository access.
+                    message: format!(
+                        "invalid TypeScript syntax in {}:{}:{} (UTF-8 byte column)",
+                        issue.path, issue.line, issue.column
+                    ),
                 });
                 continue;
             }

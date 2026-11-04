@@ -2,7 +2,7 @@
 // Expired entries are discarded lazily when they reach the root. Each range is
 // inserted once and removed at most once: O(R log R) heap work, O(R) storage.
 function precedes(a, b) {
-  const difference = (a.end - a.start) - (b.end - b.start);
+  const difference = a.end - a.start - (b.end - b.start);
   return difference < 0 || (difference === 0 && a.count < b.count);
 }
 
@@ -44,8 +44,14 @@ export function lineHits(script, source) {
   for (const fn of script.functions) {
     for (const range of fn.ranges) {
       const { startOffset: start, endOffset: end, count } = range;
-      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start
-          || !Number.isSafeInteger(count) || count < 0) {
+      if (
+        !Number.isSafeInteger(start) ||
+        !Number.isSafeInteger(end) ||
+        start < 0 ||
+        end < start ||
+        !Number.isSafeInteger(count) ||
+        count < 0
+      ) {
         throw new Error(`Invalid V8 range for ${script.url}`);
       }
       // Node's type stripper preserves source offsets but can append a sourceURL
@@ -58,7 +64,7 @@ export function lineHits(script, source) {
     }
   }
   const starts = [0];
-  for (let i = 0; i < source.length; i++) if (source[i] === '\n') starts.push(i + 1);
+  for (let i = 0; i < source.length; i++) if (source[i] === "\n") starts.push(i + 1);
   const active = [];
   const hits = {};
   const offsets = [...events.keys()].sort((a, b) => a - b);
@@ -83,18 +89,22 @@ export function lineHits(script, source) {
   return hits;
 }
 
-
 /** Merge independent process/script evidence without mutating either input. */
 export function mergeLineHits(previous, incoming) {
   const result = { ...previous };
   for (const [line, count] of Object.entries(incoming)) {
     const existing = result[line] ?? 0;
-    if (!/^[1-9][0-9]*$/.test(line) || !Number.isSafeInteger(count) || count < 0
-        || !Number.isSafeInteger(existing) || existing < 0) {
-      throw new Error('Invalid coverage line or hit count');
+    if (
+      !/^[1-9][0-9]*$/.test(line) ||
+      !Number.isSafeInteger(count) ||
+      count < 0 ||
+      !Number.isSafeInteger(existing) ||
+      existing < 0
+    ) {
+      throw new Error("Invalid coverage line or hit count");
     }
     const sum = existing + count;
-    if (!Number.isSafeInteger(sum)) throw new Error('Coverage hit count overflow');
+    if (!Number.isSafeInteger(sum)) throw new Error("Coverage hit count overflow");
     result[line] = sum;
   }
   return result;

@@ -51,7 +51,7 @@ when a stream changes state.
 | --- | --- | --- | --- | --- |
 | Roadmap v2.3 | `ROADMAP_V2_3.md` phases 1–3, in priority order (1.1 → 1.5, 2.1, 2.2, Phase 3, then later items) | Roadmap v2.3 implementation | `roadmap/` | 1.1–1.3 released in v2.3.0, 1.4 (#52) in v2.3.1; 1.5 quickstarts (#54), 2.1 excluded directories (#55) and 2.2 syntax-error report (#59) merged (target v2.4.0); Phase 3 repository tooling (#60) merged; original v2.3 roadmap scope complete. 1.6 multi-input importer (#61) in review; executed workspace/shard recipes follow (target v2.4.0) |
 | Distribution B + C | Installer hardening and GitHub Action | Distribution: installer hardening + GitHub Action | `distribution/` | B docs/CI (#41), static musl default (#44) and GitHub Action (#42) merged; decisions recorded in #45. Next: exact `--cert-identity` in the repo's own verification commands |
-| Distribution A (npm) | npm package with per-platform binaries and bundled helpers | Distribution A: npm package | `distribution/npm-` | Packages and install verification (#48), release publishing and published checks (#49) and user docs (#50) merged; ships in v2.3.2 with staged publishing (v2.3.0/v2.3.1 npm publishes failed) (two `release` approvals; after publication, run verify-published with `verify-npm=true`) |
+| Distribution A (npm) | npm package with per-platform binaries and bundled helpers | Distribution A: npm package | `distribution/npm-` | Shipped: `typescript-crap@2.3.2` (npm `latest`, provenance, staged publishing approved with 2FA); published-release npm checks pass with npm, pnpm, Yarn and Bun (#48–#50, #53, #56, #57) |
 | Docs PRs | This file and the two plans; owner decisions | this coordinating thread | `docs/` | #40 merged; #45 decisions |
 
 Thread links are in T3: search thread titles above with `t3_thread_search`,
@@ -161,7 +161,11 @@ or read them directly:
 
    Running it before the tap update fails the live-Homebrew jobs on the stale
    formula.
-8. If `publish-npm` fails after the GitHub release because of an external
+8. After the published-release check passes, open a PR that moves the pinned
+   `version:` inputs in `.github/workflows/github-action.yml` (and the matching
+   expectations) to the new release, since Action CI installs a published
+   release.
+9. If `publish-npm` fails after the GitHub release because of an external
    cause (registry outage, npm settings), fix the cause and rerun only
    that job within 30 days (the `npm-packages` artifact retention): versions
    already published with identical contents are skipped. A version that is
@@ -177,7 +181,7 @@ or read them directly:
    itself can't be fixed by rerunning: fix it on `main` and cut a new patch
    release. v2.3.0 (path bug) and v2.3.1 (direct publish, which the staged-only
    trusted publisher refuses) reached GitHub but not npm; npm starts at 2.3.2.
-9. Release tags are immutable, so a failed release needs a new patch version.
+10. Release tags are immutable, so a failed release needs a new patch version.
    v2.2.0 was burned this way.
 
 ## Resume checklist

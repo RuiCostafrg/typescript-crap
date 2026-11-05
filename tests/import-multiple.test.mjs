@@ -12,6 +12,7 @@ const source = "export function f() {\n  return 1;\n}\n";
 const first = "packages/a/src/a.ts";
 const second = "packages/b/src/b.ts";
 const scanner = process.env.TS_CRAP_SCANNER;
+/** Create two TypeScript package sources and remove the fixture after the test. */
 async function project(t) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "ts-crap projects ü-")));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
@@ -21,6 +22,7 @@ async function project(t) {
   }
   return root;
 }
+/** Encode independently counted statements on one line to test conservative reduction. */
 function istanbul(file, counts = [1]) {
   return JSON.stringify({
     [file]: {
@@ -32,9 +34,11 @@ function istanbul(file, counts = [1]) {
     },
   });
 }
+/** Reuse a test name across reports to verify that their counts remain independent. */
 function lcov(file, count) {
   return `TN:shared-name\nSF:${file}\nDA:2,${count}\nend_of_record\n`;
 }
+/** Run the importer with a collector that creates raw reports and optional fault injection. */
 function collect(
   root,
   inputs,
@@ -65,9 +69,11 @@ function collect(
     { cwd: root, encoding: "utf8" },
   );
 }
+/** Read a published native report from this test's private project. */
 async function native(root, name = "native.json") {
   return JSON.parse(await fs.readFile(path.join(root, name), "utf8"));
 }
+/** Require the expected rejection and prove that no native report was published. */
 async function unpublished(root, result, diagnostic) {
   assert.equal(result.status, 2, result.stderr);
   assert.match(result.stderr, diagnostic);
@@ -284,6 +290,7 @@ test("fresh directories may use TypeScript suffixes while file inputs cannot", a
   );
 });
 
+/** Create a parent-directory alias or explicitly skip when the platform cannot support it. */
 async function directoryLinks(t, root) {
   if (process.platform === "android") {
     t.skip("Android/proot cannot resolve directory links; covered on hosted platforms");
@@ -324,6 +331,7 @@ test("existing parent aliases are anchored but collector-created redirects are r
   assert.equal(await fs.readFile(old, "utf8"), istanbul(first, [9]));
 });
 
+/** Wait for a collector barrier, failing promptly on exit or after the readiness deadline. */
 async function waitForFile(filename, child, diagnostics) {
   const deadline = performance.now() + 30_000;
   while (performance.now() < deadline) {

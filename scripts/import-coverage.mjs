@@ -302,8 +302,11 @@ function lcov(raw, root) {
     })),
   );
 }
-// Cooperative reservations live outside report directories, which reporters may
-// delete on startup. Publish complete metadata atomically, then check overlaps.
+/**
+ * Reserve canonical input trees until publication and return their cleanup callback.
+ * Publish complete claims before checking overlaps, outside reporter-managed paths.
+ * This coordinates cooperating imports; abandoned claims require manual recovery.
+ */
 async function reserveInputs(inputs) {
   const owner = process.getuid?.() ?? digest(Buffer.from(os.userInfo().username));
   const directory = path.join(await fs.realpath(os.tmpdir()), `ts-crap-import-locks-${owner}`);
@@ -320,6 +323,7 @@ async function reserveInputs(inputs) {
   const metadata = path.join(staging, "reservation");
   const owned = [];
   let identity;
+  /** Remove only claims that still identify this import's reservation file. */
   const release = async () => {
     try {
       for (const filename of owned) {
@@ -335,6 +339,7 @@ async function reserveInputs(inputs) {
       await fs.rmdir(staging);
     }
   };
+  /** Compare canonical, case-folded paths at directory boundaries. */
   const contains = (parent, child) =>
     parent === child || child.startsWith(parent.endsWith(path.sep) ? parent : parent + path.sep);
   try {
@@ -384,6 +389,7 @@ async function reserveInputs(inputs) {
   }
 }
 
+/** Reject existing destination entries, including dangling links, before collection. */
 async function requireFresh(destinations) {
   for (const destination of destinations) {
     try {
@@ -395,11 +401,15 @@ async function requireFresh(destinations) {
   }
 }
 
-// Discover reports only after the collection command has created fresh inputs.
+/**
+ * Discover fresh reports in deterministic order after collection completes.
+ * Validate captured parent routes and reject links or duplicate file identities.
+ */
 async function reportInputs(inputs, format, locations) {
   const reports = [];
   const paths = new Set();
   const identities = new Set();
+  /** Recurse into directories; extension filtering applies only to discovered files. */
   async function visit(filename, explicit = false) {
     const stat = await fs.lstat(filename, { bigint: true }).catch((error) => {
       if (error.code !== "ENOENT") throw error;
@@ -457,9 +467,11 @@ async function reportInputs(inputs, format, locations) {
   }
   return reports;
 }
-// Bind reads to the discovered file, not a path a writer can replace. On systems
-// without O_NOFOLLOW, path and descriptor identity are both checked before bytes
-// are read; collectors must still finish all writers before returning.
+/**
+ * Read through a descriptor matching the discovered file's identity and metadata.
+ * Without O_NOFOLLOW, validate both descriptor and pathname before reading bytes.
+ * Collectors must finish all writers before returning; this is not a sandbox.
+ */
 async function readReport({ filename, stat: expected }) {
   if (expected.ino === 0n) throw new Error(`Cannot verify coverage input identity: ${filename}`);
   const changed = () => new Error(`Coverage input changed after discovery: ${filename}`);
@@ -472,6 +484,7 @@ async function readReport({ filename, stat: expected }) {
       if (["ENOENT", "ELOOP"].includes(error.code)) throw changed();
       throw error;
     });
+  /** Require the same regular file without detectable replacement or mutation. */
   const matches = (actual) =>
     actual.isFile() &&
     actual.dev === expected.dev &&
@@ -493,6 +506,10 @@ async function readReport({ filename, stat: expected }) {
   }
 }
 
+/**
+ * Collect once against a source snapshot and publish only a fully validated import.
+ * Reduce overlaps within each report before adding counts from independent reports.
+ */
 async function main() {
   const argv = process.argv.slice(2),
     separator = argv.indexOf("--");

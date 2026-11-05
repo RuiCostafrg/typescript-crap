@@ -15,6 +15,7 @@ fn pure_node_conversion_and_report_filter_tests_pass() {
             "tests/strict-json.test.mjs",
             "tests/coverage-run.test.mjs",
             "tests/import-diagnostics.test.mjs",
+            "tests/import-multiple.test.mjs",
             "tests/excluded-directories.test.mjs",
             "tests/npm-launcher.test.mjs",
         ])

@@ -350,7 +350,7 @@ async function reserveInputs(inputs) {
       } catch (error) {
         if (error.code !== "EEXIST") throw error;
         throw new Error(
-          `Coverage input is reserved by another active or abandoned import: ${key}; use a unique private run directory`,
+          `Coverage input is reserved by another active or abandoned import: ${key} (reservation ${filename}); use a unique private run directory, or remove the reservation after confirming its collector has stopped`,
         );
       }
       owned.push(filename);
@@ -373,7 +373,7 @@ async function reserveInputs(inputs) {
         )
       ) {
         throw new Error(
-          "Coverage inputs overlap another active or abandoned import; use a unique private run directory",
+          `Coverage inputs overlap another active or abandoned import (reservation ${filename}); use a unique private run directory, or remove the reservation after confirming its collector has stopped`,
         );
       }
     }

@@ -393,6 +393,12 @@ test(
       );
       assert.equal(rejected.status, 2, rejected.stderr);
       assert.match(rejected.stderr, /reserved|overlap/);
+      const reservation = JSON.parse(rejected.stderr.trim()).match(
+        /\(reservation (.+\.lock)\)/,
+      )?.[1];
+      assert.ok(reservation, rejected.stderr);
+      assert.equal((await fs.lstat(reservation)).isFile(), true);
+
       await assert.rejects(fs.access(path.join(root, "second-started")), { code: "ENOENT" });
       const isolated = collect(
         root,
@@ -517,7 +523,8 @@ for (const mutation of ["replace", "in-place", "during-read"]) {
     const root = await project(t);
     const preload = path.join(root, "replace-report.cjs");
     const target = path.join(root, "run", "a.json");
-    const replacement = istanbul(first, [9]);
+    // Vary the length so this check is reliable even with coarse timestamps.
+    const replacement = istanbul(first, [10]);
     await fs.writeFile(
       preload,
       `

@@ -202,8 +202,8 @@ Cooperating importer invocations reserve their canonical input paths until
 publication or failure. Exact or parent/child input overlap fails before the
 second collector starts; independent private paths may run concurrently. The
 reservations live outside report directories, so reporter cleanup cannot remove
-them. Normal failures release reservations. An abruptly killed importer can
-leave a reservation behind: use a new unique run directory, and only remove an
+them. Normal failures release reservations. Reservation diagnostics name the blocking lock file. An abruptly killed importer
+can leave a reservation behind: use a new unique run directory, and only remove an
 abandoned reservation after confirming its collector has stopped. These are
 cooperative importer reservations, not a sandbox against arbitrary processes
 writing to the reports. Collectors must finish all writers before returning.

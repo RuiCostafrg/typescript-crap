@@ -1,0 +1,73 @@
+name: Linux distribution
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: linux-distribution-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  portable:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-26.04-arm
+            target: aarch64-unknown-linux-musl
+    runs-on: ${{ matrix.runner }}
+    env:
+      CC: musl-gcc
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+      CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: '1.90.0'
+          targets: ${{ matrix.target }}
+      - name: Native musl compiler and Debian tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y musl-tools dpkg-dev
+      - name: Build locked static scanner
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo build --locked --profile dist --target "$TARGET"
+      - name: Assemble and reproduce packages
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p target/linux-assets
+          tar -cJf "target/linux-assets/ts-crap-$TARGET.tar.xz" -C "target/$TARGET/dist" ts-crap -C "$GITHUB_WORKSPACE/packaging/licenses" musl-COPYRIGHT
+          (cd target/linux-assets && sha256sum "ts-crap-$TARGET.tar.xz" > "ts-crap-$TARGET.tar.xz.sha256")
+          python3 scripts/bundle-coverage.py target/linux-assets
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          epoch=$(git log -1 --format=%ct)
+          python3 scripts/linux-packages.py --assets target/linux-assets --version "$version" --epoch "$epoch" --target "$TARGET"
+          cp target/linux-assets/*.deb "$RUNNER_TEMP/first.deb"
+          python3 scripts/linux-packages.py --assets target/linux-assets --version "$version" --epoch "$epoch" --target "$TARGET"
+          cmp "$RUNNER_TEMP/first.deb" target/linux-assets/*.deb
+      - name: Native distro and Debian lifecycle matrix
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
+          python3 scripts/verify-linux-distribution.py --assets target/linux-assets --target "$TARGET" --version "$version" --report target/linux-distribution.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: linux-distribution-${{ matrix.target }}
+          path: |
+            target/linux-assets/*
+            target/linux-distribution.json
+          if-no-files-found: warn
+          retention-days: 14

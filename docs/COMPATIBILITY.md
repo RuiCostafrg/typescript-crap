@@ -1,6 +1,6 @@
-# The 1.x compatibility contract
+# The 2.x compatibility contract
 
-This contract applies starting with ts-crap 1.0.0. The CLI, helper bundle, and
+This contract applies starting with ts-crap 2.0.0. The CLI, helper bundle, and
 schemas are versioned together. Install helpers from the exact same release as
 the scanner. Native coverage, configuration, baseline, and JSON report documents currently use independent integer schema version **1**.
 
@@ -33,10 +33,20 @@ change as a routine dependency update.
 
 Configuration discovery stays at `ROOT/ts-crap.json`, unless `--config` explicitly
 selects a caller-relative file. No environment or ancestor policy is loaded.
+A default config entry that is a dangling symlink is an error; only an absent
+entry uses built-in defaults. Working config symlinks remain supported.
 Each explicit gate override wins over config and then built-in defaults
 (threshold 10; require_coverage/fail_on_empty false). Bare boolean flags mean true;
 `=false` explicitly disables a configured gate. Include/exclude replacement and
-exclusion precedence are documented in the README and remain stable in 1.x.
+exclusion precedence are documented in the README and remain stable in 2.x.
+
+LCOV helpers aggregate captures by testcase and source before source mapping,
+retain conservative overlap within each testcase, then add independent testcase
+line counts. A missing or empty `TN:` names the unnamed testcase for that source
+record; it never inherits the preceding record's name. See the
+[v2 migration guide](MIGRATING_TO_V2.md) for the change from v1 behavior. Native
+version-1 coverage JSON retains its existing meaning; recollect rather than
+relabeling old imported evidence.
 
 ## Process and output behavior
 
@@ -48,6 +58,12 @@ exclusion precedence are documented in the README and remain stable in 1.x.
 - JSON and SARIF machine output remains independent of human row filtering/sort/top
   options. Reports are produced on valid gate failures. Input errors do not
   replace existing reports or baselines with a partial result.
+- `--on-syntax-error report` (2.4.0) is opt-in; the default `fail` keeps the
+  exit-2 abort and message. Report mode adds the JSON `syntax_errors` array (only
+  when nonempty), XML `<syntax-error>` elements, and located SARIF `TSCRAP002`
+  results; each unparsable file fails the completeness gate. In Rust, `scan_with`
+  with the `#[non_exhaustive]` `ScanExtensions` and `OnSyntaxError` types carries
+  the option, so `ScanOptions` keeps its fields and `scan` is unchanged.
 - Existing JSON fields retain names, types, units, and meaning. Minor releases may
   add output fields; consumers must ignore unknown output fields. Whitespace,
   object-key order, human tables/HTML markup, exact diagnostics, and displayed
@@ -58,7 +74,8 @@ exclusion precedence are documented in the README and remain stable in 1.x.
 
 ## Input documents and migration
 
-See [upgrading from v0.4.0](MIGRATING_TO_V1.md) for the concrete CLI/Rust migration.
+See [upgrading from v1](MIGRATING_TO_V2.md) for the current migration, or
+[upgrading from v0.4.0](MIGRATING_TO_V1.md) for the earlier CLI/Rust migration.
 
 [Versioned JSON Schemas](../schemas/README.md) cover config, native coverage,
 baselines, and reports. Input objects reject unknown/duplicate fields and
@@ -74,6 +91,10 @@ owned tokens, excluding trivia and nested function bodies. Ambiguous baseline
 matches stay new findings. Renames follow the documented unique-identity and
 explicit OLD=NEW rules; threshold mismatches are errors.
 
+Config v1 gained the optional `excluded_directories` key in 2.4.0. Omitting it
+keeps the built-in list, so existing configs are unchanged. A config that uses it
+needs ts-crap 2.4.0 or later, because older readers reject unknown fields.
+
 Breaking an input document's meaning requires a new document version, an explicit
 reader or conversion path, and migration instructions. A new application major
 may keep a document version only if its interpretation is unchanged. A scoring or
@@ -81,6 +102,40 @@ fingerprint change requires reviewing and recreating baselines with the new CLI;
 never transform old scores into new evidence or silently bless an updated baseline.
 Keep the previous baseline in version control for review. Coverage documents must
 always be recollected against unchanged source with matching-version helpers.
+
+## Supported test frameworks
+
+The coverage helpers support these Vitest and Jest majors with TypeScript and
+TSX sources. Each runs from its own lockfile in
+[`tests/fixtures/framework-versions`](../tests/fixtures/framework-versions),
+with Node 24 on Linux, macOS and Windows, in the owner-gated
+`framework-versions` CI job. Each run imports JSON and LCOV coverage, gates it,
+and checks stale-source and failed-test rejection.
+
+| Framework | Tested version | Providers | Transformer |
+| --- | --- | --- | --- |
+| Vitest 3 | 3.2.7 | `istanbul`, `v8` | built-in (esbuild) |
+| Vitest 4 | 4.1.12 | `istanbul`, `v8` | built-in |
+| Vitest 5 | 5.0.5 | `istanbul`, `v8` | built-in |
+| Jest 29 | 29.7.0 | `babel` | `babel-jest` 29.7.0 |
+| Jest 30 | 30.5.2 | `babel`, `v8` | `babel-jest` 30.5.2, `ts-jest` 29.4.15, `@swc/jest` 0.2.39 |
+
+Every Jest 30 transformer and provider pair must give the scanner exactly the
+`babel-jest`/`babel` results for full and partial runs. Configuration snippets
+are in [FRAMEWORK_COVERAGE.md](FRAMEWORK_COVERAGE.md#jest-transformers-and-coverage-providers).
+Other versions in these majors are expected to work but are not tested. A
+failing matrix entry names its framework and exact version. Coverage results
+are compared within a release, not across framework versions.
+
+The 2.4.0 coverage importer additionally accepts repeated `--input` flags or a
+fresh directory of raw reports. One-file invocations using regular report files
+and the native coverage schema remain supported. This tightens prior behavior:
+explicit symlink report inputs created during collection were previously followed
+by `readFile`; 2.4.0 rejects them instead. Each input's line reduction remains
+conservative before independent report counts add; the command must collect all inputs after the
+source snapshot. Symbolic links and duplicate report identities are rejected.
+Report files must expose stable, nonzero filesystem identities for checked
+descriptor reads.
 
 ## Rust API and dependencies
 

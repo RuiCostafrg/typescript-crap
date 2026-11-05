@@ -35,9 +35,27 @@ cargo test --locked -j 1
 cargo test --locked -j 1 --release
 cargo doc --locked --no-deps -j 1
 cargo bench --locked -j 1 --bench scan
-node --check scripts/coverage.mjs
-node --check scripts/coverage-hook.mjs
+npm ci --ignore-scripts --prefix tests/tooling
+npm run lint --prefix tests/tooling
+npm run format:check --prefix tests/tooling
+TS_CRAP_SCANNER="$PWD/target/debug/ts-crap" node --test tests/*.test.mjs
 ```
+
+For the Node tests in PowerShell, use the Windows scanner built by `cargo test`:
+
+```powershell
+$env:TS_CRAP_SCANNER = (Resolve-Path target/debug/ts-crap.exe).Path
+node --test tests/*.test.mjs
+```
+
+Repository JavaScript tooling is pinned in `tests/tooling/package-lock.json`:
+oxlint 1.90.0 and oxfmt 0.75.0 apply only to `scripts/*.mjs`,
+`tests/*.test.mjs` and `examples/**/*.mjs` (excluding dependency directories).
+Use `npm run format --prefix tests/tooling` to format these files locally.
+CI checks formatting and never rewrites files. Tool updates must deliberately
+include any resulting formatting changes; Rust continues to use cargo fmt,
+strict Clippy and the existing mutation floor. The npm scripts expand the
+file patterns in Node, so the same scope works with Windows shells.
 
 For actual Jest/Vitest reporter integration, build the scanner and run
 `node scripts/test-framework-coverage.mjs target/debug/ts-crap` (add `.exe` on
@@ -52,6 +70,7 @@ npm ci --ignore-scripts --prefix tests/tooling
 node scripts/verify-contracts.mjs target/debug/ts-crap
 python3 scripts/bundle-coverage.py target/helper-bundle
 python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap --vitest tests/tooling/node_modules/vitest/vitest.mjs
+python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap --jest tests/tooling/node_modules/jest/bin/jest.js
 ```
 
 [Independent adoption validation](docs/ADOPTION.md) documents the pinned upstream
@@ -72,7 +91,11 @@ cancelled. They require no publishing credentials or external coverage-service t
 
 - **`.github/workflows/ci.yml`**: push, PR, and manual runs; Rust 1.90/stable
   matrix; formatting, strict Clippy, debug/release tests, Python helper tests,
-  publishable-package content checks, rustdoc and Node syntax checks. Separate
+  publishable-package content checks, rustdoc, npm launcher syntax checks and an
+  explicit Node unit-test step. The contracts-and-guide job also runs oxlint with
+  zero warnings and oxfmt in check mode. The required
+  Rust 1.90 job also checks paired runtime/RSS performance regressions against the
+  PR base (previous main commit on pushes); its artifacts retain all raw samples. Separate
   jobs run RustSec auditing and actionlint. macOS and Windows jobs run
   CLI/path/output, Git selection, report and real Node coverage behavior tests,
   including spaces, Unicode and native path separators. These jobs retain the
@@ -210,7 +233,11 @@ warms up once, then reports five samples (median/min/max). It includes selection
 file/coverage reads, parsing, scoring, and sorting—not JSON/HTML serialization.
 Use `TS_CRAP_BENCH_FUNCTIONS` to change the workload. Local wall-clock measurements
 are informational: mobile CPU throttling, concurrent compilation, filesystem
-caches, and proot affect results. There is no flaky timing assertion in CI.
+caches, and proot affect results. Ordinary tests have no timing assertions.
+The required Rust 1.90 CI job runs the paired performance guard described in
+[PERFORMANCE.md](docs/PERFORMANCE.md#continuous-performance-regression-checks).
+It compares base and candidate on the same runner after all builds finish,
+retains raw samples and fails only consistent regressions exceeding both budgets.
 
 
 ## Publishing releases

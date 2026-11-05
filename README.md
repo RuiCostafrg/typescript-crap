@@ -14,10 +14,66 @@ TypeScript. Available for macOS (Apple Silicon / Intel), Linux (ARM64 / x86-64),
 and Windows (x86-64). See the archive compatibility notes below for Linux runtime
 requirements.
 
-**Linux minimum: Ubuntu 26.04 or a compatible glibc runtime for v0.4.0 and newer
-prebuilt releases.** The new release verification workflow checks both Linux
+**GNU Linux archive minimum: Ubuntu 26.04 or a compatible glibc runtime for
+v0.4.0 and newer GNU builds.** The new release verification workflow checks both Linux
 architectures in a clean Ubuntu 26.04 container before publication. Earlier releases have different requirements; see
 the archive notes below. Build from source for other environments.
+
+v2.2.1 adds static musl archives and Debian packages for both Linux
+architectures. See [Linux distribution](docs/LINUX_DISTRIBUTION.md) for package
+installation, verification, and the CI compatibility matrix. These assets are
+not present in v2.1.0 or earlier releases.
+
+TypeScript projects should usually install from npm, which pins the version in
+`package.json` and the lockfile. For other setups, use the shell installer,
+Homebrew, PowerShell, a manual download or the GitHub Action below.
+
+### npm (TypeScript projects)
+
+Releases from v2.3.2 are published to npm as
+[`typescript-crap`](https://www.npmjs.com/package/typescript-crap). The
+installed command is still `ts-crap`:
+
+```sh
+npm install --save-dev --save-exact typescript-crap   # or pnpm add -D -E, yarn add -D -E, bun add -d -E
+npx ts-crap --root . --threshold 30                   # or pnpm exec / yarn / bun run ts-crap
+```
+
+- `--save-exact` records the exact version in `package.json`; without it the
+  lockfile still pins the installed version, but a regenerated lockfile may
+  pick a newer release.
+- Under Yarn Plug'n'Play, run `yarn ts-crap`: `npx` can't see Plug'n'Play
+  commands and would fetch the unrelated npm package `ts-crap` instead.
+- Yarn 4.15 and later won't install a version for its first day on npm
+  (`npmMinimalAgeGate` defaults to 1 day; earlier 4.x releases default to 0). To adopt a new release sooner, add
+  `typescript-crap` and `typescript-crap-*` to `npmPreapprovedPackages` in
+  `.yarnrc.yml`, or wait a day.
+
+- The scanner comes from a platform package (`typescript-crap-linux-x64`,
+  `-linux-arm64`, `-darwin-x64`, `-darwin-arm64`, `-win32-x64`) that your
+  package manager selects by `os` and `cpu`. Linux uses the static musl build,
+  so glibc and musl distributions both work. Each executable is byte-identical
+  to the attested release archive.
+- There is no install script, so `--ignore-scripts`, pnpm, Yarn (including
+  Plug'n'Play), Bun, offline caches and registry mirrors all work. Don't omit
+  optional dependencies (`--omit=optional`): the platform packages are optional
+  dependencies.
+- The package also contains the coverage helpers at the same version. The
+  one-step Vitest/Jest command is
+  `npx typescript-crap coverage --framework vitest --scan` (or
+  `--framework jest`; the default `auto` stops if both are configured). It needs Node.js 24
+  or later and Vitest or Jest in `node_modules` (Vitest also needs
+  `@vitest/coverage-v8` or `@vitest/coverage-istanbul`), so Yarn Plug'n'Play projects
+  set `nodeLinker: node-modules` first (see
+  [coverage helpers](docs/COVERAGE_HELPERS.md#install-with-npm)).
+- Framework quickstarts: [Vitest](docs/VITEST.md) and [Jest](docs/JEST.md) cover
+  configuration, the one-step command, `package.json` scripts, GitHub Actions and
+  troubleshooting.
+- For a one-off run without installing, use `npx typescript-crap@VERSION`, not
+  `npx ts-crap`: the npm name `ts-crap` belongs to an unrelated package.
+- Packages are staged from the release workflow with npm trusted publishing
+  and provenance, and go public only after the maintainer approves them with 2FA. `npm audit signatures` checks them (see
+  [SECURITY.md](SECURITY.md#verifying-downloads)).
 
 ### macOS and Linux
 
@@ -30,6 +86,42 @@ The shell installer uses `curl` (or `wget`) and `tar`; Linux also needs `xz`
 installs to `~/.local/bin`. Follow its
 PATH instructions, or open a new terminal, then run `ts-crap --help`.
 Run the same installer again to update to the latest release.
+
+The `latest` URL changes with every release. For CI and other reproducible
+installs, pin a version instead. Each release's installer installs only that
+release and embeds the SHA-256 of every archive it can download:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/RuiCostafrg/typescript-crap/releases/download/v2.3.2/ts-crap-installer.sh | sh
+```
+
+To check the installer before running it, download it, verify its
+[build provenance](SECURITY.md#verifying-downloads) with the GitHub CLI, and
+only then run the verified file:
+
+```sh
+version=2.3.2
+installer_dir=$(mktemp -d) &&
+curl --proto '=https' --tlsv1.2 -LsSf -o "$installer_dir/ts-crap-installer.sh" \
+  "https://github.com/RuiCostafrg/typescript-crap/releases/download/v$version/ts-crap-installer.sh" &&
+gh attestation verify "$installer_dir/ts-crap-installer.sh" --repo RuiCostafrg/typescript-crap \
+  --signer-workflow RuiCostafrg/typescript-crap/.github/workflows/release.yml \
+  --source-ref "refs/tags/v$version" --deny-self-hosted-runners &&
+command -v sha256sum >/dev/null &&
+sh "$installer_dir/ts-crap-installer.sh"
+```
+
+Each step runs only if the previous one succeeded, so a missing `gh` or a
+failed verification stops before the installer runs. The verified installer
+then checks the downloaded archive against its embedded checksum, but only
+when `sha256sum` is available: without it, the installer prints
+`skipping sha256 checksum verification` and installs anyway. The
+`command -v sha256sum` step stops the sequence in that case. On macOS without
+`sha256sum`, use Homebrew or the manual archive download instead. In CI, set `TS_CRAP_UNMANAGED_INSTALL` to a directory to install there
+without editing shell profiles or writing an install receipt, then add that
+directory to `PATH`. On Linux, installers from v2.3.0 on always
+install the static musl build. The v2.2.1 installer uses the GNU build when the
+system glibc is 2.43 or newer (Ubuntu 26.04), and otherwise the static musl build.
 
 ### Homebrew (macOS and Linux)
 
@@ -55,9 +147,29 @@ verify its SHA-256 using the accompanying `.sha256` file, extract it, and place
 `ts-crap` (or `ts-crap.exe`) in a directory on your PATH. Unix archives use
 `.tar.xz`; Windows archives use `.zip`. New release builds and archive smoke tests use
 Ubuntu 26.04 (ARM64 and x86-64) and macOS 26 (Apple Silicon and Intel).
-Linux binaries from these builds require Ubuntu 26.04 or a compatible glibc
-runtime; the v0.3.0 and earlier Linux archives retain their glibc 2.35+ baseline. Linux binaries target glibc distributions;
-Alpine/musl, Android/Termux, and Windows ARM64 do not have native release builds.
+GNU Linux archives from these builds require Ubuntu 26.04 or a compatible glibc
+runtime; the v0.3.0 and earlier Linux archives retain their glibc 2.35+ baseline.
+v2.2.1 adds separate static musl archives for Alpine and other Linux
+userlands. Android/Termux and Windows ARM64 have no native release builds.
+
+### GitHub Actions
+
+The repository's [setup action](action.yml) downloads a pinned release for the
+runner (static musl on Linux), verifies its build provenance and SHA-256, and
+adds `ts-crap` to `PATH`. It can also run the gate and upload SARIF:
+
+```yaml
+- uses: RuiCostafrg/typescript-crap@<full commit SHA> # vX.Y.Z
+  with:
+    version: 2.3.2
+```
+
+Pinning the full commit SHA, with the release as a comment, is the recommended
+and most secure reference. An immutable `@vX.Y.Z` release tag also works, and
+a floating `@v2` is not offered yet. See
+[choosing the action ref](docs/CI_ADOPTION.md#choosing-the-action-ref) for the
+trade-offs, and [CI adoption](docs/CI_ADOPTION.md#github-action) for inputs and
+SARIF upload.
 
 See [installation verification](docs/INSTALLATION_COMPATIBILITY.md) for tested
 install/upgrade paths, runtime boundaries, and outstanding release-time evidence.
@@ -151,6 +263,15 @@ escaped in CLI diagnostics.
 - **2:** invalid arguments, invalid TypeScript, missing/stale inputs or coverage,
   Git/gh errors, or report I/O errors.
 
+By default a selected file that does not parse aborts the whole scan (exit 2).
+`--on-syntax-error report` (ts-crap 2.4.0 or later) scores every other file
+instead and lists each unparsable file at its first syntax error. It appears as
+`syntax_errors` in JSON, a `Syntax errors` section in text and HTML, a
+`<syntax-error>` element in XML, and a located `TSCRAP002` result in SARIF. Any
+unparsable file fails the completeness gate (exit 1) whatever the coverage
+policy, and `--write-baseline` is refused until every selected file parses.
+Reports for scans without syntax errors are byte-identical in both modes.
+
 The default text report explicitly identifies empty selections. JSON/XML/HTML
 include file/function counts or records, so an empty result is distinguishable
 from a nonempty passing scan. Thresholds must be finite and nonnegative.
@@ -160,9 +281,11 @@ from a nonempty passing scan. Thresholds must be finite and nonnegative.
 - Parses `.ts`, `.tsx`, `.mts`, and `.cts` using Tree-sitter—not regular
   expressions. Excludes `.d.ts`, `.d.mts`, and `.d.cts`.
 - Directory scans honor `.gitignore`/`.ignore`, skip hidden entries and symbolic
-  links, and skip `node_modules`, `.git`, `target`, `dist`, `build`, `coverage`.
+  links, and skip directories named `node_modules`, `.git`, `target`, `dist`,
+  `build` or `coverage` at any depth. `excluded_directories` in `ts-crap.json`
+  replaces that list, for example to scan a real `src/build/` directory.
   An explicitly named supported source file bypasses ignore rules but cannot
-  bypass those excluded directories. Missing explicit files are errors.
+  bypass the excluded directories. Missing explicit files are errors.
 - Diff/PR mode takes tracked changes directly from Git, so tracked ignored/hidden
   files cannot silently disappear from the gate (generated-directory exclusions
   still apply).
@@ -237,6 +360,9 @@ multiline formatting. It is not branch or function-invocation coverage.
 
 ## Real coverage from TypeScript tests
 
+With the npm package, run `npx typescript-crap coverage` for the one-step
+Vitest/Jest command, or `node node_modules/typescript-crap/coverage/coverage.mjs`
+and `.../import-coverage.mjs` for the helpers below.
 Installed users can run `node "/tools/ts-crap-coverage-helpers/coverage.mjs"`
 or `node "/tools/ts-crap-coverage-helpers/import-coverage.mjs"` with the same options
 shown below; replace `/tools/ts-crap-coverage-helpers` with the extracted bundle
@@ -266,6 +392,13 @@ exclusive link, so a failed write leaves no partial file and a destination creat
 concurrently is never replaced.
 Fresh-destination publication requires hard-link support on the destination
 filesystem; failures are reported without falling back to a partial direct write.
+
+Both helpers reserve `ROOT/ts-crap.json`, even when absent. Pass `--config FILE`
+before `--` to also protect an alternative policy file; the path is relative to
+the calling directory, just like the scanner's `--config`. This helper option
+only protects the destination and does not load policy or forward it to tests.
+The importer reserves both its raw input and native output against these paths.
+Existing directory aliases and config symlink targets are checked too.
 
 ```sh
 mkdir -p reports
@@ -325,7 +458,8 @@ The CLI stages file output and buffers stdout before writing. Each baseline
 application compares absolute scores anew, independently of earlier comparisons.
 See **[CONTRIBUTING.md](CONTRIBUTING.md)** for folder
 conventions, enforced safety/lint rules, release settings, benchmarks and quality
-commands. These rules reduce risk; they are not proof of maximum performance or
+commands. See [verification contracts](docs/VERIFICATION.md) for bounded Kani
+proofs and the released Rust API compatibility check. These rules reduce risk; they are not proof of maximum performance or
 of safety in third-party/native dependencies.
 
 ## Reproducible example and tests
@@ -406,6 +540,25 @@ ancestor config is loaded, so results do not depend on the caller's directory.
 }
 ```
 
+`excluded_directories` (ts-crap 2.4.0 or later) replaces the built-in excluded
+directory names. Each entry is one non-empty directory name, matched at any depth. Path
+separators (`/`, `\`), NUL characters, `.`, `..` and duplicates are invalid;
+`[]` excludes nothing. Omitting it keeps the
+defaults `["node_modules", ".git", "target", "dist", "build", "coverage"]`. Keep
+`node_modules` and `.git` when you replace the list. The coverage helpers read
+this key from the same file (`ROOT/ts-crap.json` or `--config`), so they skip
+the same directory names as the scanner. They do not apply `.gitignore` or skip
+hidden entries, so they may record extra files the scanner never selects; those
+records are unused. Older scanners reject the key as unknown.
+
+```json
+{
+  "version": 1,
+  "include": ["src/**"],
+  "excluded_directories": ["node_modules", ".git", "target", "dist", "coverage"]
+}
+```
+
 Gate settings resolve independently: an explicit CLI value overrides the project
 config, which overrides the built-in defaults (`threshold: 10`,
 `require_coverage: false`, `fail_on_empty: false`). A threshold must be finite and
@@ -464,6 +617,15 @@ reviewed policy inputs, not authenticated proof of past code quality.
 
 ### Istanbul and LCOV collection
 
+For Vitest and Jest, the one-step helper chooses fresh paths and reporter flags
+for you (see the [helper guide](docs/COVERAGE_HELPERS.md#one-step-vitest-or-jest-coverage)):
+
+```sh
+node scripts/coverage-run.mjs --framework vitest --scan   # or --framework jest
+```
+
+The manual importer commands below remain supported.
+
 Jest/nyc `coverage-final.json`, Vitest's Istanbul reporter, and LCOV line records
 can be collected through the dependency-free Node adapter. Use fresh input/output
 paths (the adapter rejects existing destinations). Paths passed on the command
@@ -513,10 +675,13 @@ bidirectional formatting characters; JSON retains raw values for machine readers
 
 ### Compatibility and CI adoption
 
-The [1.x compatibility contract](docs/COMPATIBILITY.md) defines scoring, exit codes,
+The [2.x compatibility contract](docs/COMPATIBILITY.md) defines scoring, exit codes,
 configuration, report fields, baseline identities, migrations, and Rust API
 stability. [Versioned JSON Schemas and examples](schemas/README.md) cover the four
 machine-readable documents.
+
+For v1 installations, follow the [v2 migration guide](docs/MIGRATING_TO_V2.md),
+including fresh LCOV collection and review of changed gate/baseline results.
 
 The [CI adoption guide](docs/CI_ADOPTION.md) and
 [copyable GitHub workflow](examples/ci/github-actions.yml) cover reviewed baselines,

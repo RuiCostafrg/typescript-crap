@@ -8,6 +8,38 @@ on:
 permissions:
   contents: read
 jobs:
+  portable-linux:
+    name: Portable Linux and Debian (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-26.04-arm
+            target: aarch64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: release-assets
+          path: artifacts
+      - name: Validate actual staged portable archives and Debian packages
+        env:
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ fromJson(inputs.plan).releases[0].app_version }}
+        run: python3 scripts/verify-linux-distribution.py --assets artifacts --target "$TARGET" --version "$VERSION" --report target/linux-distribution.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: release-linux-distribution-${{ matrix.target }}
+          path: target/linux-distribution.json
+          if-no-files-found: warn
+          retention-days: 14
   smoke:
     name: Smoke test (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
@@ -87,13 +119,16 @@ jobs:
           VERSION: ${{ fromJson(inputs.plan).releases[0].app_version }}
         run: |
           installer=shell
+          archive_target=$TARGET
           if [[ "$TARGET" == *windows* ]]; then installer=powershell; fi
-          gh release download v0.3.0 --repo "$GITHUB_REPOSITORY" \
+          # The candidate installer selects static musl on Linux; v2.2.1 selected GNU on glibc 2.43+.
+          if [[ "$TARGET" == *-linux-gnu ]]; then archive_target=${TARGET%-gnu}-musl; fi
+          gh release download v2.2.1 --repo "$GITHUB_REPOSITORY" \
             --pattern "ts-crap-$TARGET.*" --pattern ts-crap-installer.sh \
             --pattern ts-crap-installer.ps1 --dir previous-assets
           python3 scripts/verify-installation.py --assets artifacts --version "$VERSION" \
-            --previous-assets previous-assets --previous-version 0.3.0 \
-            --target "$TARGET" --installer "$installer"
+            --previous-assets previous-assets --previous-version 2.2.1 \
+            --target "$TARGET" --installer "$installer" --archive-target "$archive_target"
   homebrew:
     name: Homebrew (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
@@ -126,8 +161,8 @@ jobs:
           if [[ "$RUNNER_OS" == Linux ]]; then
             eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           fi
-          gh release download v0.3.0 --repo "$GITHUB_REPOSITORY" \
+          gh release download v2.2.1 --repo "$GITHUB_REPOSITORY" \
             --pattern "ts-crap-$TARGET.*" --pattern ts-crap.rb --dir previous-assets
           python3 scripts/verify-installation.py --assets artifacts --version "$VERSION" \
-            --previous-assets previous-assets --previous-version 0.3.0 \
+            --previous-assets previous-assets --previous-version 2.2.1 \
             --target "$TARGET" --installer homebrew

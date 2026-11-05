@@ -1,16 +1,24 @@
 # Installation and platform verification
 
+v2.2.1 adds a separate static musl and Debian package matrix described
+in [Linux distribution](LINUX_DISTRIBUTION.md). The GNU archive baseline below
+continues to apply to existing releases and GNU artifacts. Musl/package checks
+are additional; they do not retroactively certify older archives.
+
 The supported Linux reference runtime for v0.4.0 and newer prebuilt archives is
 **Ubuntu 26.04**. Keep this minimum until a separately built and tested older
 runtime is introduced. A glibc version alone does not establish compatibility
-with every distribution. Alpine/musl and Android/Termux have no native release
+with every distribution. Releases through v2.1.0 have no Alpine/musl archive;
+v2.2.1 adds separate musl builds. Android/Termux has no native release
 archive. Older v0.3.0 archives retain their earlier glibc 2.35+ baseline.
 
 The [installation workflow](../.github/workflows/installation.yml) verifies a
 pinned published upgrade pair, v0.3.0 to v0.4.0. The
 [release verification workflow](../.github/workflows/verify-release.yml) repeats
 installation and upgrades using the candidate release assets before publication.
-It upgrades from the fixed v0.3.0 compatibility fixture; update that fixture
+The installer and Homebrew checks upgrade candidates from the published v2.2.1
+release; Debian package checks use the synthetic revision-zero fixture described
+in the Linux distribution guide. Update the published-version fixture
 explicitly if its supported upgrade range changes. Tagged publication requires
 successful installation CI on the source commit as well as the existing Rust,
 coverage, mutation, and release checks.
@@ -18,6 +26,18 @@ coverage, mutation, and release checks.
 ## Matrix and assertions
 
 - Shell: macOS 26 Apple Silicon/Intel and Ubuntu 26.04 ARM64/x86-64.
+- Pinned published installer: the README's verify-before-run flow for v2.2.1
+  (real GitHub URLs, `gh attestation verify`, unmanaged install) on Ubuntu 26.04
+  and 24.04 ARM64/x86-64 and macOS 26 Apple Silicon, plus inside stock
+  `debian:12-slim` and `alpine:3.22` containers on both architectures. It
+  asserts which archive the installer selected by comparing installed bytes
+  with the attested archive: on Linux, GNU on glibc 2.43 or newer and static
+  musl otherwise; on macOS, the Darwin archive. It fails if the installer reports
+  that it skipped its checksum check because `sha256sum` is missing. Further
+  jobs on Ubuntu 26.04 and in both containers apply the release-time
+  [static-musl rewrite](LINUX_DISTRIBUTION.md#shell-installer-selection) first
+  and expect static musl. Candidate release verification runs Linux installers
+  with `--archive-target` set to the musl archive.
 - PowerShell: Windows Server 2022 x86-64, both Windows PowerShell and PowerShell
   Core in published-pair CI; candidate release verification uses Windows PowerShell.
 - Homebrew: macOS 26 Apple Silicon/Intel and Ubuntu 26.04 x86-64. Linux ARM64
@@ -105,8 +125,16 @@ packages and taps do not participate, and the temporary installation is removed
 afterward. This live-path test covers a nondefault prefix; the separate staged
 installer matrix exercises the hosted runner's standard Homebrew prefix.
 
-After each new release, run that workflow with its version and a previous published
-upgrade fixture. Leave guide verification enabled for releases containing helpers.
+After each new release, run that workflow with its version and an explicitly
+selected, distinct previous published upgrade fixture. There is no default
+previous version: use `version=2.3.2`, `previous-version=2.2.1`,
+`verify-linux=true` and `verify-npm=true` for v2.3.2 verification, so its musl,
+Debian and npm packages are checked. v2.3.0 and v2.3.1 have no npm packages, so their
+rechecks use `verify-npm=false`. v2.2.1 rechecks use `version=2.2.1`,
+`previous-version=2.1.0` and `verify-linux=true`. Historical rechecks keep `verify-linux=false` and use `version=2.0.0`,
+`previous-version=1.0.0` for v2.0.0, or `version=1.0.0`, `previous-version=0.4.0`
+for v1.
+Leave guide verification enabled for releases containing helpers.
 For the legacy v0.4.0 tap check only, disable guide verification and select v0.3.0
 as the previous version. A green candidate run remains distinct from a green
 published-path run; publication evidence must be recorded after it occurs.

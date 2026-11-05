@@ -10,3 +10,12 @@ test('service uses the workspace pricing package', () => {
     expect([0, 1, 2, 3].map(shipping)).toEqual([0, 5, 10, 20]);
   }
 });
+
+(process.env.FIXTURE_FAIL === '1' ? test : test.skip)('deliberate failure verifies importer publication is aborted', () => {
+  expect('actual test failure').toBe('a passing test');
+});
+
+test('runs under the Jest config the suite selected', () => {
+  const expected = process.env.FIXTURE_TRANSFORMER;
+  if (expected) expect((globalThis as { fixtureTransformer?: string }).fixtureTransformer).toBe(expected);
+});

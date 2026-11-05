@@ -126,6 +126,43 @@
           }
         }
       }
+    },
+    "syntax_errors": {
+      "type": "array",
+      "description": "Unparsable selected sources, present only with --on-syntax-error report (ts-crap 2.4.0 or later). Any entry fails the completeness gate.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "line",
+          "column",
+          "column_utf16",
+          "message"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "One-based UTF-8 byte column."
+          },
+          "column_utf16": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "description": "Readers must tolerate additive output fields. Cross-field scoring/completeness invariants are validated by executable contract tests."

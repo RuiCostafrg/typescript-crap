@@ -1,0 +1,58 @@
+name: Verification
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: verification-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  bounded-proofs:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: Format proof harnesses
+        run: cargo fmt --manifest-path verification/kani/Cargo.toml --check
+      - name: Install pinned Kani
+        run: |
+          cargo install --locked kani-verifier --version 0.68.0
+          cargo kani setup
+      - name: Check production comparator against independent specification
+        working-directory: verification/kani
+        shell: bash
+        run: cargo kani --output-format terse | tee proof-results.log
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: bounded-proof-results
+          path: verification/kani/proof-results.log
+          if-no-files-found: warn
+          retention-days: 14
+  public-api:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2
+        with:
+          tool: cargo-semver-checks@0.51.0
+      - name: Preserve the released v2 Rust API
+        run: cargo semver-checks --baseline-rev v2.0.0 --release-type patch

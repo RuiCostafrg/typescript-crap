@@ -10,7 +10,8 @@ ci = "github"
 # The installers to generate for each app
 installers = ["shell", "powershell", "homebrew"]
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "aarch64-unknown-linux-musl", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
+include = ["packaging/licenses/musl-COPYRIGHT"]
 # Path that installers should place binaries in
 install-path = "~/.local/bin"
 # A GitHub repo to push Homebrew formulas to
@@ -30,6 +31,8 @@ aarch64-apple-darwin = "macos-26"
 x86_64-apple-darwin = "macos-26-intel"
 aarch64-unknown-linux-gnu = "ubuntu-26.04-arm"
 x86_64-unknown-linux-gnu = "ubuntu-26.04"
+aarch64-unknown-linux-musl = "ubuntu-26.04-arm"
+x86_64-unknown-linux-musl = "ubuntu-26.04"
 
 # Keep generated workflows pinned like the existing CI workflows.
 [dist.github-action-commits]

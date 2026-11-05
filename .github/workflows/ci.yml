@@ -20,6 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
@@ -43,17 +44,49 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: Debug tests
         run: cargo test --locked
+      - name: Node unit tests
+        run: node --test tests/*.test.mjs
+        env:
+          TS_CRAP_SCANNER: ${{ github.workspace }}/target/debug/ts-crap
       - name: Installed coverage helper bundle (Node 24)
         run: |
           python3 scripts/bundle-coverage.py target/helper-bundle
           python3 scripts/verify-coverage-bundle.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap
+          # The npm package ships the same files as an installed directory.
+          python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' target/helper-bundle/ts-crap-coverage-helpers.zip target/helper-directory
+          python3 scripts/verify-coverage-bundle.py --helpers target/helper-directory/ts-crap-coverage-helpers --scanner target/debug/ts-crap
       - name: Release tests
         run: cargo test --locked --release
       - name: Rust documentation
         run: cargo doc --locked --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
-      - run: node --check scripts/coverage.mjs && node --check scripts/coverage-lines.mjs && node --check scripts/coverage-hook.mjs && node --check scripts/import-coverage.mjs
+      - name: npm launcher syntax
+        run: for f in packaging/npm/bin/*.js packaging/npm/lib/*.js; do node --check "$f"; done
+      - name: Paired performance and memory regression checks
+        if: matrix.rust == '1.90'
+        shell: bash
+        env:
+          BASELINE_REF: ${{ github.event.pull_request.base.sha || github.event.before || 'v2.0.1' }}
+        run: |
+          if [[ -z "${BASELINE_REF:-}" || "$BASELINE_REF" =~ ^0+$ ]] \
+             || ! git rev-parse --verify --end-of-options "${BASELINE_REF}^{commit}" >/dev/null 2>&1; then
+            BASELINE_REF=v2.0.1
+          fi
+          if [[ ! -x /usr/bin/time ]]; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y time
+          fi
+          python3 -B -m unittest discover -s tests -p test_performance.py
+          python3 scripts/check-performance.py --baseline "$BASELINE_REF"
+      - name: Retain performance regression evidence
+        if: always() && matrix.rust == '1.90'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: performance-regressions
+          path: target/performance/results.json
+          if-no-files-found: warn
+          retention-days: 14
   platform-behavior:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     timeout-minutes: 20
@@ -83,7 +116,7 @@ jobs:
           python3 scripts/verify-coverage-bundle.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner "$scanner"
   framework-coverage:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
-    timeout-minutes: 15
+    timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -108,6 +141,38 @@ jobs:
           scanner=target/debug/ts-crap
           if [[ "$RUNNER_OS" == Windows ]]; then scanner="$scanner.exe"; fi
           node scripts/test-framework-coverage.mjs "$scanner"
+  framework-versions:
+    # Supported Vitest/Jest majors, each from its own lockfile (docs/COMPATIBILITY.md).
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    timeout-minutes: 20
+    runs-on: ${{ matrix.os }}
+    name: framework-versions (${{ matrix.versions }}, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        versions: [vitest-3, vitest-4, vitest-5, jest-29, jest-30]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: "1.90"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tests/fixtures/framework-versions/${{ matrix.versions }}/package-lock.json
+      - run: cargo build --locked
+      - name: Real coverage imports and gates for ${{ matrix.versions }}
+        shell: bash
+        env:
+          FRAMEWORK_VERSIONS: ${{ matrix.versions }}
+        run: |
+          scanner=target/debug/ts-crap
+          if [[ "$RUNNER_OS" == Windows ]]; then scanner="$scanner.exe"; fi
+          node scripts/test-framework-coverage.mjs "$scanner" --versions "$FRAMEWORK_VERSIONS"
   audit:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     timeout-minutes: 15
@@ -154,14 +219,19 @@ jobs:
           cache: npm
           cache-dependency-path: tests/tooling/package-lock.json
       - run: npm ci --ignore-scripts --no-audit --no-fund --prefix tests/tooling
+      - name: Repository mjs lint (zero warnings)
+        run: npm run lint --prefix tests/tooling
+      - name: Repository mjs formatting
+        run: npm run format:check --prefix tests/tooling
       - run: cargo build --locked
       - name: Schemas and executable compatibility contract
         run: node scripts/verify-contracts.mjs target/debug/ts-crap
-      - name: Installed CI guide with direct Node and actual Vitest
+      - name: Installed CI guide with direct Node, actual Vitest and one-step Jest
         run: |
           python3 scripts/bundle-coverage.py target/helper-bundle
           python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap
           python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap --vitest tests/tooling/node_modules/vitest/vitest.mjs --output target/ci-guide-reports
+          python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap --jest tests/tooling/node_modules/jest/bin/jest.js
       - name: Retain the deliberately failing PR's reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

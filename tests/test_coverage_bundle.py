@@ -22,7 +22,7 @@ class CoverageBundleTests(unittest.TestCase):
             archive = bundle.build(Path(temporary))
             with zipfile.ZipFile(archive) as packaged:
                 names = set(packaged.namelist())
-                for entry in ['coverage.mjs', 'import-coverage.mjs', 'coverage-hook.mjs']:
+                for entry in ['coverage.mjs', 'import-coverage.mjs', 'coverage-hook.mjs', 'coverage-run.mjs']:
                     self.assertIn(bundle.PREFIX + entry, names)
                 for name in names:
                     if not name.endswith('.mjs'):
@@ -59,7 +59,7 @@ class CoverageBundleTests(unittest.TestCase):
             second = bundle.build(Path(temporary) / 'second', root).read_bytes()
             self.assertEqual(first, second)
             with zipfile.ZipFile(Path(temporary) / 'second' / bundle.NAME) as archive:
-                self.assertEqual(len(archive.namelist()), 10)
+                self.assertEqual(len(archive.namelist()), 11)
             (root / 'scripts/coverage-hook.mjs').unlink()
             with self.assertRaises(FileNotFoundError):
                 bundle.build(Path(temporary) / 'missing', root)

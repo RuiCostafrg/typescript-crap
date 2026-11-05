@@ -1,8 +1,11 @@
 """Security regressions for untrusted release bytes and archive metadata."""
+import re
 import hashlib
 import importlib.util
 import io
+import os
 from pathlib import Path
+import subprocess
 import tarfile
 import tempfile
 import zipfile
@@ -21,6 +24,61 @@ installer = module('installer', ROOT / 'scripts/install-dist.py')
 release = module('release', ROOT / 'scripts/prepare-release.py')
 
 class ReleaseSecurityTests(unittest.TestCase):
+    def test_tag_publication_requires_every_exact_source_quality_workflow(self):
+        """Reject publication when any exact-source main quality workflow fails."""
+        workflow = (ROOT / '.github/workflows/release.yml').read_text()
+        preflight = workflow.split('          git merge-base --is-ancestor', 1)[1]
+        preflight = 'git merge-base --is-ancestor' + preflight.split('      - name:', 1)[0]
+        required = ['ci.yml', 'coverage.yml', 'mutation.yml',
+                    'installation.yml', 'verification.yml', 'linux-distribution.yml', 'npm-package.yml']
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            (directory / 'git').write_text('#!/bin/bash\nexit 0\n')
+            (directory / 'gh').write_text(
+                '#!/bin/bash\n'
+                'echo "$*" >> "$CALLS"\n'
+                'if [[ -n "$FAIL_WORKFLOW" && "$*" == *"/$FAIL_WORKFLOW/"* ]]; '
+                'then echo false; else echo true; fi\n')
+            for name in ['git', 'gh']:
+                (directory / name).chmod(0o755)
+            for failure in ['', *required]:
+                with self.subTest(failed_workflow=failure):
+                    calls = directory / 'calls'
+                    calls.write_text('')
+                    environment = dict(os.environ, PATH=f'{directory}:/usr/bin:/bin',
+                                       CALLS=str(calls), FAIL_WORKFLOW=failure,
+                                       EVENT='push', REF='refs/tags/v2.0.1',
+                                       GITHUB_SHA='exact-source-sha',
+                                       GITHUB_REPOSITORY='owner/repo')
+                    result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c', preflight],
+                                            env=environment, capture_output=True, text=True)
+                    self.assertEqual(result.returncode == 0, not failure, result.stderr)
+                    if not failure:
+                        commands = calls.read_text().splitlines()
+                        self.assertEqual(len(commands), len(required))
+                        for name, command in zip(required, commands):
+                            self.assertIn(f'/{name}/runs?head_sha=exact-source-sha&event=push', command)
+                            self.assertIn('head_branch == "main"', command)
+
+    def test_npm_publish_and_its_ci_dry_run_use_local_tarball_paths(self):
+        """npm 12 reads a bare dir/file.tgz as a GitHub shorthand; only ./ paths publish."""
+        release_yml = (ROOT / '.github/workflows/release.yml').read_text()
+        self.assertIn('file="./npm-packages/$name-$version.tgz"', release_yml)
+        self.assertNotIn('file="npm-packages/', release_yml)
+        self.assertIn('npm stage publish "$file"', release_yml)
+        # The trusted publisher allows only staged publishing; the owner approves with 2FA.
+        self.assertNotRegex(release_yml, r'\bnpm publish\b')
+        ci = (ROOT / '.github/workflows/npm-package.yml').read_text()
+        self.assertIn('npm stage publish --dry-run --force "./npm-packages/$name-$VERSION.tgz"', ci)
+        # --force belongs only to the dry run; the real publish must keep npm's protections.
+        self.assertNotIn('--force', release_yml)
+        # The dry run must use the same pinned npm CLI as the publish job.
+        pinned = 'https://registry.npmjs.org/npm/-/npm-12.2.1.tgz'
+        self.assertIn(pinned, release_yml)
+        self.assertIn(pinned, ci)
+        digest = re.search(r'echo "([0-9a-f]{128})  \$RUNNER_TEMP/npm-12\.2\.1\.tgz"', release_yml).group(1)
+        self.assertIn(digest, ci)
+
     def test_tool_download_rejects_tampering_before_writing_executable(self):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary) / 'bin'
@@ -62,8 +120,7 @@ class ReleaseSecurityTests(unittest.TestCase):
             self.assertEqual(list((root / 'bin').iterdir()), [executable])
 
     def fixture(self, source):
-        names = [f"ts-crap-{target}.{'zip' if 'windows' in target else 'tar.xz'}"
-                 for target in release.TARGETS] + ['ts-crap-coverage-helpers.zip']
+        names = release.checksummed_assets()
         for name in names:
             (source / name).write_bytes(b'archive fixture')
             digest = hashlib.sha256(b'archive fixture').hexdigest()
@@ -74,8 +131,7 @@ class ReleaseSecurityTests(unittest.TestCase):
     def test_corrupted_archive_and_misbound_checksum_cannot_publish(self):
         for attack, name in [(attack, name)
                              for attack in ['corruption', 'filename']
-                             for name in ['ts-crap-aarch64-apple-darwin.tar.xz',
-                                          'ts-crap-coverage-helpers.zip']]:
+                             for name in release.checksummed_assets()]:
             with self.subTest(attack=attack, name=name), tempfile.TemporaryDirectory() as temporary:
                 source = Path(temporary)
                 self.fixture(source)
@@ -106,7 +162,7 @@ class ReleaseSecurityTests(unittest.TestCase):
             (source / 'unrelated-private-file').write_text('must stay local')
             output = source / 'out'
             release.prepare(source, output)
-            self.assertEqual(len(list(output.iterdir())), 17)
+            self.assertEqual(len(list(output.iterdir())), 25)
             self.assertFalse((output / 'unrelated-private-file').exists())
 
 if __name__ == '__main__':

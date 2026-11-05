@@ -15,6 +15,12 @@ def render(report):
         "| --- | ---: | ---: | ---: |",
     ]
     for metric in ("lines", "functions", "regions"):
+        for entry in data:
+            totals = entry["totals"][metric]
+            if (type(totals["count"]) is not int
+                    or type(totals["covered"]) is not int
+                    or not 0 <= totals["covered"] <= totals["count"]):
+                raise ValueError("invalid coverage totals")
         total = sum(entry["totals"][metric]["count"] for entry in data)
         covered = sum(entry["totals"][metric]["covered"] for entry in data)
         if (

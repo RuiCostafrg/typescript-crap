@@ -30,6 +30,38 @@ pub enum Sort {
     Crap,
 }
 
+/// What a scan does with a selected source that does not parse as TypeScript.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[non_exhaustive]
+pub enum OnSyntaxError {
+    /// Abort the whole scan with an error (exit 2). The default.
+    #[default]
+    Fail,
+    /// Score every other file, list unparsable files in the report, and fail the
+    /// completeness gate.
+    Report,
+}
+
+/// Opt-in scan settings added after 2.0. Construct with `ScanExtensions::default()`
+/// and set fields, so later additions stay compatible.
+#[derive(Clone, Debug, Default)]
+#[non_exhaustive]
+pub struct ScanExtensions {
+    pub on_syntax_error: OnSyntaxError,
+}
+
+/// A selected source that could not be parsed, at its first syntax error.
+#[derive(Debug, Serialize)]
+pub struct UnparsedFile {
+    pub path: String,
+    pub line: usize,
+    /// One-based UTF-8 byte column, like `FunctionScore::column`.
+    pub column: usize,
+    /// One-based UTF-16 column for SARIF consumers.
+    pub column_utf16: usize,
+    pub message: String,
+}
+
 /// Presentation only: the full report always determines the gate and baseline.
 #[derive(Debug, Default)]
 pub struct RenderOptions {
@@ -126,6 +158,10 @@ pub struct Report {
     pub functions_missing_coverage: usize,
     pub completeness_failed: bool,
     pub functions: Vec<FunctionScore>,
+    /// Unparsable selected sources (only with `OnSyntaxError::Report`). Each one
+    /// fails the completeness gate. Omitted from JSON when empty.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub syntax_errors: Vec<UnparsedFile>,
 }
 
 impl Report {
@@ -141,6 +177,11 @@ impl Report {
 /// Analyze selected files. No report is published and no repository is modified.
 /// Empty selections pass unless the effective fail_on_empty policy is enabled.
 pub fn scan(args: &ScanOptions) -> Result<Report> {
+    scan_with(args, &ScanExtensions::default())
+}
+
+/// `scan` with opt-in settings; `scan_with(args, &ScanExtensions::default())` is `scan(args)`.
+pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Report> {
     if let Some(threshold) = args.threshold {
         validate_threshold(threshold)?;
     }
@@ -158,7 +199,13 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
     let threshold = args.threshold.unwrap_or(rules.threshold);
     let require_coverage = args.require_coverage.unwrap_or(rules.require_coverage);
     let fail_on_empty = args.fail_on_empty.unwrap_or(rules.fail_on_empty);
-    let selection = selection::files(&root, &args.paths, args.diff.as_deref(), args.pr.as_deref())?;
+    let selection = selection::files(
+        &root,
+        &args.paths,
+        args.diff.as_deref(),
+        args.pr.as_deref(),
+        &rules.excluded_directories,
+    )?;
     let mut files = selection.paths;
     let mut identities = std::collections::BTreeSet::new();
     let mut selected = Vec::new();
@@ -180,6 +227,7 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
     let mut functions = Vec::new();
     let mut files_missing_coverage = 0;
     let mut functions_missing_coverage = 0;
+    let mut syntax_errors = Vec::new();
     let mut analyzer = analysis::Analyzer::default();
     let mut committed = if files.is_empty() || selection.committed.is_empty() {
         None
@@ -197,7 +245,34 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
                 .context("selected source has no committed identity")?;
             reader.verify(oid, path, &source)?;
         }
-        let methods = analyzer.analyze(&relative, &source)?;
+        let methods = match analyzer.analyze(&relative, &source) {
+            Ok(methods) => methods,
+            Err(error) if extensions.on_syntax_error == OnSyntaxError::Report => {
+                let Some(issue) = error.downcast_ref::<analysis::SyntaxError>() else {
+                    return Err(error);
+                };
+                // Reporting syntax errors must not hide stale or invalid coverage.
+                let source_coverage = coverage
+                    .as_ref()
+                    .map(|coverage| coverage.for_source(&relative, &source))
+                    .transpose()?;
+                files_missing_coverage +=
+                    usize::from(source_coverage.as_ref().is_none_or(|c| !c.present()));
+                syntax_errors.push(UnparsedFile {
+                    path: relative.clone(),
+                    line: issue.line,
+                    column: issue.column,
+                    column_utf16: issue.column_utf16,
+                    // Saved reports may be shared independently of repository access.
+                    message: format!(
+                        "invalid TypeScript syntax in {}:{}:{} (UTF-8 byte column)",
+                        issue.path, issue.line, issue.column
+                    ),
+                });
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         // Validate coverage even for selected files with no implemented functions.
         let source_coverage = coverage
             .as_ref()
@@ -235,8 +310,10 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
     }
     functions
         .sort_unstable_by(|a, b| (&a.path, a.line, a.column).cmp(&(&b.path, b.line, b.column)));
+    // An unparsable file is unscored evidence: the scan is incomplete under any policy.
     let completeness_failed = (fail_on_empty && functions.is_empty())
-        || (require_coverage && (files_missing_coverage > 0 || functions_missing_coverage > 0));
+        || (require_coverage && (files_missing_coverage > 0 || functions_missing_coverage > 0))
+        || !syntax_errors.is_empty();
     let report = Report {
         version: 1,
         source_paths: files.clone(),
@@ -247,6 +324,7 @@ pub fn scan(args: &ScanOptions) -> Result<Report> {
         completeness_failed,
         failed: completeness_failed || functions.iter().any(|f| f.failed),
         functions,
+        syntax_errors,
     };
     Ok(report)
 }

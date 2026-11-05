@@ -1,5 +1,39 @@
 # Standalone coverage helpers
 
+## Install with npm
+
+Releases from v2.3.2 include the helpers in the npm package `typescript-crap`,
+in `node_modules/typescript-crap/coverage/`. They are byte-identical to the
+release's `ts-crap-coverage-helpers.zip`, and the package's scanner is the same
+version, so nothing needs to be matched by hand:
+
+```sh
+npm install --save-dev typescript-crap
+npx typescript-crap coverage --framework vitest --scan      # one-step; or --framework jest
+node node_modules/typescript-crap/coverage/coverage.mjs --root . --output native.json -- node test.mjs
+npx ts-crap --root . --coverage native.json --require-coverage
+```
+
+With pnpm, Yarn or Bun, run the same commands through `pnpm exec`, `yarn` or
+`bun run`. Under Yarn Plug'n'Play use `yarn ts-crap`, never `npx ts-crap`, which
+would fetch the unrelated npm package of that name.
+
+`typescript-crap coverage ARGS` runs `coverage-run.mjs` (described
+[below](#one-step-vitest-or-jest-coverage)) with ARGS. With `--scan` and no
+`--scanner`, it scans with the package's own executable. Without `--scan`, the
+printed follow-up command is `npx typescript-crap@VERSION ...`, at the same
+version. The helpers need Node.js 24 or later; on older Node.js the command
+stops with a message.
+
+The coverage command finds Vitest and Jest in `node_modules`, so it doesn't
+support Yarn Plug'n'Play projects: set `nodeLinker: node-modules` in
+`.yarnrc.yml` first. The scanner itself works under Plug'n'Play.
+
+The rest of this page describes the standalone bundle. Its options and
+guarantees apply to the npm copy too.
+
+## Standalone bundle
+
 Starting with v1.0.0, releases include
 `ts-crap-coverage-helpers.zip` and its `.sha256` checksum. The bundle contains both
 collectors and every supporting module; no repository checkout, npm install, or
@@ -35,6 +69,26 @@ directory and `/project` with your project root. On Windows use Windows paths in
 the same quoted arguments. Output paths are relative to your calling directory;
 the child command runs inside the project root.
 
+Both helpers skip the same excluded directory names as the scanner. They do not
+apply `.gitignore` or skip hidden entries as the scanner's directory walk does,
+so they may record extra files the scanner never selects; those records are
+unused. They read only
+`excluded_directories` from `ROOT/ts-crap.json` (or `--config FILE`), and use the
+default list when the key or the default file is absent. An explicit `--config`
+must exist, and an invalid list is an error. See the README's
+[adoption gates](../README.md#adoption-gates-v02).
+
+Both helpers reject destinations at `ROOT/ts-crap.json`, whether or not it
+already exists. If the scanner uses an alternative policy, pass the same
+caller-relative `--config FILE` to the helper before `--` to protect that path as
+well. The default remains reserved. The helpers also read that file's
+`excluded_directories` (see above), so pass the same `--config` to the helper and
+the scanner. Other policy keys belong to the scanner, and the option never
+forwards arguments to tests.
+For imports, it protects both raw input and native output. Existing directory
+aliases and resolved config symlink targets are included in the checks.
+Protected filename case variants are reserved on every platform for portability.
+
 ```sh
 node "/tools/ts-crap-coverage-helpers/coverage.mjs" --root /project --output native-coverage.json -- node test.mjs
 ts-crap --root /project --coverage native-coverage.json --require-coverage
@@ -44,6 +98,51 @@ Native collection supports Node's direct TypeScript execution, including `.mts`.
 It does not transpile TSX or remap source maps. It snapshots source before tests
 and verifies loaded TypeScript through the bundled loader hook. Failed collection
 preserves an existing report; always check the command's exit status before scanning.
+
+## One-step Vitest or Jest coverage
+
+`coverage-run.mjs` wraps the importer below for Vitest and Jest. It finds the
+framework installed in the project (or a parent workspace), creates a new
+private run directory, adds the reporter and directory flags, imports the
+result and prints the matching scanner command:
+
+```sh
+node "/tools/ts-crap-coverage-helpers/coverage-run.mjs" --root /project
+ts-crap --root /project --coverage /tmp/ts-crap-run-AbC123/native-coverage.json --require-coverage
+```
+
+Add `--scan` to run that scanner command directly. The helper's exit status is
+then the scanner's: 0 pass, 1 quality gate, 2 error. Before any test runs,
+`--scan` checks that `ts-crap --version` (or `--scanner PATH`) matches this
+bundle's `version.json` exactly.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--framework vitest\|jest\|auto` | `auto` | `auto` looks for `vitest.config.*`, `vite.config.*` when Vitest is installed (Vitest also loads it, but plain Vite apps have one too), `jest.config.*` or a `jest` key in `package.json`. It never evaluates config files. If both frameworks match it stops and asks for `--framework`. |
+| `--provider PROVIDER` | see below | Each framework's own names: `istanbul` or `v8` for Vitest (`--coverage.provider`), `babel` or `v8` for Jest (`--coverageProvider`). Other combinations are rejected. |
+| `--format json\|lcov` | `json` | Reporter: Istanbul `json` or `lcovonly`. JSON keeps default-argument evidence. |
+| `--root DIR` | `.` | Project root; the framework runs here. |
+| `--output FILE` | inside the run directory | Native coverage path. It must not exist yet, and missing parent directories are created before tests run. With `--output` the run directory is removed after success. Without it, the report stays in the run directory (kept, so the printed command works) until you delete it. |
+| `--config FILE` | — | Alternative ts-crap policy path. It is protected from publication and passed to the scanner. |
+| `--scan`, `--scanner PATH` | off, `ts-crap` | Run the scanner after a successful import. |
+| `-- ARGS` | — | Extra framework arguments, for example `-- --config vitest.ci.ts` or `-- --runInBand`. Arguments that change the coverage reporter, directory, provider or coverage switch are rejected. |
+
+Without `--provider`, Jest uses the project's configured provider. Vitest offers
+to install a missing provider package and edit `package.json`, so for Vitest the
+helper first checks that `@vitest/coverage-v8` or `@vitest/coverage-istanbul`
+is installed. If only one is installed it selects that provider explicitly. If
+both are installed the configured provider is used.
+
+The importer's guarantees still apply. Every run uses fresh reporter and native
+paths, source is hashed before the tests and checked after them, failing tests
+publish nothing, and the project configuration is never overwritten. SIGINT,
+SIGTERM and SIGHUP are forwarded through the importer to the test command, and
+the helper waits for it to stop, so a cancelled run never publishes later.
+
+The printed command is quoted for POSIX shells, and on Windows for PowerShell.
+`cmd.exe` cannot quote `%` literally, so use `--scan` there for paths with
+unusual characters. On failure
+the run directory is kept and its path is printed for inspection.
 
 ## Collect Istanbul or LCOV
 
@@ -58,6 +157,74 @@ For LCOV, use `--format lcov --input /project/coverage/lcov.info`, with a comman
 that emits LCOV (for example `npx vitest run --coverage --coverage.reporter=lcov`).
 Install/configure the test framework and coverage reporter in your project first.
 
+### Multiple reports and fresh directories
+
+From ts-crap 2.4.0, repeat `--input` to import reports from independent projects
+or shards in one source snapshot, or pass a directory created by the command:
+
+```sh
+node /tools/ts-crap-coverage-helpers/import-coverage.mjs --root . --format istanbul \
+  --input .coverage-run/project-a/coverage-final.json \
+  --input .coverage-run/project-b/coverage-final.json \
+  --output imported-coverage.json -- node scripts/collect-projects.mjs
+# Alternatively: --input .coverage-run instead of the two input flags.
+```
+
+The command must run and wait for all project/shard test processes, fail if any
+fails, and create those reports in fresh paths. The importer does **not** accept
+coverage collected before it started. For an input directory, the directory itself
+must not exist before the command. Discovery is recursive and deterministic:
+Istanbul selects `.json` files; LCOV selects `.info` or `.lcov` files. Keep only
+raw coverage reports with those extensions there. Explicit file inputs retain
+support for arbitrary file names. Every input uses the same `--format`; source
+paths in every report must be absolute or relative to the common `--root`.
+
+Each report first reduces overlapping statements/mappings conservatively, then
+its independent line counts add to the other reports. A line remains zero if
+none of the reports establishes positive coverage for that entire line; disjoint
+partial statements on one line are not promoted into complete line coverage.
+LCOV test names are local to each report. Missing source records remain missing;
+coverage counts are never invented for absent files. Duplicate selections (including
+canonical aliases or hard-linked copies of the same selected report), symbolic
+links within a report tree, empty inputs, invalid reports, count overflow and changed sources fail
+without publishing a native report. Batch diagnostics name the report that failed. Regular-file one-input commands and native schemas
+remain supported. Explicit symlink report files, previously followed when created
+during collection, are now rejected. Reports are opened and checked against their
+discovered identity before reading, and checked for metadata changes during the
+read. The filesystem must expose stable, nonzero report identities.
+
+Existing parent-directory aliases are resolved before collection, including
+standard OS temporary-directory aliases. If collection changes an input's
+resolved parent path, the import fails. A fresh report directory may have any
+suffix (including `.ts`); only TypeScript *file* inputs are rejected.
+
+Cooperating importer invocations reserve their canonical input paths until
+publication or failure. Exact or parent/child input overlap fails before the
+second collector starts; independent private paths may run concurrently. The
+reservations live outside report directories, so reporter cleanup cannot remove
+them. Normal failures release reservations. Reservation diagnostics name the blocking lock file. An abruptly killed importer
+can leave a reservation behind: use a new unique run directory, and only remove an
+abandoned reservation after confirming its collector has stopped. These are
+cooperative importer reservations, not a sandbox against arbitrary processes
+writing to the reports. Collectors must finish all writers before returning.
+
+This is the importer foundation for roadmap 1.6. Executed Vitest/Jest workspace
+and shard recipes are the follow-up; this example's collection script is supplied
+by the project. Preserve framework percentage thresholds when collecting shards:
+merge and check those thresholds separately, because ts-crap gates CRAP and
+coverage evidence rather than framework coverage percentages.
+
+LCOV `TN:` test groups are aggregated independently. Repeated records for the
+same test name and resolved `SF:` source add execution counts before mapping;
+missing/empty `TN:` belongs to the unnamed group for that record, without
+inheriting the preceding record's test name. Within a test, overlapping
+statements or generated locations mapped to the same source line take the
+minimum count. The resulting per-test line counts then add. Duplicate `DA:` line
+numbers within one source record and sums outside JavaScript's safe-integer range
+are errors. Istanbul's already aggregated statement counts retain conservative
+overlap behavior. Recollect coverage with the updated helper to benefit from
+aggregation fixes; review changed gate results before updating baselines.
+
 Both raw input and native output must be **fresh paths** before each import.
 Use a new run directory and configure your reporter to write there, or remove
 only those previous generated reports before rerunning. The importer runs tests
@@ -71,3 +238,24 @@ approximation, not branch coverage. Istanbul JSON also maps direct `default-arg`
 initializer counters; LCOV can omit that declaration-line evidence. Use JSON for
 complete default-argument evidence. Missing evidence is never treated as covered.
 These helpers run trusted test commands with your permissions; they are not a sandbox.
+
+## Troubleshooting imports
+
+Import failures exit with status 2, publish nothing, and name the likely fix.
+
+| Message starts with | Likely cause | Fix |
+| --- | --- | --- |
+| `Coverage command failed: N` | Tests failed, or a coverage threshold failed. Any raw report the command wrote is not imported. | Fix the tests or thresholds, then rerun with fresh paths. |
+| `Coverage command succeeded but wrote no report` | Coverage is off, the reporter is wrong, or the report went elsewhere. | Pass `--coverage`; use the `json` (Istanbul) or `lcovonly` reporter; set the reports directory (Vitest `coverage.reportsDirectory`, Jest `coverageDirectory`) to the directory that contains the `--input` file. |
+| `Empty imported coverage` | No tests ran, or the coverage include misses your sources. | Set Vitest `coverage.include` or Jest `collectCoverageFrom`, for example `src/**/*.ts`. |
+| `No source map for generated input`, `could not be source-mapped` | The report covers generated JavaScript. | Use a provider that remaps to TypeScript (Vitest `istanbul`/`v8`; Jest `babel`/`v8` with source maps). Do not import raw `NODE_V8_COVERAGE` output. |
+| `Unmappable source outside collected TypeScript snapshot` | The report names a file outside `--root`; a file under it that no longer exists; a file reached through a symbolic link (never followed); or one that is not collected: in an excluded directory (`node_modules`, `.git`, `target`, `dist`, `build`, `coverage`), a declaration file, or not `.ts`/`.tsx`/`.mts`/`.cts`. | The message says which. Pass the project root that contains your sources, recollect coverage from current sources, or limit coverage to collected TypeScript sources. |
+
+After a successful import, a warning lists TypeScript files under the root that
+have no coverage records. It leaves out `*.test.*`, `*.spec.*`, `*.mock.*` and
+`*.fixture.*` files (and their plurals, such as `*.tests.*`), `*.config.*`
+files, and anything under `__tests__`, `__mocks__`, `__fixtures__`, `test`,
+`tests`, `mocks` or `fixtures` directories. Names are shown with control
+characters escaped.
+Those files count as missing coverage if the scanner selects them. The warning
+never changes the exit status.

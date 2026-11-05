@@ -1,6 +1,6 @@
 [package]
 name = "ts-crap"
-version = "1.0.0"
+version = "2.3.2"
 edition = "2024"
 rust-version = "1.90"
 description = "Source-aware CRAP scores for TypeScript functions"
@@ -19,9 +19,12 @@ include = [
     "/SECURITY.md",
     "/LICENSE*",
     "/assets/icon.svg",
+    "/packaging/**",
     "/docs/COVERAGE_HELPERS.md",
     "/docs/COMPATIBILITY.md",
+    "/docs/VERIFICATION.md",
     "/docs/MIGRATING_TO_V1.md",
+    "/docs/MIGRATING_TO_V2.md",
     "/docs/CI_ADOPTION.md",
     "/tests/tooling/package*.json",
     "/tests/adoption/*.json",
@@ -61,6 +64,10 @@ harness = false
 
 [[bench]]
 name = "review"
+harness = false
+
+[[bench]]
+name = "committed"
 harness = false
 
 [lints.rust]

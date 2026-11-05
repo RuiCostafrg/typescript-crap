@@ -1,5 +1,8 @@
 //! Compare the analyzed worktree snapshot with pinned HEAD blobs, not index hints.
+#[path = "committed/compare.rs"]
+mod compare;
 use anyhow::{Context, Result, ensure};
+use compare::matches_committed;
 use std::{
     io::{BufRead, BufReader, Read, Write},
     path::Path,
@@ -42,18 +45,14 @@ impl BlobReader {
             .next()
             .context("Git blob size unavailable")?
             .parse()?;
-        // Only one committed file is buffered at a time; the scan keeps one batch
-        // process instead of starting Git once per source. No filters are executed.
-        let mut committed = Vec::new();
-        self.output
-            .by_ref()
-            .take(size)
-            .read_to_end(&mut committed)?;
+        // Keep one batch process, but only a fixed-size comparison buffer. The
+        // worktree snapshot remains the exact buffer subsequently analyzed/hashed.
+        let matches = matches_committed(&mut self.output, size, source.as_bytes())?;
         let mut terminator = [0];
         self.output.read_exact(&mut terminator)?;
         ensure!(terminator == *b"\n", "invalid Git blob response");
         ensure!(
-            without_crlf(&committed).eq(without_crlf(source.as_bytes())),
+            matches,
             "uncommitted changes in selected source {}; commit or restore it before a diff/PR scan (only CRLF/LF differences are allowed)",
             path.display()
         );
@@ -70,18 +69,6 @@ impl BlobReader {
     }
 }
 
-// Preserve lone CR bytes and all other content. Parsing and source hashes still
-// use the original worktree buffer; this equivalence applies only to HEAD checks.
-fn without_crlf(bytes: &[u8]) -> impl Iterator<Item = u8> + '_ {
-    bytes
-        .iter()
-        .copied()
-        .enumerate()
-        .filter_map(|(index, byte)| {
-            (byte != b'\r' || bytes.get(index + 1) != Some(&b'\n')).then_some(byte)
-        })
-}
-
 impl Drop for BlobReader {
     fn drop(&mut self) {
         // Error paths must also close and reap a batch process waiting for input.
@@ -91,4 +78,5 @@ impl Drop for BlobReader {
 }
 
 #[cfg(test)]
+#[path = "committed/tests.rs"]
 mod tests;

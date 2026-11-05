@@ -16,6 +16,20 @@ spec.loader.exec_module(installation)
 
 
 class InstallationEvidenceTests(unittest.TestCase):
+    def test_installer_archive_selection_stays_on_the_same_platform(self):
+        self.assertEqual(installation.archive_target('x86_64-unknown-linux-gnu', None),
+                         'x86_64-unknown-linux-gnu')
+        for arch in ['aarch64', 'x86_64']:
+            self.assertEqual(installation.archive_target(f'{arch}-unknown-linux-gnu', f'{arch}-unknown-linux-musl'),
+                             f'{arch}-unknown-linux-musl')
+        for target, selected in [('x86_64-unknown-linux-gnu', 'aarch64-unknown-linux-musl'),
+                                 ('aarch64-apple-darwin', 'aarch64-unknown-linux-musl'),
+                                 ('x86_64-pc-windows-msvc', 'x86_64-unknown-linux-musl'),
+                                 ('aarch64-unknown-linux-gnu', 'aarch64-apple-darwin'),
+                                 ('x86_64-unknown-linux-gnu', 'x86_64-unknown-linux-gnux')]:
+            with self.subTest(target=target, selected=selected), self.assertRaises(ValueError):
+                installation.archive_target(target, selected)
+
     def fixture(self, source, target='x86_64-unknown-linux-gnu', binaries=None):
         binaries = binaries or [('ts-crap', b'expected executable')]
         raw = io.BytesIO()

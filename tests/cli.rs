@@ -97,6 +97,119 @@ fn duplicate_coverage_is_an_input_error_and_preserves_the_previous_report() {
 fn fixture() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/project")
 }
+
+#[test]
+fn config_destinations_are_reserved_before_the_config_exists() {
+    for flag in ["--output", "--write-baseline"] {
+        for explicit in [false, true] {
+            for existing in [false, true] {
+                let dir = project(&[("a.ts", "export function f(){return 1;}")]);
+                let config = dir.path().join(if explicit {
+                    "custom.json"
+                } else {
+                    "ts-crap.json"
+                });
+                let original = r#"{"version":1}"#;
+                if existing {
+                    fs::write(&config, original).unwrap();
+                }
+                // An equivalent spelling must not evade absent-path checks.
+                let destination = dir.path().join(".").join(config.file_name().unwrap());
+                let mut args = vec![flag, destination.to_str().unwrap()];
+                if explicit {
+                    args.extend(["--config", config.to_str().unwrap()]);
+                }
+                let result = at(dir.path(), &args);
+                assert_eq!(
+                    result.status.code(),
+                    Some(2),
+                    "{flag}, {explicit}, {existing}: {result:?}"
+                );
+                assert!(
+                    String::from_utf8_lossy(&result.stderr).contains("cannot overwrite"),
+                    "{result:?}"
+                );
+                assert!(result.stdout.is_empty());
+                if existing {
+                    assert_eq!(fs::read_to_string(&config).unwrap(), original);
+                } else {
+                    assert!(!config.exists());
+                }
+                assert_eq!(at(dir.path(), &[]).status.code(), Some(0));
+            }
+        }
+    }
+}
+
+#[test]
+fn explicit_config_does_not_release_the_default_config_destination() {
+    let dir = project(&[
+        ("a.ts", "export function f(){return 1;}"),
+        ("custom.json", r#"{"version":1}"#),
+    ]);
+    let config = dir.path().join("custom.json");
+    for flag in ["--output", "--write-baseline"] {
+        let destination = dir.path().join("ts-crap.json");
+        let out = at(
+            dir.path(),
+            &[
+                "--config",
+                config.to_str().unwrap(),
+                flag,
+                destination.to_str().unwrap(),
+            ],
+        );
+        assert_eq!(out.status.code(), Some(2), "{out:?}");
+        assert!(!destination.exists());
+        assert_eq!(fs::read_to_string(&config).unwrap(), r#"{"version":1}"#);
+        let ordinary = dir.path().join("report.json");
+        assert_eq!(
+            at(
+                dir.path(),
+                &[
+                    "--config",
+                    config.to_str().unwrap(),
+                    flag,
+                    ordinary.to_str().unwrap()
+                ]
+            )
+            .status
+            .code(),
+            Some(0)
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn missing_config_destination_is_protected_through_directory_aliases() {
+    use std::os::unix::fs::symlink;
+    let dir = project(&[("a.ts", "export function f(){return 1;}")]);
+    let parent = tempfile::tempdir().unwrap();
+    let alias = parent.path().join("project-alias");
+    symlink(dir.path(), &alias).unwrap();
+    for flag in ["--output", "--write-baseline"] {
+        let destination = alias.join("ts-crap.json");
+        let out = at(dir.path(), &[flag, destination.to_str().unwrap()]);
+        assert_eq!(out.status.code(), Some(2), "{out:?}");
+        assert!(!destination.exists());
+    }
+    assert_eq!(at(&alias, &[]).status.code(), Some(0));
+}
+
+#[cfg(unix)]
+#[test]
+fn explicit_selection_rejects_links_above_the_immediate_parent() {
+    use std::os::unix::fs::symlink;
+    let dir = project(&[("real/nested/deep/a.ts", "export function f(){return 1;}")]);
+    symlink(dir.path().join("real"), dir.path().join("alias")).unwrap();
+    for selection in ["alias/nested/deep/a.ts", "alias/nested/deep"] {
+        let out = at(dir.path(), &[selection]);
+        assert_eq!(out.status.code(), Some(2), "{out:?}");
+        assert!(String::from_utf8_lossy(&out.stderr).contains("symbolic link source"));
+        assert!(out.stdout.is_empty());
+    }
+}
 fn run(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_ts-crap"))
         .args(["--root", fixture().to_str().unwrap()])

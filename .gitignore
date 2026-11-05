@@ -7,3 +7,5 @@
 /REPO_IMPROVEMENT_REPORT.md
 __pycache__/
 *.py[cod]
+
+/verification/kani/target/

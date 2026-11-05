@@ -20,6 +20,10 @@ struct Entry {
     crap: f64,
 }
 impl Baseline {
+    /// Snapshot the scored functions, including from an incomplete report. Callers
+    /// requiring every selected source to parse must check `report.syntax_errors`;
+    /// the CLI does so before `--write-baseline`. Applying any snapshot preserves
+    /// the report's completeness failure.
     pub fn capture(report: &Report) -> Self {
         Self {
             version: 1,

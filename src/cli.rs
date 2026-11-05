@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
-use ts_crap::{Format, RenderOptions, ScanOptions, Sort};
+use ts_crap::{Format, OnSyntaxError, RenderOptions, ScanExtensions, ScanOptions, Sort};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -50,6 +50,10 @@ struct Args {
     /// Explicit file move mapping for changed functions, OLD=NEW
     #[arg(long, requires = "baseline")]
     baseline_rename: Vec<String>,
+    /// Abort on a source that does not parse (fail), or score the rest, list it and
+    /// fail the completeness gate (report)
+    #[arg(long, value_enum, default_value = "fail")]
+    on_syntax_error: OnSyntaxError,
     /// Report format; defaults to a readable table
     #[arg(long, value_enum, default_value = "text")]
     format: Format,
@@ -95,10 +99,11 @@ pub fn execute() -> Result<bool> {
         top: args.top,
     };
     presentation.validate(args.format)?;
+    let default_config = args.root.join("ts-crap.json");
     let config_path = args
         .config
         .clone()
-        .unwrap_or_else(|| args.root.join("ts-crap.json"));
+        .unwrap_or_else(|| default_config.clone());
     let destinations = [&args.write_baseline, &args.output]
         .into_iter()
         .flatten()
@@ -109,26 +114,38 @@ pub fn execute() -> Result<bool> {
         .flatten()
         .map(PathBuf::as_path)
         .collect();
-    if config_path.exists() {
-        protected.push(config_path.as_path());
-    }
+    // Reserve both config locations even when absent: a successful publication
+    // must not create an invalid config for a later default or explicit scan.
+    protected.extend([default_config.as_path(), config_path.as_path()]);
     let publication = crate::output::DestinationPlan::new(&args.root, destinations, protected)?;
-    let mut report = ts_crap::scan(&ScanOptions {
-        root: args.root.clone(),
-        paths: args.paths,
-        threshold: args.threshold,
-        coverage: args.coverage.clone(),
-        diff: args.diff,
-        pr: args.pr,
-        config: args.config,
-        include: args.include,
-        exclude: args.exclude,
-        require_coverage: args.require_coverage,
-        fail_on_empty: args.fail_on_empty,
-    })?;
+    let mut extensions = ScanExtensions::default();
+    extensions.on_syntax_error = args.on_syntax_error;
+    let mut report = ts_crap::scan_with(
+        &ScanOptions {
+            root: args.root.clone(),
+            paths: args.paths,
+            threshold: args.threshold,
+            coverage: args.coverage.clone(),
+            diff: args.diff,
+            pr: args.pr,
+            config: args.config,
+            include: args.include,
+            exclude: args.exclude,
+            require_coverage: args.require_coverage,
+            fail_on_empty: args.fail_on_empty,
+        },
+        &extensions,
+    )?;
     if let Some(path) = &args.baseline {
         let snapshot = ts_crap::baseline::Baseline::load(&std::fs::read(path)?)?;
         snapshot.apply(&mut report, &args.baseline_rename)?;
+    }
+    // A baseline must record every selected function; unparsable files have none.
+    if args.write_baseline.is_some() && !report.syntax_errors.is_empty() {
+        anyhow::bail!(
+            "cannot write a baseline while {} selected files have syntax errors",
+            report.syntax_errors.len()
+        );
     }
     let baseline = args
         .write_baseline

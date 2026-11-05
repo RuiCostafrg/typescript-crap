@@ -1,5 +1,54 @@
 # Performance and CI measurement
 
+## Committed Git blob comparison
+
+The committed-byte verifier now compares through an 8 KiB buffer and a reader
+limited to Git's declared blob size. It retains the captured worktree source for
+analysis and source hashing, without allocating a second full committed-source
+buffer. CRLF/LF equivalence, lone CR bytes, batch framing and process cleanup
+remain covered by regression tests.
+
+Measured 2026-10-27 on Android/aarch64 in Ubuntu/proot, Rust 1.96.0 and Git 2.54.0.
+Baseline is `9bdcf9e7f0fa353a6f7b5569949e0cdad1fd9b19`. The same benchmark body
+was built against the retained-buffer verifier and the bounded streaming verifier;
+each executable was saved before rebuilding the other. Source and executable
+hashes, all timing samples and RSS observations are in
+[the raw measurements](measurements/committed-blob-2026-10-27.json).
+
+| Synthetic captured source | Baseline median peak RSS (KiB) | Streaming median peak RSS (KiB) |
+| --- | ---: | ---: |
+| Approximately 1 MiB | 5,652 | 3,760 |
+| Approximately 32 MiB | 69,344 | 35,536 |
+
+Each cell is the median of three fresh processes, alternating baseline/current.
+Each process constructs the source and stores its Git blob outside the timed
+region, then verifies that blob five times (one cold and four warm calls). Peak
+RSS is the parent's `VmHWM`, including setup and runtime overhead, excluding Git
+children. This isolates verification from parsing and reporting; it does not
+measure whole-scan or total process-tree memory. The 32 MiB fixture observed
+about 49% lower parent peak RSS. It is a synthetic local result, not a memory
+guarantee for arbitrary projects.
+
+Other validation builds/tests were active during these measurements. Timing
+samples are retained for inspection but do not establish a throughput speedup.
+There are no timing/RSS assertions in CI.
+
+Reproduce the current implementation with separate fresh invocations:
+
+```sh
+cargo bench --locked -j 1 --bench committed -- 1
+cargo bench --locked -j 1 --bench committed -- 32
+```
+
+For a historical comparison, copy `benches/committed.rs` into a detached checkout
+at the baseline and register its `harness = false` bench target. Set the original
+verifier's test-module path to `committed/tests.rs` so Cargo's bench cfg resolves
+the private tests. This changes test discovery only. Use separate target
+directories, save and hash each executable, and repeat each size in fresh
+processes. Prefer serial measurements without competing validation workloads.
+
+## Scan benchmarks
+
 The scan benchmark now covers both a large file and collections of small files,
 including alternating TypeScript/TSX grammars and copies of the runnable shop,
 inventory and async retry modules. Every case uses real files and source-hashed
@@ -300,3 +349,93 @@ syntax checking and package listing passed. All 15 library tests also passed
 in the release profile, including the analyzer reference test. The complete
 hosted release/platform/coverage/mutation/audit checks remain merge requirements;
 a local benchmark is not a replacement for those gates.
+
+## Continuous performance regression checks
+
+The required `test (1.90)` job now runs `scripts/check-performance.py` after its
+ordinary tests and documentation checks. This supersedes the historical notes
+above saying CI has no performance gate. The stable Rust leg still runs its full
+correctness checks. Existing coverage, mutation and audit gates are unchanged.
+Because the guard is a step inside an existing required job, a failure blocks
+merging and the release workflow's successful-main-CI prerequisite.
+
+The baseline is the exact PR base SHA, the preceding main SHA on pushes, or
+`v2.0.1` on manual dispatch. Empty, all-zero or locally unavailable event
+references fall back to `v2.0.1`; failure to resolve that tag still fails the job.
+A full checkout makes those sources available. The
+runner exports tracked baseline files, builds baseline and candidate sequentially
+with separate Cargo target directories, `--locked --release -j 1`, and the same
+Rust/Node tools. All builds finish before measurement. Untracked user files are
+never copied into the baseline. No previous runner's timings are used as a gate.
+
+Seven fixed, validated workloads protect important optimization boundaries:
+
+| Workload | Fixture | What it exercises |
+| --- | --- | --- |
+| Covered scan | 4,000 functions in 40 TS/TSX files | Source hashes, coverage lookup, parser reuse and scoring |
+| Unicode TSX | 4,000 arrows on one line with astral characters and JSX | UTF-16 columns and long-line scanning |
+| Nested functions | Depth 192 | Scope naming, child ownership and hashing |
+| SARIF | 4,000 failing functions | Complete finding serialization and fingerprints |
+| Git batch | 3,840 functions in 48 committed files, CRLF worktree snapshots | One batch verifier, pinned identities and newline equivalence |
+| Large Git blob | A 32 MiB comment and one function | Bounded blob verification memory without a second full blob copy |
+| Coverage conversion | 16,000 overlapping V8 ranges | Active-range heap scaling and conservative line evidence |
+
+Every scanner result must retain the known function count and exact fixture
+scores/coverage. SARIF must retain all 4,000 expected findings; the Node benchmark
+asserts its known line-hit result. Errors, malformed results, missing samples and
+process timeouts fail instead of being treated as speedups.
+Unicode fixture locations must match independently encoded source prefixes,
+including exact byte and UTF-16 columns by function name. Every measured SARIF
+run must retain the baseline warmup's ordered `function/v1` identities; a hash of
+those fingerprints is retained with each observation. Distinct but incorrect
+columns or replacement fingerprints cannot pass as successful optimization.
+
+Each side gets one validated warmup, then five fresh-process observations in
+alternating baseline/candidate order. Only the five paired observations count.
+This is a warm-filesystem benchmark and includes CLI startup, scan and output;
+it does not isolate parser instructions. The Node case includes process startup
+and its benchmark's warmup and five conversions. No compiler or other test runs
+concurrently on that job's runner during measurements.
+
+A metric fails only if its candidate median exceeds **both** the relative and
+absolute budget, and a majority of individual pairs also exceed both:
+
+| Metric | Relative limit | Absolute slack |
+| --- | ---: | ---: |
+| Process wall time | 1.5× baseline | 50 ms |
+| Peak RSS | 1.3× baseline | 16 MiB |
+
+These intentionally broad limits target substantial regressions on shared CI
+runners. They are not promises of stable latency or maximum performance. RSS is
+GNU time's per-run `%M` value in KiB, including kernel child accounting; it is
+neither summed process-tree memory nor a stage allocation measurement. Setup in
+the Python parent is outside the measured scanner/helper process. Each command
+has a 60-second watchdog that kills its process group on timeout.
+
+The `performance-regressions` artifact retains `results.json` for 14 days even
+when a budget fails: source SHAs, dirty-tree status, compiler/runtime versions,
+binary/module/harness hashes, every observation and budget decision. Inspect the
+raw pairs and reproduce before changing code or reviewing a budget adjustment;
+do not loosen a limit merely to make a failing change pass.
+The harness removes previous `results.json` evidence before setup, records
+metadata/build/measurement failures as failed attempts, and publishes complete
+JSON by syncing a sibling staging file and atomically replacing the result.
+If publication itself fails, the command fails and cleans its staging file;
+an earlier success is not reused after successful initial invalidation.
+
+```sh
+# Linux needs GNU time; local Android/proot can use its GNU /usr/bin/time too.
+python3 scripts/check-performance.py --baseline v2.0.1
+# Focused development run; CI always uses all seven workloads and five pairs.
+python3 scripts/check-performance.py --baseline HEAD --case unicode-tsx --pairs 3
+python3 -B -m unittest discover -s tests -p test_performance.py
+```
+
+Ordinary Rust regressions independently check a long Unicode/TSX line against
+full-prefix UTF-16 references, isolate one missing coverage statement among
+1,000 functions, reject stale evidence, and exercise seven-byte reads with
+interrupted reads and real I/O errors across the production 8192-byte boundary.
+Those tests assert behavior without wall-clock limits and run in debug, release,
+coverage and mutation CI. The Python guard tests reject known slowdowns and
+memory growth, tolerate isolated outliers, reject corrupt observations, verify
+per-process RSS isolation, and check command failures and timeout cleanup.

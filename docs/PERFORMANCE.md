@@ -252,8 +252,10 @@ Reproduce with the release `review` benchmark's `render-sarif` and
 `stream-sarif` modes at sizes 2000 and 10000. Output byte counts agree between
 the two modes. These measurements describe the current implementation at that
 revision, rather than a controlled before/after comparison. Sink output omits
-file I/O and can allow compiler optimizations; peak RSS includes fixture setup
-and parsing. No general throughput or memory reduction percentage is inferred.
+file I/O and can allow compiler optimizations; peak RSS covers the whole process,
+including fixture setup, parsing, the initial full scan, and rendering. It does
+not isolate rendering memory. No general throughput or memory reduction
+percentage is inferred.
 
 ## Lookup optimization follow-up
 

@@ -1,8 +1,14 @@
 # Quality gates
 
-CI enforces these gates for pull requests and main. Floors must not be lowered
-to make a failing change pass. Do not add production application-logic exclusions
-to mutation runs.
+Coverage and mutation CI runs in `RuiCostafrg/typescript-crap` only when
+`github.actor_id == '35194998'` (the owner), including eligible pull-request
+events and `main` runs. Bot- and contributor-triggered jobs are intentionally
+skipped; a skipped required check is not evidence that a gate passed. Before
+merging, verify successful owner-triggered coverage and mutation runs for the
+exact PR head, as described in [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+Floors must not be lowered to make a failing change pass. Do not add production
+application-logic exclusions to mutation runs.
 
 ## Rust source coverage
 

@@ -1,3 +1,5 @@
+![typescript-crap banner](assets/readme-banner.svg)
+
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
 # ts-crap

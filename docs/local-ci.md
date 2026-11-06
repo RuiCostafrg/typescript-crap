@@ -1,7 +1,8 @@
 # Local CI — `gh-signoff` (Linux only)
 
-Run the Linux CI checks on your own machine and post green `signoff/<stage>` commit
-statuses with [basecamp/gh-signoff](https://github.com/basecamp/gh-signoff).
+Run the core Linux CI checks on your own machine (a fast subset — see Notes for
+what stays hosted) and post green `signoff/<stage>` commit statuses with
+[basecamp/gh-signoff](https://github.com/basecamp/gh-signoff).
 
 Use it when free Actions minutes run out — or as a fast pre-push gate. The GitHub
 Actions workflows stay untouched; this lane covers **Linux only** (the macOS/Windows
@@ -39,6 +40,6 @@ gh signoff uninstall
 ## Notes
 
 - `scripts/mutation-score.py` / runtime mutation counting and cargo-kani proofs
-  (`verification.yml`) are deliberately left out of the local lane — they are slow
-  jobs executed on demand.
+  (`verification.yml`, `mutation.yml`) are deliberately left out of the local lane —
+  they are slow hosted jobs that run automatically on every PR and push to `main`.
 - Release-tag builds (`release.yml`, `verify-*.yml`) stay CI-only.

@@ -31,7 +31,6 @@ Push your commits first: `gh signoff` only attests pushed work. Failing stages p
 a red `signoff/<stage>` status automatically. Each status (green or red) is bound
 with `--commit` to the exact commit captured at the start of its stage, so a
 commit or push landing mid-run can never be green-lit for code it did not test.
-a red `signoff/<stage>` status automatically.
 
 ## Optional: make sign-off a merge requirement
 

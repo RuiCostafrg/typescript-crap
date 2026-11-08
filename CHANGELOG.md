@@ -4,6 +4,8 @@
 
 ### Added
 
+- README guidance on why to use the GitHub Action in CI and when npm is the
+  better fit, with measured install times.
 - The coverage importer accepts repeated `--input` files or a fresh report
   directory, conservatively reduces each report before adding independent counts,
   and rejects duplicate evidence or invalid inputs without publishing a report.

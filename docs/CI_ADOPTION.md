@@ -137,7 +137,9 @@ Before anything downloaded runs, the action:
 
 1. Downloads the archive and its `.sha256` with `gh` into a fresh directory
    under `RUNNER_TEMP`.
-2. Runs `gh attestation verify` with an exact `--cert-identity` for this
+2. Fetches the Sigstore trusted root once per install (`gh attestation trusted-root`),
+   then runs `gh attestation verify --custom-trusted-root` with an exact
+   `--cert-identity` for this
    repository's `release.yml` at `refs/tags/vVERSION`, plus `--source-ref` and
    `--deny-self-hosted-runners`. An exact identity is used because `gh`
    2.101.0 and older match `--signer-workflow` only as a prefix
@@ -185,7 +187,9 @@ paths or function names in a PR cannot forge annotations. In that mode, `--forma
 `--output`, `-o` and the text-only `--only-failing`, `--sort` and `--top`
 are rejected before `--`. `upload-sarif: true` uploads the report to code
 scanning with a pinned `github/codeql-action/upload-sarif`; only that job needs
-`security-events: write`:
+`security-events: write`. Grant it only on trusted events such as `push`, not
+on `pull_request` jobs. Private repositories also need `actions: read` and
+GitHub Code Security enabled:
 
 ```yaml
 jobs:
@@ -194,6 +198,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      actions: read # private repositories only
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

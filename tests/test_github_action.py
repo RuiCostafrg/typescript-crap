@@ -35,6 +35,11 @@ if args[:2] == ['release', 'download']:
 elif args[:2] == ['attestation', 'verify']:
     if os.path.basename(args[2]) in os.environ.get('GH_UNATTESTED', '').split():
         sys.exit('no matching attestation')
+elif args[:2] == ['attestation', 'trusted-root']:
+    if 'GH_NO_TRUSTED_ROOT' in os.environ:
+        sys.exit('tuf refresh failed')
+    if 'GH_EMPTY_TRUSTED_ROOT' not in os.environ:
+        print('{"mediaType":"trusted-root"}')
 else:
     sys.exit('unexpected gh call')
 '''
@@ -183,9 +188,11 @@ class ActionScripts(unittest.TestCase):
                     ['release', 'download', 'v2.2.1', '--repo', 'RuiCostafrg/typescript-crap',
                      '--pattern', name, '--pattern', f'{name}.sha256',
                      '--dir', str(executable.parents[2] / 'download')],
+                    ['attestation', 'trusted-root'],
                     ['attestation', 'verify', str(executable.parents[2] / 'download' / name),
                      '--repo', 'RuiCostafrg/typescript-crap', '--cert-identity', IDENTITY,
-                     '--source-ref', 'refs/tags/v2.2.1', '--deny-self-hosted-runners']])
+                     '--source-ref', 'refs/tags/v2.2.1', '--deny-self-hosted-runners',
+                     '--custom-trusted-root', str(executable.parents[2] / 'trusted-root.jsonl')]])
 
     def gh_calls(self):
         return [json.loads(line) for line in (self.root / 'calls').read_text().splitlines()]
@@ -251,9 +258,38 @@ class ActionScripts(unittest.TestCase):
         helpers = self.outputs()['helpers-dir']
         self.assertTrue((Path(helpers) / 'coverage.mjs').is_file())
         self.assertEqual((self.root / 'env').read_text(), f'TS_CRAP_HELPERS={helpers}\n')
-        attested = [call[2] for call in self.gh_calls() if call[0] == 'attestation']
-        self.assertEqual([Path(path).name for path in attested],
-                         ['ts-crap-x86_64-unknown-linux-musl.tar.xz', 'ts-crap-coverage-helpers.zip'])
+        calls = self.gh_calls()
+        self.assertEqual(calls.count(['attestation', 'trusted-root']), 1)
+        attested = [call[2] for call in calls if call[:2] == ['attestation', 'verify']]
+        self.assertEqual(sorted(Path(path).name for path in attested),
+                         ['ts-crap-coverage-helpers.zip', 'ts-crap-x86_64-unknown-linux-musl.tar.xz'])
+
+    def test_rejects_a_missing_or_empty_trusted_root_before_verifying(self):
+        for variable, message in [('GH_NO_TRUSTED_ROOT', 'could not fetch the Sigstore trusted root'),
+                                  ('GH_EMPTY_TRUSTED_ROOT', 'the Sigstore trusted root is empty')]:
+            with self.subTest(variable=variable):
+                (self.root / 'calls').write_text('')
+                self.publish()
+                self.assert_rejected(self.install(**{variable: '1'}), message)
+                self.assertFalse([c for c in self.gh_calls() if c[:2] == ['attestation', 'verify']])
+
+    def test_a_missing_asset_rejects_the_install_before_any_verification(self):
+        self.publish(helpers=False)
+        result = self.install(TS_CRAP_ACTION_HELPERS='true')
+        self.assert_rejected(result, 'has no ts-crap-coverage-helpers.zip')
+        self.assertFalse([c for c in self.gh_calls() if c[:2] == ['attestation', 'verify']])
+
+    def test_any_unattested_asset_rejects_the_install(self):
+        name = 'ts-crap-x86_64-unknown-linux-musl.tar.xz'
+        for unattested in [name, 'ts-crap-coverage-helpers.zip',
+                           f'{name} ts-crap-coverage-helpers.zip']:
+            with self.subTest(unattested=unattested):
+                self.publish()
+                result = self.install(TS_CRAP_ACTION_HELPERS='true', GH_UNATTESTED=unattested)
+                self.assert_rejected(result, 'build provenance verification failed for')
+                for asset in unattested.split():
+                    self.assertIn(asset, result.stderr)
+                self.assertEqual((self.root / 'env').read_text(), '')
 
     def test_rejects_unpinned_malformed_and_unsupported_versions(self):
         for version in ['', 'latest', '2.2', 'v', '2.2.1 ', '2.2.1;id', '$(id)', '2.2.1+build',

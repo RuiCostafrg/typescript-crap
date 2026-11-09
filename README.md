@@ -184,8 +184,9 @@ The Action is the recommended way to run ts-crap in GitHub workflows:
 - **It's pinned by design.** `version` is required and `latest` is rejected, so
   a job can't silently pick up a new release.
 - **SARIF upload is built in.** With `scan: true`, `sarif: true` and
-  `upload-sarif: true`, and `security-events: write` on the job, findings reach
-  GitHub code scanning with no separate upload step to wire up.
+  `upload-sarif: true`, and `security-events: write` on the job (plus
+  `actions: read` in private repositories), findings reach GitHub code scanning
+  with no separate upload step to wire up.
 - **The scanner doesn't need Node or a `package.json`.** It works in any
   repository, adds nothing to your lockfile, and the same step runs on Linux,
   macOS and Windows runners. Only the optional coverage helpers need Node 24+.

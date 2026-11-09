@@ -273,6 +273,12 @@ class ActionScripts(unittest.TestCase):
                 self.assert_rejected(self.install(**{variable: '1'}), message)
                 self.assertFalse([c for c in self.gh_calls() if c[:2] == ['attestation', 'verify']])
 
+    def test_a_missing_asset_rejects_the_install_before_any_verification(self):
+        self.publish(helpers=False)
+        result = self.install(TS_CRAP_ACTION_HELPERS='true')
+        self.assert_rejected(result, 'has no ts-crap-coverage-helpers.zip')
+        self.assertFalse([c for c in self.gh_calls() if c[:2] == ['attestation', 'verify']])
+
     def test_any_unattested_asset_rejects_the_install(self):
         name = 'ts-crap-x86_64-unknown-linux-musl.tar.xz'
         for unattested in [name, 'ts-crap-coverage-helpers.zip',

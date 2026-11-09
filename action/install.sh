@@ -105,15 +105,18 @@ gh release download "v$version" --repo "$REPOSITORY" "${patterns[@]}" --dir "$do
   || fail "could not download v$version assets for $target from $REPOSITORY"
 
 # gh refreshes the Sigstore trusted root over TUF on every verification, which
-# is most of its runtime. Fetch it once, through the same TUF client, per job.
+# is most of its runtime. Fetch it once per install, through the same TUF client.
 trusted_root="$work/trusted-root.jsonl"
 gh attestation trusted-root > "$trusted_root" \
   || fail "could not fetch the Sigstore trusted root"
 [[ -s "$trusted_root" ]] || fail "the Sigstore trusted root is empty"
 
-pids=()
+# Check every asset first, so a missing one can't leave a verifier running.
 for asset in "${assets[@]}"; do
   [[ -f "$download/$asset" ]] || fail "release v$version has no $asset"
+done
+pids=()
+for asset in "${assets[@]}"; do
   gh attestation verify "$download/$asset" --repo "$REPOSITORY" \
     --cert-identity "$SIGNER_URL@refs/tags/v$version" --source-ref "refs/tags/v$version" \
     --deny-self-hosted-runners --custom-trusted-root "$trusted_root" >/dev/null &

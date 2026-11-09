@@ -183,16 +183,16 @@ The Action is the recommended way to run ts-crap in GitHub workflows:
   add `npm audit signatures` yourself.
 - **It's pinned by design.** `version` is required and `latest` is rejected, so
   a job can't silently pick up a new release.
-- **SARIF is one input.** `sarif: true` and `upload-sarif: true` publish findings
-  to GitHub code scanning, with no separate upload step to wire up.
-- **It doesn't need Node or a `package.json`.** It works in any repository, adds
-  nothing to your lockfile, and the same step runs on Linux, macOS and Windows
-  runners.
+- **SARIF upload is built in.** With `scan: true`, `sarif: true` and
+  `upload-sarif: true`, and `security-events: write` on the job, findings reach
+  GitHub code scanning with no separate upload step to wire up.
+- **The scanner doesn't need Node or a `package.json`.** It works in any
+  repository, adds nothing to your lockfile, and the same step runs on Linux,
+  macOS and Windows runners. Only the optional coverage helpers need Node 24+.
 
 The verification has a small cost. On GitHub-hosted Linux runners with v2.3.2,
-installing and scanning took about 5 seconds with the Action, against about
-2 seconds with `npm install`. With the coverage helpers, the Action took about
-9 seconds.
+installing the tool and scanning the same project took about 5 seconds with the
+Action, against about 2 seconds with `npm install` followed by the scan.
 
 Prefer npm if your job already runs `npm ci` and Node, or you want the same
 pinned version for local runs and CI. Adding ts-crap as a devDependency then

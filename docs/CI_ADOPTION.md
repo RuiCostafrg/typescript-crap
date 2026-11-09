@@ -137,7 +137,9 @@ Before anything downloaded runs, the action:
 
 1. Downloads the archive and its `.sha256` with `gh` into a fresh directory
    under `RUNNER_TEMP`.
-2. Runs `gh attestation verify` with an exact `--cert-identity` for this
+2. Fetches the Sigstore trusted root once per run (`gh attestation trusted-root`),
+   then runs `gh attestation verify --custom-trusted-root` with an exact
+   `--cert-identity` for this
    repository's `release.yml` at `refs/tags/vVERSION`, plus `--source-ref` and
    `--deny-self-hosted-runners`. An exact identity is used because `gh`
    2.101.0 and older match `--signer-workflow` only as a prefix

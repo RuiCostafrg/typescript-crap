@@ -5,7 +5,10 @@
 ### Added
 
 - README guidance on why to use the GitHub Action in CI and when npm is the
-  better fit, with measured install times.
+  better fit, with measured install-and-scan times.
+- The GitHub Action fetches the Sigstore trusted root once per run and verifies
+  the release archive and coverage helpers in parallel, so `helpers: true` no
+  longer adds a second full verification. What is verified is unchanged.
 - The coverage importer accepts repeated `--input` files or a fresh report
   directory, conservatively reduces each report before adding independent counts,
   and rejects duplicate evidence or invalid inputs without publishing a report.

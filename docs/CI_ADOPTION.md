@@ -187,7 +187,9 @@ paths or function names in a PR cannot forge annotations. In that mode, `--forma
 `--output`, `-o` and the text-only `--only-failing`, `--sort` and `--top`
 are rejected before `--`. `upload-sarif: true` uploads the report to code
 scanning with a pinned `github/codeql-action/upload-sarif`; only that job needs
-`security-events: write`:
+`security-events: write`. Grant it only on trusted events such as `push`, not
+on `pull_request` jobs. Private repositories also need `actions: read` and
+GitHub Code Security enabled:
 
 ```yaml
 jobs:

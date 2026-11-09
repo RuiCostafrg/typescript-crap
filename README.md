@@ -183,11 +183,10 @@ The Action is the recommended way to run ts-crap in GitHub workflows:
   add `npm audit signatures` yourself.
 - **It's pinned by design.** `version` is required and `latest` is rejected, so
   a job can't silently pick up a new release.
-- **SARIF upload is built in.** With `scan: true`, `sarif: true` and
-  `upload-sarif: true`, and `security-events: write` on the job (plus
-  `actions: read` in private repositories), findings reach GitHub code scanning
-  with no separate upload step to wire up. Grant that write scope only to jobs
-  on trusted events such as `push`, not to `pull_request` jobs.
+- **SARIF upload is built in.** The Action can publish findings to GitHub code
+  scanning with no separate upload step. See
+  [CI adoption](docs/CI_ADOPTION.md#github-action) for the inputs and
+  permissions it needs.
 - **The scanner doesn't need Node or a `package.json`.** It works in any
   repository, adds nothing to your lockfile, and the same step runs on Linux,
   macOS and Windows runners. Only the optional coverage helpers need Node 24+.

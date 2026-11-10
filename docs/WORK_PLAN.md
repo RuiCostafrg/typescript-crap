@@ -94,7 +94,7 @@ or read them directly:
 1. Prepare the release in a PR:
    - Bump `Cargo.toml` and `Cargo.lock`.
    - Date the changelog.
-   - Point `verify-release.yml` upgrade checks at the previous published version.
+   - Set `PREVIOUS_VERSION` in `verify-release.yml` to the latest published release.
 2. Merge, then wait until `ci`, `coverage`, `mutation`, `installation`,
    `verification`, `linux-distribution` and `npm-package` all succeed on `main`.
 3. Tag on the merge commit: `git tag -a vX.Y.Z -m "ts-crap vX.Y.Z"`, then push

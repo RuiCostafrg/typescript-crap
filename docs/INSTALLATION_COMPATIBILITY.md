@@ -16,10 +16,10 @@ The [installation workflow](../.github/workflows/installation.yml) verifies a
 pinned published upgrade pair, v0.3.0 to v0.4.0. The
 [release verification workflow](../.github/workflows/verify-release.yml) repeats
 installation and upgrades using the candidate release assets before publication.
-The installer and Homebrew checks upgrade candidates from the published v2.2.1
-release; Debian package checks use the synthetic revision-zero fixture described
-in the Linux distribution guide. Update the published-version fixture
-explicitly if its supported upgrade range changes. Tagged publication requires
+The installer and Homebrew checks upgrade candidates from the published release
+set as `PREVIOUS_VERSION` in that workflow, which is moved to the latest
+published release when each release is prepared. Debian package checks use the
+synthetic revision-zero fixture described in the Linux distribution guide. Tagged publication requires
 successful installation CI on the source commit as well as the existing Rust,
 coverage, mutation, and release checks.
 

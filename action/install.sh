@@ -101,13 +101,15 @@ if [[ "$helpers" == true ]]; then
   patterns+=(--pattern ts-crap-coverage-helpers.zip --pattern ts-crap-coverage-helpers.zip.sha256)
   assets+=(ts-crap-coverage-helpers.zip)
 fi
-# GitHub occasionally answers release downloads with a transient HTTP 5xx, so
-# retry. A missing release or asset fails the same way every time: stop at once.
+# GitHub occasionally answers release downloads with a transient HTTP 5xx or a
+# network error, so try up to three times. Errors that repeat identically stop
+# at once: a missing release or asset, and HTTP 4xx other than 408 and 429.
 attempt=1
 until gh release download "v$version" --repo "$REPOSITORY" "${patterns[@]}" --dir "$download" \
   --clobber 2> "$work/download.err"; do
   cat "$work/download.err" >&2
-  if (( attempt >= 3 )) || grep -q -e 'release not found' -e 'no assets match' "$work/download.err"; then
+  if (( attempt >= 3 )) || grep -q -e 'release not found' -e 'no assets match' "$work/download.err" \
+    || { grep -q -E 'HTTP 4[0-9]{2}' "$work/download.err" && ! grep -q -E 'HTTP (408|429)' "$work/download.err"; }; then
     fail "could not download v$version assets for $target from $REPOSITORY"
   fi
   sleep $(( attempt * 2 ))

@@ -39,9 +39,10 @@
 
 ### Fixed
 
-- The GitHub Action retries a release download up to three times when GitHub
-  answers with a transient error, instead of failing the job. A missing release
-  or asset still fails at once.
+- The GitHub Action makes up to three attempts at a release download when
+  GitHub answers with a transient error (HTTP 5xx, 408, 429 or a network
+  error), instead of failing the job. A missing release or asset and other
+  HTTP 4xx errors still fail at once.
 - The published-release npm check disables Yarn's one-day `npmMinimalAgeGate`
   for its own install projects, so it passes right after a release. The README
   explains the gate for Yarn 4.15+ users.

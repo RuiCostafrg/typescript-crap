@@ -31,15 +31,18 @@ if args[:2] == ['release', 'download']:
         if remaining:
             with open(failures, 'w') as f:
                 f.write(str(remaining - 1))
-            sys.exit('HTTP 500 (https://api.github.com/repos/x/releases/assets/1)')
+            sys.exit(os.environ.get('GH_DOWNLOAD_ERROR', 'HTTP 500 (https://api.github.com/repos/x/releases/assets/1)'))
     patterns = [args[i + 1] for i, a in enumerate(args) if a == '--pattern']
     destination = args[args.index('--dir') + 1]
     source = os.path.join(os.environ['GH_RELEASES'], args[2])
     if not os.path.isdir(source):
         sys.exit('release not found')
-    for name in os.listdir(source):
-        if any(fnmatch.fnmatchcase(name, p) for p in patterns):
-            shutil.copy(os.path.join(source, name), destination)
+    matched = [name for name in os.listdir(source)
+               if any(fnmatch.fnmatchcase(name, p) for p in patterns)]
+    if not matched:
+        sys.exit('no assets match the file pattern')
+    for name in matched:
+        shutil.copy(os.path.join(source, name), destination)
 elif args[:2] == ['attestation', 'verify']:
     if os.path.basename(args[2]) in os.environ.get('GH_UNATTESTED', '').split():
         sys.exit('no matching attestation')
@@ -288,9 +291,31 @@ class ActionScripts(unittest.TestCase):
         self.assert_rejected(self.install(GH_DOWNLOAD_FAILURES=str(failures)), 'could not download')
         self.assertEqual(len([c for c in self.gh_calls() if c[:2] == ['release', 'download']]), 3)
 
-    def test_does_not_retry_a_missing_release(self):
+    def download_calls(self):
+        return len([c for c in self.gh_calls() if c[:2] == ['release', 'download']])
+
+    def test_does_not_retry_a_missing_release_or_asset(self):
         self.assert_rejected(self.install('2.99.0'), 'could not download')
-        self.assertEqual(len([c for c in self.gh_calls() if c[:2] == ['release', 'download']]), 1)
+        self.assertEqual(self.download_calls(), 1)
+        (self.root / 'calls').write_text('')
+        self.publish(target='aarch64-apple-darwin', helpers=False)
+        self.assert_rejected(self.install(), 'could not download')
+        self.assertIn('no assets match', self.install().stderr)
+        self.assertEqual(self.download_calls(), 2)
+
+    def test_retries_only_transient_http_errors(self):
+        for error, calls in [('HTTP 401: Bad credentials', 1), ('HTTP 403: Forbidden', 1),
+                             ('HTTP 404: Not Found', 1), ('HTTP 429: Too Many Requests', 3),
+                             ('HTTP 408: Request Timeout', 3), ('HTTP 502: Bad Gateway', 3),
+                             ('connection reset by peer', 3)]:
+            with self.subTest(error=error):
+                (self.root / 'calls').write_text('')
+                failures = self.root / 'failures'
+                failures.write_text('3')
+                self.publish()
+                result = self.install(GH_DOWNLOAD_FAILURES=str(failures), GH_DOWNLOAD_ERROR=error)
+                self.assert_rejected(result, 'could not download')
+                self.assertEqual(self.download_calls(), calls)
 
     def test_rejects_a_missing_or_empty_trusted_root_before_verifying(self):
         for variable, message in [('GH_NO_TRUSTED_ROOT', 'could not fetch the Sigstore trusted root'),
@@ -358,7 +383,8 @@ class ActionScripts(unittest.TestCase):
     def test_rejects_missing_assets_and_releases(self):
         self.assert_rejected(self.install('2.9.9'), 'could not download v2.9.9')
         self.publish(target='aarch64-apple-darwin')
-        self.assert_rejected(self.install(), 'has no ts-crap-x86_64-unknown-linux-musl.tar.xz')
+        # Real gh fails when no pattern matches; a partial match is caught later.
+        self.assert_rejected(self.install(), 'could not download v2.2.1')
 
     def test_rejects_wrong_or_ambiguous_executables(self):
         self.publish(reported='2.2.0')

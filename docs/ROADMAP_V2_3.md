@@ -175,8 +175,9 @@ and the current plan:
 - **v2.4.0 (released 2026-11-10):** 1.5, 2.1, 2.2, Phase 3 and the 1.6
   multi-input importer. Completes the Vitest/Jest docs and adds opt-in controls
   for the two ways a scan can silently skip code or abort entirely.
-- **Next release (planned):** the executed 1.6 workspace/shard recipes, then 2.3,
-  2.4 and 2.5: monorepo, shard and PR-noise improvements.
+- **Next release (planned):** the executed 1.6 workspace/shard recipes, then 2.3
+  (inline suppression comments), 2.4 (changed-function-only diff mode) and 2.5
+  (per-path thresholds for monorepos).
 - **Later / on demand:** 2.6 (crates.io, after the owner's first publish) and 2.7.
 
 All changes are additive under the 2.x compatibility contract

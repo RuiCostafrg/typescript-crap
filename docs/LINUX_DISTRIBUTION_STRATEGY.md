@@ -1,9 +1,9 @@
 # Linux distribution strategy
 
-Drafted 2026-10-30 for discussion. Status (2026-11-02): B (installer
+Drafted 2026-10-30 for discussion. Status (2026-11-10): B (installer
 hardening) and C (GitHub Action) shipped in v2.3.0, and A (npm package
-`typescript-crap`) in v2.3.2; D is planned for
-v2.4.0. See
+`typescript-crap`) in v2.3.2; D waits for the owner's first crates.io
+publish (roadmap 2.6). See
 [ROADMAP_V2_3.md](ROADMAP_V2_3.md) for the feature roadmap and
 [LINUX_DISTRIBUTION.md](LINUX_DISTRIBUTION.md) for what ships today.
 
@@ -245,7 +245,8 @@ Schedule (owner decision, 2026-10-30, updated 2026-11-02; see
 - A is merged as `typescript-crap` and ships in v2.3.2, with staged publishing. The
   Vitest/Jest one-step command is then
   `npx typescript-crap coverage --framework vitest --scan`.
-- D stays in v2.4.0.
+- D did not ship in v2.4.0. It follows the owner's first crates.io publish
+  (roadmap 2.6).
 
 ## Decisions needed from the owner
 

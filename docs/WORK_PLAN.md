@@ -1,6 +1,6 @@
 # Work plan and handoff (post-v2.2.1)
 
-Last updated 2026-11-05. This file preserves decisions and the parallel work
+Last updated 2026-11-10. This file preserves decisions and the parallel work
 split so any session can resume after a context reset. Update the status table
 when a stream changes state.
 

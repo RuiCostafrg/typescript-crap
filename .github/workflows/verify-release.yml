@@ -10,7 +10,7 @@ permissions:
 env:
   # Published release whose installers and formula the upgrade checks start
   # from. Move it to the latest published release when preparing a release.
-  PREVIOUS_VERSION: 2.3.2
+  PREVIOUS_VERSION: 2.4.0
 jobs:
   portable-linux:
     name: Portable Linux and Debian (${{ matrix.target }})

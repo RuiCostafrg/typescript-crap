@@ -238,7 +238,7 @@ review for little benefit.
 | Later | GHCR image (H), AUR/Nix (G), RPM (F), APT repository (E) | Add when users ask for them. |
 | No | Snap/Flatpak (I) | Poor fit for a CLI. |
 
-Schedule (owner decision, 2026-10-30, updated 2026-11-02; see
+Schedule (owner decision, 2026-10-30, updated 2026-11-10; see
 [WORK_PLAN.md](WORK_PLAN.md)):
 
 - B and C are merged and ship in v2.3.0.

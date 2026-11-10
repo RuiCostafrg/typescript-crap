@@ -101,8 +101,22 @@ if [[ "$helpers" == true ]]; then
   patterns+=(--pattern ts-crap-coverage-helpers.zip --pattern ts-crap-coverage-helpers.zip.sha256)
   assets+=(ts-crap-coverage-helpers.zip)
 fi
-gh release download "v$version" --repo "$REPOSITORY" "${patterns[@]}" --dir "$download" \
-  || fail "could not download v$version assets for $target from $REPOSITORY"
+# GitHub occasionally answers release downloads with a transient HTTP 5xx or a
+# network error, so try up to three times. "release not found" is retried too:
+# gh reports it when its published and draft lookups both fail, even if the
+# published lookup failed transiently. A missing asset in a found release, and
+# HTTP 4xx other than 408 and 429, repeat identically and stop at once.
+attempt=1
+until gh release download "v$version" --repo "$REPOSITORY" "${patterns[@]}" --dir "$download" \
+  --clobber 2> "$work/download.err"; do
+  cat "$work/download.err" >&2
+  if (( attempt >= 3 )) || grep -q -e 'no assets match' "$work/download.err" \
+    || { grep -q -E 'HTTP 4[0-9]{2}' "$work/download.err" && ! grep -q -E 'HTTP (408|429)' "$work/download.err"; }; then
+    fail "could not download v$version assets for $target from $REPOSITORY"
+  fi
+  sleep $(( attempt * 2 ))
+  attempt=$(( attempt + 1 ))
+done
 
 # gh refreshes the Sigstore trusted root over TUF on every verification, which
 # is most of its runtime. Fetch it once per install, through the same TUF client.

@@ -136,7 +136,7 @@ replaces the manual install step in the example workflow. It installs the
 Before anything downloaded runs, the action:
 
 1. Downloads the archive and its `.sha256` with `gh` into a fresh directory
-   under `RUNNER_TEMP`.
+   under `RUNNER_TEMP`, making up to three attempts when the error is transient.
 2. Fetches the Sigstore trusted root once per install (`gh attestation trusted-root`),
    then runs `gh attestation verify --custom-trusted-root` with an exact
    `--cert-identity` for this

@@ -94,7 +94,7 @@ installs, pin a version instead. Each release's installer installs only that
 release and embeds the SHA-256 of every archive it can download:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/RuiCostafrg/typescript-crap/releases/download/v2.3.2/ts-crap-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/RuiCostafrg/typescript-crap/releases/download/v2.4.0/ts-crap-installer.sh | sh
 ```
 
 To check the installer before running it, download it, verify its
@@ -102,7 +102,7 @@ To check the installer before running it, download it, verify its
 only then run the verified file:
 
 ```sh
-version=2.3.2
+version=2.4.0
 installer_dir=$(mktemp -d) &&
 curl --proto '=https' --tlsv1.2 -LsSf -o "$installer_dir/ts-crap-installer.sh" \
   "https://github.com/RuiCostafrg/typescript-crap/releases/download/v$version/ts-crap-installer.sh" &&
@@ -163,7 +163,7 @@ adds `ts-crap` to `PATH`. It can also run the gate and upload SARIF:
 ```yaml
 - uses: RuiCostafrg/typescript-crap@<full commit SHA> # vX.Y.Z
   with:
-    version: 2.3.2
+    version: 2.4.0
 ```
 
 Pinning the full commit SHA, with the release as a comment, is the recommended

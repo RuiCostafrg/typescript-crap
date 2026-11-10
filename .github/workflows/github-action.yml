@@ -41,7 +41,7 @@ jobs:
       - id: install
         uses: ./
         with:
-          version: 2.3.2
+          version: 2.4.0
           helpers: true
       - name: Check the installed tool, helpers and outputs
         shell: bash
@@ -53,8 +53,8 @@ jobs:
           OUT_HELPERS: ${{ steps.install.outputs.helpers-dir }}
         run: |
           test "$OUT_TARGET" = "$TARGET"
-          test "$OUT_VERSION" = 2.3.2
-          test "$(ts-crap --version | tr -d '\r')" = "ts-crap 2.3.2"
+          test "$OUT_VERSION" = 2.4.0
+          test "$(ts-crap --version | tr -d '\r')" = "ts-crap 2.4.0"
           test -f "$OUT_EXECUTABLE"
           test "$TS_CRAP_HELPERS" = "$OUT_HELPERS"
           test -f "$TS_CRAP_HELPERS/coverage.mjs"
@@ -66,7 +66,7 @@ jobs:
       - id: scan
         uses: ./
         with:
-          version: v2.3.2
+          version: v2.4.0
           scan: true
           sarif: true
           args: |
@@ -94,7 +94,7 @@ jobs:
         continue-on-error: true
         uses: ./
         with:
-          version: 2.3.2
+          version: 2.4.0
           scan: true
           sarif: true
           args: |
@@ -106,7 +106,7 @@ jobs:
         continue-on-error: true
         uses: ./
         with:
-          version: 2.3.2
+          version: 2.4.0
           scan: true
           args: |
             --root
@@ -115,7 +115,7 @@ jobs:
         continue-on-error: true
         uses: ./
         with:
-          version: 2.3.2
+          version: 2.4.0
           sarif: true
           upload-sarif: true
       - id: latest
@@ -178,7 +178,7 @@ jobs:
           persist-credentials: false
       - uses: ./
         with:
-          version: 2.3.2
+          version: 2.4.0
           scan: true
           sarif: true
           upload-sarif: true

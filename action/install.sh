@@ -102,13 +102,15 @@ if [[ "$helpers" == true ]]; then
   assets+=(ts-crap-coverage-helpers.zip)
 fi
 # GitHub occasionally answers release downloads with a transient HTTP 5xx or a
-# network error, so try up to three times. Errors that repeat identically stop
-# at once: a missing release or asset, and HTTP 4xx other than 408 and 429.
+# network error, so try up to three times. "release not found" is retried too:
+# gh reports it when its published and draft lookups both fail, even if the
+# published lookup failed transiently. A missing asset in a found release, and
+# HTTP 4xx other than 408 and 429, repeat identically and stop at once.
 attempt=1
 until gh release download "v$version" --repo "$REPOSITORY" "${patterns[@]}" --dir "$download" \
   --clobber 2> "$work/download.err"; do
   cat "$work/download.err" >&2
-  if (( attempt >= 3 )) || grep -q -e 'release not found' -e 'no assets match' "$work/download.err" \
+  if (( attempt >= 3 )) || grep -q -e 'no assets match' "$work/download.err" \
     || { grep -q -E 'HTTP 4[0-9]{2}' "$work/download.err" && ! grep -q -E 'HTTP (408|429)' "$work/download.err"; }; then
     fail "could not download v$version assets for $target from $REPOSITORY"
   fi

@@ -294,14 +294,17 @@ class ActionScripts(unittest.TestCase):
     def download_calls(self):
         return len([c for c in self.gh_calls() if c[:2] == ['release', 'download']])
 
-    def test_does_not_retry_a_missing_release_or_asset(self):
+    def test_retries_a_missing_release_but_not_a_missing_asset(self):
+        # gh reports "release not found" when a transient error hits its
+        # published lookup and the draft lookup finds nothing, so retry it.
         self.assert_rejected(self.install('2.99.0'), 'could not download')
-        self.assertEqual(self.download_calls(), 1)
+        self.assertEqual(self.download_calls(), 3)
         (self.root / 'calls').write_text('')
         self.publish(target='aarch64-apple-darwin', helpers=False)
-        self.assert_rejected(self.install(), 'could not download')
-        self.assertIn('no assets match', self.install().stderr)
-        self.assertEqual(self.download_calls(), 2)
+        result = self.install()
+        self.assert_rejected(result, 'could not download')
+        self.assertIn('no assets match', result.stderr)
+        self.assertEqual(self.download_calls(), 1)
 
     def test_retries_only_transient_http_errors(self):
         for error, calls in [('HTTP 401: Bad credentials', 1), ('HTTP 403: Forbidden', 1),

@@ -385,6 +385,10 @@ class ActionScripts(unittest.TestCase):
         self.publish(target='aarch64-apple-darwin')
         # Real gh fails when no pattern matches; a partial match is caught later.
         self.assert_rejected(self.install(), 'could not download v2.2.1')
+        (self.root / 'calls').write_text('')
+        self.assert_rejected(self.install(TS_CRAP_ACTION_HELPERS='true'),
+                             'has no ts-crap-x86_64-unknown-linux-musl.tar.xz')
+        self.assertFalse([c for c in self.gh_calls() if c[:2] == ['attestation', 'verify']])
 
     def test_rejects_wrong_or_ambiguous_executables(self):
         self.publish(reported='2.2.0')

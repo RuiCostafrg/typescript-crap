@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 2.4.0 — 2026-11-10
+
+Adds configurable excluded directories, syntax-error reporting that keeps
+scanning, and coverage report merging. The GitHub Action now verifies with one
+trusted-root fetch per install and retries transient download errors.
 
 ### Added
 

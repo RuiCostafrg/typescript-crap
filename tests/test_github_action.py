@@ -24,6 +24,14 @@ args = sys.argv[1:]
 with open(os.environ['GH_CALLS'], 'a') as calls:
     calls.write(json.dumps(args) + '\n')
 if args[:2] == ['release', 'download']:
+    failures = os.environ.get('GH_DOWNLOAD_FAILURES')
+    if failures:
+        with open(failures) as f:
+            remaining = int(f.read() or 0)
+        if remaining:
+            with open(failures, 'w') as f:
+                f.write(str(remaining - 1))
+            sys.exit('HTTP 500 (https://api.github.com/repos/x/releases/assets/1)')
     patterns = [args[i + 1] for i, a in enumerate(args) if a == '--pattern']
     destination = args[args.index('--dir') + 1]
     source = os.path.join(os.environ['GH_RELEASES'], args[2])
@@ -187,7 +195,7 @@ class ActionScripts(unittest.TestCase):
                 self.assertEqual(calls, [
                     ['release', 'download', 'v2.2.1', '--repo', 'RuiCostafrg/typescript-crap',
                      '--pattern', name, '--pattern', f'{name}.sha256',
-                     '--dir', str(executable.parents[2] / 'download')],
+                     '--dir', str(executable.parents[2] / 'download'), '--clobber'],
                     ['attestation', 'trusted-root'],
                     ['attestation', 'verify', str(executable.parents[2] / 'download' / name),
                      '--repo', 'RuiCostafrg/typescript-crap', '--cert-identity', IDENTITY,
@@ -263,6 +271,26 @@ class ActionScripts(unittest.TestCase):
         attested = [call[2] for call in calls if call[:2] == ['attestation', 'verify']]
         self.assertEqual(sorted(Path(path).name for path in attested),
                          ['ts-crap-coverage-helpers.zip', 'ts-crap-x86_64-unknown-linux-musl.tar.xz'])
+
+    def test_retries_transient_download_failures(self):
+        failures = self.root / 'failures'
+        failures.write_text('2')
+        self.publish()
+        result = self.install(GH_DOWNLOAD_FAILURES=str(failures))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('HTTP 500', result.stderr)
+        self.assertEqual(len([c for c in self.gh_calls() if c[:2] == ['release', 'download']]), 3)
+
+    def test_gives_up_after_three_download_failures(self):
+        failures = self.root / 'failures'
+        failures.write_text('3')
+        self.publish()
+        self.assert_rejected(self.install(GH_DOWNLOAD_FAILURES=str(failures)), 'could not download')
+        self.assertEqual(len([c for c in self.gh_calls() if c[:2] == ['release', 'download']]), 3)
+
+    def test_does_not_retry_a_missing_release(self):
+        self.assert_rejected(self.install('2.99.0'), 'could not download')
+        self.assertEqual(len([c for c in self.gh_calls() if c[:2] == ['release', 'download']]), 1)
 
     def test_rejects_a_missing_or_empty_trusted_root_before_verifying(self):
         for variable, message in [('GH_NO_TRUSTED_ROOT', 'could not fetch the Sigstore trusted root'),

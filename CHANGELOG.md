@@ -39,6 +39,9 @@
 
 ### Fixed
 
+- The GitHub Action retries a release download up to three times when GitHub
+  answers with a transient error, instead of failing the job. A missing release
+  or asset still fails at once.
 - The published-release npm check disables Yarn's one-day `npmMinimalAgeGate`
   for its own install projects, so it passes right after a release. The README
   explains the gate for Yarn 4.15+ users.

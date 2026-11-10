@@ -101,8 +101,18 @@ if [[ "$helpers" == true ]]; then
   patterns+=(--pattern ts-crap-coverage-helpers.zip --pattern ts-crap-coverage-helpers.zip.sha256)
   assets+=(ts-crap-coverage-helpers.zip)
 fi
-gh release download "v$version" --repo "$REPOSITORY" "${patterns[@]}" --dir "$download" \
-  || fail "could not download v$version assets for $target from $REPOSITORY"
+# GitHub occasionally answers release downloads with a transient HTTP 5xx, so
+# retry. A missing release or asset fails the same way every time: stop at once.
+attempt=1
+until gh release download "v$version" --repo "$REPOSITORY" "${patterns[@]}" --dir "$download" \
+  --clobber 2> "$work/download.err"; do
+  cat "$work/download.err" >&2
+  if (( attempt >= 3 )) || grep -q -e 'release not found' -e 'no assets match' "$work/download.err"; then
+    fail "could not download v$version assets for $target from $REPOSITORY"
+  fi
+  sleep $(( attempt * 2 ))
+  attempt=$(( attempt + 1 ))
+done
 
 # gh refreshes the Sigstore trusted root over TUF on every verification, which
 # is most of its runtime. Fetch it once per install, through the same TUF client.

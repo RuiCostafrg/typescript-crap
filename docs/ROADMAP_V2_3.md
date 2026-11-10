@@ -162,7 +162,7 @@ follows [WORK_PLAN.md](WORK_PLAN.md):
   `npx typescript-crap coverage --framework vitest --scan` (or `jest`, or
   `auto`), and it stays in
   the coverage helper bundle as `coverage-run.mjs`.
-- crates.io (2.6) stays in v2.4.0.
+- crates.io (2.6) stays later, after the owner's first publish.
 
 ## Release grouping
 
@@ -172,10 +172,11 @@ and the current plan:
 - **v2.3.0 (released):** 1.1, 1.2, 1.3. The one-step command, diagnostics and the
   version matrix, plus the npm package.
 - **v2.3.1 (released):** 1.4. Jest transformers and the `v8` provider.
-- **v2.4.0 (planned):** 1.5, 2.1, 2.2, Phase 3, then 1.6, 2.3, 2.4, 2.5.
-  Completes the Vitest/Jest docs and adds opt-in controls for the two ways a scan
-  can silently skip code or abort entirely, then monorepo, shard and PR-noise
-  improvements.
+- **v2.4.0 (released 2026-11-10):** 1.5, 2.1, 2.2, Phase 3 and the 1.6
+  multi-input importer. Completes the Vitest/Jest docs and adds opt-in controls
+  for the two ways a scan can silently skip code or abort entirely.
+- **Next release (planned):** the executed 1.6 workspace/shard recipes, then 2.3,
+  2.4 and 2.5: monorepo, shard and PR-noise improvements.
 - **Later / on demand:** 2.6 (crates.io, after the owner's first publish) and 2.7.
 
 All changes are additive under the 2.x compatibility contract

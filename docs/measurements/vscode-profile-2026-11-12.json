@@ -1,0 +1,93 @@
+{
+  "date": "2026-11-12",
+  "purpose": "Per-stage profile of a full scan on a large real project, and throwaway prototypes of four optimizations. Evidence for docs/PERFORMANCE_PLAN.md. Not a release measurement.",
+  "environment": {
+    "machine": "Android/aarch64 phone, Ubuntu in proot (syscalls are intercepted, so filesystem-heavy stages are inflated relative to native Linux)",
+    "cpu_max_khz": [1804800, 1804800, 1804800, 1804800, 2419200, 2419200, 2419200, 3091200],
+    "rustc": "1.96.0",
+    "target": "aarch64 glibc (the shipped Linux binary is static musl and was not measured)",
+    "noise": "Thermal and scheduling variance is large. The same stage varied by 20-40% between runs; baseline selection ranged 57-101 s. Read the numbers as orders of magnitude."
+  },
+  "source": {
+    "ts_crap_commit": "9907f22 (v2.4.0 + CI commits)",
+    "instrumentation": "Benchmark-only spans (Instant + atomics) around stages; prototypes toggled at run time with an environment variable so one executable measured every variant.",
+    "prototype_scope": "Scratch copy outside the repository. No production file was changed."
+  },
+  "corpus": {
+    "name": "microsoft/vscode",
+    "commit": "f42f0a1102cedb0047aed92bcdf1f4ba422d02b8",
+    "version": "1.147.0",
+    "selected_files": 11473,
+    "source_bytes": 186640728,
+    "functions": 370009,
+    "unparsable_files": 11,
+    "json_report_bytes": 158452789
+  },
+  "command": "ts-crap --root corpus/vscode --on-syntax-error report --format json --output out.json (no coverage, no baseline)",
+  "output_equivalence": {
+    "report_sha256": "8cf1de34dad327b1e916dc57251c99fa662a302c5efa0b0e30731e2d96eef17a",
+    "identical_across": ["baseline", "kind", "sel+pre", "kind+sel+pre", "all at 1, 2, 4 and 8 workers"]
+  },
+  "variants": {
+    "kind": "Per-grammar flag tables indexed by kind_id, cached field ids, one buffered SHA-256 update stream per function",
+    "sel": "Walked entries: each directory checked for symlinks once per scan; no per-file canonicalize",
+    "pre": "DestinationPlan::validate compares (dev, ino) from one lstat for regular files instead of stat + open + fstat",
+    "par": "std::thread::scope workers pulling file indexes from an atomic counter; results merged in file order (naive: unbounded result buffer)"
+  },
+  "baseline_stage_profile_ms": {
+    "note": "Unpinned run with an existing output file, so both validation walks ran. Spans nest: collect is inside analyze; metrics and hash are inside collect.",
+    "selection_total": 56730.0,
+    "selection_checked": 49593.6,
+    "read_to_string": 12560.8,
+    "analyze_total": 58157.8,
+    "parse": 30571.7,
+    "collect_total": 23840.6,
+    "collect_metrics_walks": 9417.9,
+    "collect_hash_walk": 7507.2,
+    "coverage_for_source": 5.9,
+    "score_and_push": 192.3,
+    "sort": 100.6,
+    "preflight_validate": 19262.6,
+    "render_and_publish_with_one_validate": 15127.4,
+    "render_and_publish_without_validate": 848.8
+  },
+  "runs_unpinned": [
+    {"variant": "baseline", "output_existed": false, "wall_s": 155.96, "user_s": 63.58, "sys_s": 12.76, "peak_rss_kib": 199380},
+    {"variant": "baseline", "output_existed": true, "wall_s": 162.41, "user_s": 64.47, "sys_s": 18.73, "peak_rss_kib": 198896},
+    {"variant": "kind", "output_existed": true, "wall_s": 167.23, "user_s": 46.36, "sys_s": 18.03, "peak_rss_kib": 198960, "collect_total_ms": 14319.2, "collect_metrics_walks_ms": 4238.4, "collect_hash_walk_ms": 5018.3},
+    {"variant": "sel+pre", "output_existed": true, "wall_s": 87.35, "user_s": 49.84, "sys_s": 5.68, "peak_rss_kib": 198916, "selection_total_ms": 10739.4, "selection_checked_ms": 1601.4, "preflight_validate_ms": 10390.0},
+    {"variant": "kind+sel+pre+par", "workers": 8, "output_existed": true, "wall_s": 61.40, "user_s": 108.39, "sys_s": 18.57, "peak_rss_kib": 390836},
+    {"variant": "kind+sel+pre+par", "workers": 1, "output_existed": false, "wall_s": 107.29, "user_s": 62.31, "sys_s": 4.52, "peak_rss_kib": 280940},
+    {"variant": "kind+sel+pre+par", "workers": 2, "output_existed": false, "wall_s": 52.26, "user_s": 64.45, "sys_s": 4.72, "peak_rss_kib": 336692},
+    {"variant": "kind+sel+pre+par", "workers": 4, "output_existed": false, "wall_s": 45.73, "user_s": 76.34, "sys_s": 7.67, "peak_rss_kib": 382576},
+    {"variant": "kind+sel+pre+par", "workers": 8, "output_existed": false, "wall_s": 48.10, "user_s": 102.44, "sys_s": 17.16, "peak_rss_kib": 388416}
+  ],
+  "runs_pinned_to_cores_4_to_7": {
+    "note": "taskset -c 4-7, output file absent (no validation walk), run back to back.",
+    "runs": [
+      {"variant": "baseline", "wall_s": 152.36, "user_s": 63.08, "sys_s": 19.32, "peak_rss_kib": 199432, "selection_total_ms": 93509.5, "read_ms": 9999.3, "analyze_ms": 47384.4, "parse_ms": 24749.0, "collect_ms": 19876.1},
+      {"variant": "kind", "wall_s": 159.23, "user_s": 62.35, "sys_s": 21.32, "peak_rss_kib": 199520, "selection_total_ms": 101068.9, "read_ms": 12041.2, "analyze_ms": 44617.4, "parse_ms": 26363.8, "collect_ms": 15289.0},
+      {"variant": "kind+sel+pre", "wall_s": 68.25, "user_s": 49.31, "sys_s": 2.89, "peak_rss_kib": 199480, "selection_total_ms": 9353.8, "read_ms": 12563.8, "analyze_ms": 44858.5, "parse_ms": 26598.4, "collect_ms": 15255.0},
+      {"variant": "kind+sel+pre+par", "workers": 2, "wall_s": 54.66, "user_s": 68.78, "sys_s": 4.13, "peak_rss_kib": 319888},
+      {"variant": "kind+sel+pre+par", "workers": 4, "wall_s": 41.81, "user_s": 77.51, "sys_s": 8.23, "peak_rss_kib": 397436}
+    ]
+  },
+  "download_measurements_v2_4_0": {
+    "note": "Measured from the same proot machine; byte counts are exact, seconds are indicative.",
+    "linux_x86_64_musl_tar_xz_bytes": 1419452,
+    "unpacked_binary_bytes": 7123640,
+    "symtab_plus_strtab_bytes": 576605,
+    "symtab_plus_strtab_xz_bytes": 109308,
+    "npm_linux_x64_tarball_bytes": 1918996,
+    "deb_amd64_bytes": 1944198,
+    "recompression_of_binary_bytes": {"xz_6": 1397680, "xz_9e": 1399468, "zstd_19": 1534154, "gzip_9": 1914329},
+    "archive_download_s": [0.63, 0.46],
+    "small_asset_request_s": "0.2-0.5 each",
+    "gh_release_download_archive_and_sha256_s": 1.98,
+    "gh_attestation_trusted_root_s": "5.0-5.6",
+    "gh_attestation_verify_with_custom_trusted_root_s": [2.14, 2.18],
+    "gh_attestation_verify_default_trusted_root_s": 5.6,
+    "action_repository_archive_gzip_bytes": 609657,
+    "action_directory_only_archive_gzip_bytes": 7640
+  }
+}

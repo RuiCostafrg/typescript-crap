@@ -1,7 +1,9 @@
 """Regression tests for performance budgets, observations and fixture validity."""
+import hashlib
 import importlib.util
 import os
 import json
+import re
 from pathlib import Path
 import sys
 import subprocess
@@ -21,15 +23,22 @@ class PerformanceTests(unittest.TestCase):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')
         start = workflow.index('          if [[ -z "${BASELINE_REF:-}"')
         end = workflow.index('          if [[ ! -x /usr/bin/time ]]', start)
-        script = workflow[start:end] + '\nprintf "%s" "$BASELINE_REF"\n'
-        for reference, expected in [('HEAD', 'HEAD'), ('', 'v2.0.1'),
-                                    ('0' * 40, 'v2.0.1'), ('no-such-baseline-ref', 'v2.0.1'),
-                                    ('$(exit 99)', 'v2.0.1'), ('--help', 'v2.0.1')]:
-            with self.subTest(reference=reference):
-                result = subprocess.run(['bash', '-e', '-c', script], cwd=ROOT,
-                                        env=dict(os.environ, BASELINE_REF=reference),
+        script = workflow[start:end] + '\nprintf "%s|%s" "$BASELINE_REF" "${output_policy[*]}"\n'
+        allowed = '--allow-output-change'
+        for reference, change, expected in [
+                ('HEAD', 'false', 'HEAD|'), ('HEAD', 'true', f'HEAD|{allowed}'), ('HEAD', '', 'HEAD|'),
+                ('HEAD', 'yes', 'HEAD|'), ('', 'false', f'v2.0.1|{allowed}'),
+                ('0' * 40, 'false', f'v2.0.1|{allowed}'),
+                ('no-such-baseline-ref', 'false', f'v2.0.1|{allowed}'),
+                ('$(exit 99)', 'false', f'v2.0.1|{allowed}'), ('--help', 'false', f'v2.0.1|{allowed}')]:
+            with self.subTest(reference=reference, change=change):
+                result = subprocess.run(['bash', '-e', '-u', '-c', script], cwd=ROOT,
+                                        env=dict(os.environ, BASELINE_REF=reference, OUTPUT_CHANGE=change),
                                         capture_output=True, text=True, check=True)
                 self.assertEqual(result.stdout, expected)
+        self.assertIn('"$BASELINE_REF" "${output_policy[@]}"', workflow)
+        self.assertIn("OUTPUT_CHANGE: ${{ github.event_name != 'pull_request' || "
+                      "contains(github.event.pull_request.labels.*.name, 'output-change') }}", workflow)
 
     def test_unicode_fixture_bytes_do_not_depend_on_locale(self):
         """Generate the real fixture with ASCII locale and Python UTF-8 coercion disabled."""
@@ -246,6 +255,198 @@ assert len(case['locations'])==4000
         bad['runs'][0]['results'][0]['locations'][0]['physicalLocation']['region']['startLine'] = 999
         with self.assertRaises(ValueError):
             performance.validate(case, bad)
+
+    def test_reports_must_match_baseline_unless_a_change_is_allowed(self):
+        """Different candidate reports fail; nondeterministic reports fail even when allowed."""
+        def rows(*digests):
+            return [{'output_sha256': digest} for digest in digests]
+        same = {'baseline': rows('a', 'a', 'a'), 'candidate': rows('a', 'a', 'a')}
+        changed = {'baseline': rows('a', 'a', 'a'), 'candidate': rows('b', 'b', 'b')}
+        self.assertFalse(performance.compare_outputs('case', same, False))
+        self.assertFalse(performance.compare_outputs('case', same, True))
+        with self.assertRaisesRegex(ValueError, 'case: candidate report differs from the baseline'):
+            performance.compare_outputs('case', changed, False)
+        with patch('builtins.print') as printed:
+            self.assertTrue(performance.compare_outputs('case', changed, True))
+        self.assertIn('::notice', printed.call_args.args[0])
+        for side in ('baseline', 'candidate'):
+            unstable = {'baseline': rows('a', 'a', 'a'), 'candidate': rows('a', 'a', 'a')}
+            unstable[side] = rows('a', 'c', 'a')
+            for allow in (False, True):
+                with self.subTest(side=side, allow=allow), \
+                        self.assertRaisesRegex(ValueError, f'{side} reports differ between runs'):
+                    performance.compare_outputs('case', unstable, allow)
+
+    def test_every_scanner_case_compares_reports_and_node_case_does_not(self):
+        """compare_case wires the policy for every scanner workload, including warmup order."""
+        args = type('Args', (), {'pairs': 3, 'time_ratio': 1.5, 'time_slack_ms': 50,
+                                 'rss_ratio': 1.3, 'rss_slack_kib': 16384})
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'root'
+            (root / 'deep').mkdir(parents=True)
+            (root / 'deep/a.ts').write_text('x' * 7)
+            (root / '.git').mkdir()
+            (root / '.git/ignored.ts').write_text('not a fixture source')
+            sides = {'baseline': None, 'candidate': None}
+            for name in performance.CASES:
+                for allow, candidate in [(False, 'same'), (True, 'same'), (True, 'other'), (False, 'other'),
+                                         (False, 'warmup'), (True, 'warmup')]:
+                    args.allow_output_change = allow
+                    expectations = []
+                    def observed(case, scanner, module, directory, label, expected=None):
+                        """Return a fixed measurement whose report digest depends on the side."""
+                        expectations.append(expected)
+                        digest = candidate if label.endswith('candidate') else 'same'
+                        if candidate == 'warmup':  # Only the candidate warmup differs.
+                            digest = 'other' if label.endswith('warmup-candidate') else 'same'
+                        return {'wall_ms': 1.0, 'peak_rss_kib': 1, 'output_sha256': digest,
+                                'fingerprints_sha256': 'f'}
+                    case = {'name': name, 'count': 1, 'root': root}
+                    with self.subTest(name=name, allow=allow, candidate=candidate), \
+                            patch.object(performance, 'execute', side_effect=observed), \
+                            patch('builtins.print'):
+                        if name != 'coverage-ranges' and candidate == 'other' and not allow:
+                            with self.assertRaisesRegex(ValueError, 'differs from the baseline'):
+                                performance.compare_case(case, sides, sides, root, args)
+                            continue
+                        if name != 'coverage-ranges' and candidate == 'warmup':
+                            # A warmup that disagrees with later runs fails even when allowed.
+                            with self.assertRaisesRegex(ValueError, 'candidate reports differ between runs'):
+                                performance.compare_case(case, sides, sides, root, args)
+                            continue
+                        result = performance.compare_case(case, sides, sides, root, args)
+                        self.assertEqual(result['source_bytes'], 7)  # Sources below the root count.
+                        # SARIF identities are pinned to the baseline unless a change is allowed.
+                        pinned = 'f' if name == 'sarif' and not allow else None
+                        self.assertEqual(expectations, [None] + [pinned] * (1 + 2 * args.pairs))
+                        if name == 'coverage-ranges':
+                            self.assertNotIn('output_changed', result)
+                        else:
+                            self.assertEqual(result['output_changed'], candidate == 'other')
+                            self.assertNotEqual(candidate, 'warmup')
+
+    def test_new_workloads_have_the_promised_shape(self):
+        """Mixed sizes, deep paths, an existing destination and a matching baseline snapshot."""
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            mixed = performance.fixture('mixed-corpus', workspace / 'mixed-corpus')
+            files = performance.sources(mixed['root'])
+            sizes = sorted(path.stat().st_size for path in files)
+            self.assertGreaterEqual(len(files), 300)
+            self.assertEqual(sum(size >= 2 * 1024 * 1024 for size in sizes), len(performance.LARGE_SOURCES))
+            self.assertLess(sizes[-len(performance.LARGE_SOURCES) - 1], 4096)
+            self.assertTrue(any(path.suffix == '.tsx' for path in files))
+            text = ''.join(path.read_text() for path in files)
+            self.assertEqual(text.count('function f'), mixed['count'])
+            self.assertEqual(text.count('if(flag)'), mixed['count'])  # Complexity 2 everywhere.
+            deep = performance.fixture('deep-tree', workspace / 'deep-tree')
+            files = performance.sources(deep['root'])
+            depths = [len(path.relative_to(deep['root']).parts) - 1 for path in files]
+            self.assertEqual(max(depths), performance.DEPTH)
+            self.assertEqual(len(files) * performance.FUNCTIONS_PER_FILE, deep['count'])
+            existing = performance.fixture('existing-output', workspace / 'existing-output')
+            self.assertGreaterEqual(len(performance.sources(existing['root'])), 1000)
+            self.assertNotIn(existing['root'], existing['output'].parents)
+            self.assertEqual(existing['args'], ['--output', str(existing['output'])])
+            baseline = performance.fixture('baseline-gate', workspace / 'baseline-gate')
+            self.assertEqual(baseline['threshold'], '0')
+            self.assertEqual(baseline['args'][0], '--baseline')
+            snapshot = json.loads(Path(baseline['args'][1]).read_text())
+            self.assertNotIn(baseline['root'], Path(baseline['args'][1]).parents)
+            self.assertEqual(snapshot['threshold'], 0.0)
+            expected = set()
+            for path in performance.sources(baseline['root']):
+                expected |= {(path.name, name) for name in re.findall(r'function (f\d+)', path.read_text())}
+            self.assertEqual({(row['path'], row['name']) for row in snapshot['functions']}, expected)
+            self.assertEqual(len(snapshot['functions']), baseline['count'])
+            self.assertEqual({row['crap'] for row in snapshot['functions']}, {6.0})
+
+    @unittest.skipUnless(sys.platform in ('linux', 'android') and Path('/usr/bin/time').exists(), 'Linux GNU time required')
+    def test_output_destination_is_reset_and_must_receive_the_report(self):
+        """A destination case reads the written file; stale or stdout reports fail."""
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            case = {'name': 'git-blob', 'root': workspace, 'count': 1, 'complexity': 1, 'coverage': 0.0,
+                    'args': [], 'locations': {}, 'threshold': None, 'output': workspace / 'report.json'}
+            report = json.dumps({'failed': False, 'functions': [
+                {'name': 'only', 'path': 'large.ts', 'line': 1, 'column': 1, 'complexity': 1,
+                 'coverage': 0.0, 'crap': 2.0, 'failed': False}]})
+            def scanner(name, code):
+                """Write an executable stand-in scanner."""
+                script = workspace / name
+                script.write_text(f'#!{sys.executable}\nfrom pathlib import Path\n{code}\n')
+                script.chmod(0o755)
+                return script
+            writes = f'Path({str(case["output"])!r}).write_text({report!r})'
+            writer = scanner('writer', writes)
+            result = performance.execute(case, writer, None, workspace, 'written')
+            self.assertEqual(result['output_sha256'], hashlib.sha256(report.encode()).hexdigest())
+            # The destination now holds a valid report; a scanner that writes
+            # nothing must not pass by reusing it.
+            idle = scanner('idle', 'pass')
+            with self.assertRaisesRegex(RuntimeError, 'did not replace the existing output destination'):
+                performance.execute(case, idle, None, workspace, 'idle')
+            noisy = scanner('noisy', writes + '\nprint("{}")')
+            with self.assertRaisesRegex(RuntimeError, 'instead of the output destination'):
+                performance.execute(case, noisy, None, workspace, 'stdout')
+
+    def test_scanner_command_uses_case_threshold_and_arguments(self):
+        """The baseline gate runs at threshold 0; other JSON cases use the permissive default."""
+        commands = []
+        def measured(command, output, metrics, **kwargs):
+            """Capture the command and leave a report for hashing."""
+            commands.append(command)
+            output.write_text('{}')
+            metrics.write_text('1')
+            return {'wall_ms': 1.0, 'peak_rss_kib': 1}
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(performance, 'measure', side_effect=measured), \
+                patch.object(performance, 'validate', return_value=None):
+            workspace = Path(temporary)
+            for name, threshold, args, expected in [
+                    ('baseline-gate', '0', ['--baseline', 'snapshot.json'], '0'),
+                    ('deep-tree', None, [], '1000000000'), ('sarif', None, [], '0')]:
+                case = {'name': name, 'root': workspace, 'args': args, 'threshold': threshold}
+                performance.execute(case, Path('scanner'), None, workspace, name)
+                command = commands[-1]
+                self.assertEqual(command[command.index('--threshold') + 1], expected, name)
+                self.assertEqual(command[-len(args):] if args else [], args)
+
+    @unittest.skipUnless(sys.platform in ('linux', 'android') and Path('/usr/bin/time').exists(), 'Linux GNU time required')
+    def test_fixtures_never_reuse_the_exported_baseline_directory(self):
+        """main() keeps case roots apart from workspace/baseline, whatever a case is called."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            roots = []
+            def exported(reference, destination):
+                """Provide a minimal source export like git archive would."""
+                (destination / 'scripts').mkdir(parents=True)
+                (destination / 'scripts/coverage-lines.mjs').write_text('baseline module')
+                return 'baseline-sha'
+            def built(source, target):
+                """Provide a hashable binary stand-in."""
+                target.mkdir(parents=True, exist_ok=True)
+                (target / 'scanner').write_bytes(b'scanner')
+                return target / 'scanner'
+            def made(name, case_root):
+                """Record where each fixture would be created."""
+                roots.append(case_root)
+                case_root.mkdir()
+                return {'name': name}
+            arguments = ['check-performance.py', '--output', str(root)]
+            for name in performance.CASES:
+                arguments += ['--case', name]
+            with patch('sys.argv', arguments), \
+                    patch.object(performance, 'run', return_value='metadata\n'), \
+                    patch.object(performance, 'export_baseline', side_effect=exported), \
+                    patch.object(performance, 'build', side_effect=built), \
+                    patch.object(performance, 'fixture', side_effect=made), \
+                    patch.object(performance, 'compare_case',
+                                 return_value={'assessment': {'wall_ms': {'regressed': False}}}):
+                performance.main()
+            self.assertEqual([path.name for path in roots], list(performance.CASES))
+            self.assertEqual({path.parent.name for path in roots}, {'cases'})
+            self.assertNotIn('baseline', performance.CASES)
 
     @unittest.skipUnless(sys.platform in ('linux', 'android') and Path('/usr/bin/time').exists(), 'Linux GNU time required')
     def test_rss_is_per_process_and_command_failures_are_fatal(self):

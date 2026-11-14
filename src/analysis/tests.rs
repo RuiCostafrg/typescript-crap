@@ -257,3 +257,176 @@ abstract class Abstract { abstract missing(): void; concrete() { return () => 15
         },
     );
 }
+
+// Committed expectations for every construct the analyzer names, counts or
+// hashes. Identities are stored in users' baselines, so a difference here is a
+// breaking change, never a reason to regenerate the golden files. A grammar or
+// tree-sitter update that changes them changes users' identities too: treat it
+// as a compatibility decision (docs/COMPATIBILITY.md) before editing a golden.
+const GOLDEN: [(&str, &str, &str); 2] = [
+    (
+        "golden/constructs.ts",
+        include_str!("../../tests/fixtures/golden/constructs.ts"),
+        include_str!("../../tests/fixtures/golden/constructs.ts.golden"),
+    ),
+    (
+        "golden/constructs.tsx",
+        include_str!("../../tests/fixtures/golden/constructs.tsx"),
+        include_str!("../../tests/fixtures/golden/constructs.tsx.golden"),
+    ),
+];
+
+fn golden_dump(methods: &[super::Method]) -> String {
+    let header = "# identity line column column_utf16 end_line complexity owned_lines name";
+    let rows = methods.iter().map(|method| {
+        let lines: Vec<String> = method.lines.iter().map(usize::to_string).collect();
+        let lines = if lines.is_empty() {
+            "-".to_owned()
+        } else {
+            lines.join(",")
+        };
+        format!(
+            "{} {} {} {} {} {} {lines} {}",
+            method.identity,
+            method.line,
+            method.column,
+            method.column_utf16,
+            method.end_line,
+            method.complexity,
+            method.name
+        )
+    });
+    std::iter::once(header.to_owned())
+        .chain(rows)
+        .map(|row| row + "\n")
+        .collect()
+}
+
+#[test]
+fn golden_identities_names_columns_and_metrics_are_pinned() {
+    isolated(
+        "analysis::tests::golden_identities_names_columns_and_metrics_are_pinned",
+        || {
+            let mut analyzer = super::Analyzer::default();
+            for (path, source, expected) in GOLDEN {
+                // The fixtures must keep the bytes they exist to exercise.
+                assert!(source.starts_with('\u{feff}'), "{path} lost its BOM");
+                // CRLF appears only inside the marked region, so a checkout that
+                // rewrote line endings fails here rather than in the goldens.
+                let (before, region) = source.split_once("// CRLF region starts below.\n").unwrap();
+                let (region, after) = region.split_once("// CRLF region ends above.\n").unwrap();
+                assert!(
+                    !before.contains('\r') && !after.contains('\r'),
+                    "{path} has CR outside its CRLF region"
+                );
+                assert_eq!(
+                    region.matches("\r\n").count(),
+                    region.matches('\n').count(),
+                    "{path} lost its CRLF region"
+                );
+                assert!(region.contains("\r\n"), "{path} lost its CRLF region");
+                assert!(
+                    source.chars().any(|c| c.len_utf16() == 2),
+                    "{path} lost its astral characters"
+                );
+                let actual = golden_dump(&analyzer.analyze(path, source).unwrap());
+                if actual != expected {
+                    let difference = actual
+                        .lines()
+                        .zip(expected.lines())
+                        .position(|(actual, expected)| actual != expected)
+                        .unwrap_or_else(|| actual.lines().count().min(expected.lines().count()));
+                    panic!(
+                        "{path} differs from its golden file at line {}:\n  expected: {:?}\n  actual:   {:?}\nfull actual output:\n{actual}",
+                        difference + 1,
+                        expected.lines().nth(difference),
+                        actual.lines().nth(difference),
+                    );
+                }
+            }
+        },
+    );
+}
+
+fn kind_trees() -> Vec<(tree_sitter::Language, tree_sitter::Tree)> {
+    let mut trees = Vec::new();
+    for (path, source, _) in GOLDEN {
+        let tsx = path.ends_with(".tsx");
+        let language: tree_sitter::Language = if tsx {
+            tree_sitter_typescript::LANGUAGE_TSX
+        } else {
+            tree_sitter_typescript::LANGUAGE_TYPESCRIPT
+        }
+        .into();
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&language).unwrap();
+        let malformed: &[&str] = if tsx {
+            &["const f = <div>", "const g = () => <b>{</b>;", "<<>>"]
+        } else {
+            &[
+                "function f() {",
+                "const broken = ;",
+                "class { method( }",
+                "export type * from './m';",
+                "let x: = 1; )",
+            ]
+        };
+        trees.push((language.clone(), parser.parse(source, None).unwrap()));
+        for source in malformed {
+            trees.push((language.clone(), parser.parse(source, None).unwrap()));
+        }
+    }
+    trees
+}
+
+// Kind-id tables are only equivalent to kind() string matches if the id of
+// every node, including ERROR (65535) and MISSING nodes, maps back to its kind.
+#[test]
+fn every_node_kind_id_maps_back_to_its_kind_in_both_grammars() {
+    isolated(
+        "analysis::tests::every_node_kind_id_maps_back_to_its_kind_in_both_grammars",
+        || {
+            let (mut errors, mut missing, mut nodes) = (0, 0, 0);
+            for (language, tree) in kind_trees() {
+                super::walk(tree.root_node(), |node| {
+                    nodes += 1;
+                    errors += usize::from(node.is_error());
+                    missing += usize::from(node.is_missing());
+                    assert_eq!(
+                        language.node_kind_for_id(node.kind_id()),
+                        Some(node.kind()),
+                        "kind id {} at {:?}",
+                        node.kind_id(),
+                        node.start_position()
+                    );
+                    true
+                });
+            }
+            assert!(nodes > 1000 && errors > 0 && missing > 0);
+            for language in [
+                tree_sitter_typescript::LANGUAGE_TYPESCRIPT,
+                tree_sitter_typescript::LANGUAGE_TSX,
+            ] {
+                let language: tree_sitter::Language = language.into();
+                assert_eq!(language.node_kind_for_id(u16::MAX), Some("ERROR"));
+                // Several kinds have more than one id, including kinds the
+                // analyzer matches, so a kind-id table must be built over all ids:
+                // not from the first match (`id_for_node_kind`), nor named ids only.
+                let ids = |kind: &str| -> Vec<u16> {
+                    (0..u16::try_from(language.node_kind_count()).unwrap())
+                        .filter(|&id| language.node_kind_for_id(id) == Some(kind))
+                        .collect()
+                };
+                let class = ids("class");
+                assert!(
+                    class.iter().any(|&id| language.node_kind_is_named(id))
+                        && class.iter().any(|&id| !language.node_kind_is_named(id)),
+                    "class: {class:?}"
+                );
+                for kind in ["required_parameter", "optional_parameter"] {
+                    assert!(ids(kind).len() > 1, "{kind}: {:?}", ids(kind));
+                }
+            }
+        },
+    );
+}

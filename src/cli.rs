@@ -152,33 +152,70 @@ pub fn execute() -> Result<bool> {
             report.syntax_errors.len()
         );
     }
-    let baseline = args
-        .write_baseline
-        .is_some()
-        .then(|| ts_crap::baseline::Baseline::capture(&report));
-    // Buffer stdout before publishing any baseline, preserving all-or-error rendering.
+    let write_baseline = args.write_baseline.is_some();
+    // Stage stdout before publishing any baseline, preserving all-or-error rendering.
     let stdout_report = if args.output.is_none() {
-        Some(ts_crap::render_with_options(
-            &report,
-            args.format,
-            &presentation,
-        )?)
+        Some(StagedReport::render(&report, args.format, &presentation)?)
     } else {
         None
     };
-    let count = usize::from(baseline.is_some()) + usize::from(args.output.is_some());
+    let count = usize::from(write_baseline) + usize::from(args.output.is_some());
     publication.publish_with(count, |index, writer| {
-        if index == 0
-            && let Some(baseline) = &baseline
-        {
-            baseline.render_to(writer)
+        if index == 0 && write_baseline {
+            ts_crap::baseline::Baseline::render_report_to(&report, writer)
         } else {
             ts_crap::render_to_with_options(&report, args.format, &presentation, writer)
         }
     })?;
-    if let Some(rendered) = stdout_report {
-        use std::io::Write;
-        std::io::stdout().lock().write_all(rendered.as_bytes())?;
+    if let Some(staged) = stdout_report {
+        staged.copy_to_stdout()?;
     }
     Ok(report.failed)
+}
+
+/// A fully rendered stdout report, held in an anonymous temporary file so large
+/// reports do not sit in memory. If the temporary file cannot be created or
+/// written (say, a full temporary directory), the report is rendered in memory
+/// instead; either way the bytes are the same, and a real rendering error still
+/// fails because rendering is deterministic.
+enum StagedReport {
+    File(std::fs::File),
+    Memory(String),
+}
+
+impl StagedReport {
+    fn render(report: &ts_crap::Report, format: Format, options: &RenderOptions) -> Result<Self> {
+        match Self::stage(report, format, options) {
+            Ok(file) => Ok(Self::File(file)),
+            Err(_) => Ok(Self::Memory(ts_crap::render_with_options(
+                report, format, options,
+            )?)),
+        }
+    }
+
+    fn stage(
+        report: &ts_crap::Report,
+        format: Format,
+        options: &RenderOptions,
+    ) -> Result<std::fs::File> {
+        use std::io::{Seek, SeekFrom};
+        let mut writer = std::io::BufWriter::new(tempfile::tempfile()?);
+        ts_crap::render_to_with_options(report, format, options, &mut writer)?;
+        let mut file = writer.into_inner().map_err(|error| error.into_error())?;
+        file.seek(SeekFrom::Start(0))?;
+        Ok(file)
+    }
+
+    fn copy_to_stdout(self) -> Result<()> {
+        use std::io::Write;
+        let mut stdout = std::io::stdout().lock();
+        match self {
+            Self::File(mut file) => {
+                std::io::copy(&mut file, &mut stdout)?;
+            }
+            Self::Memory(rendered) => stdout.write_all(rendered.as_bytes())?,
+        }
+        stdout.flush()?;
+        Ok(())
+    }
 }

@@ -1,8 +1,8 @@
 //! Versioned regression snapshots. Ambiguous matches are treated as new findings.
-use crate::{Report, validate_threshold};
+use crate::{FunctionScore, Report, validate_threshold};
 use anyhow::{Result, bail};
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use serde::{Deserialize, Serialize, Serializer};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -19,6 +19,34 @@ struct Entry {
     identity: String,
     crap: f64,
 }
+
+// Borrowed mirrors of `Baseline` and `Entry`: same field names and order, so
+// they serialize to the same bytes without copying the report's strings.
+#[derive(Serialize)]
+struct BaselineView<'a> {
+    version: u32,
+    threshold: f64,
+    functions: FunctionsView<'a>,
+}
+struct FunctionsView<'a>(&'a [FunctionScore]);
+#[derive(Serialize)]
+struct EntryView<'a> {
+    path: &'a str,
+    name: &'a str,
+    identity: &'a str,
+    crap: f64,
+}
+impl Serialize for FunctionsView<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(self.0.iter().map(|f| EntryView {
+            path: &f.path,
+            name: &f.name,
+            identity: &f.identity,
+            crap: f.crap,
+        }))
+    }
+}
+
 impl Baseline {
     /// Snapshot the scored functions, including from an incomplete report. Callers
     /// requiring every selected source to parse must check `report.syntax_errors`;
@@ -68,13 +96,28 @@ impl Baseline {
         writer.write_all(b"\n")?;
         Ok(())
     }
+    /// Stream the snapshot of `report`: the same bytes as
+    /// `Baseline::capture(report).render_to(writer)`, without copying every
+    /// function's path, name and identity first. Use a staged writer when
+    /// partial output is unacceptable.
+    pub fn render_report_to(report: &Report, mut writer: impl std::io::Write) -> Result<()> {
+        let view = BaselineView {
+            version: 1,
+            threshold: report.threshold,
+            functions: FunctionsView(&report.functions),
+        };
+        serde_json::to_writer_pretty(&mut writer, &view)?;
+        writer.write_all(b"\n")?;
+        Ok(())
+    }
     /// Compare absolute scores anew; earlier comparisons do not compose.
     pub fn apply(&self, report: &mut Report, renames: &[String]) -> Result<()> {
         if self.threshold != report.threshold {
             bail!("baseline threshold differs from scan threshold");
         }
-        let mut paths = BTreeMap::new();
-        let mut destinations = BTreeSet::new();
+        // Lookup-only maps: their iteration order is never observed.
+        let mut paths = HashMap::new();
+        let mut destinations = HashSet::new();
         for rename in renames {
             let (old, new) = rename
                 .split_once('=')
@@ -87,8 +130,8 @@ impl Baseline {
                 bail!("duplicate or empty baseline rename");
             }
         }
-        let mut named = BTreeMap::<(&str, &str), Vec<usize>>::new();
-        let mut fingerprints = BTreeMap::<&str, Vec<usize>>::new();
+        let mut named = HashMap::<(&str, &str), Vec<usize>>::new();
+        let mut fingerprints = HashMap::<&str, Vec<usize>>::new();
         for (index, f) in self.functions.iter().enumerate() {
             named
                 .entry((
@@ -99,15 +142,15 @@ impl Baseline {
                 .push(index);
             fingerprints.entry(&f.identity).or_default().push(index);
         }
-        let mut current_names = BTreeMap::new();
-        let mut current_ids = BTreeMap::new();
+        let mut current_names = HashMap::new();
+        let mut current_ids = HashMap::new();
         for f in &report.functions {
             *current_names
                 .entry((f.path.as_str(), f.name.as_str()))
                 .or_insert(0) += 1;
             *current_ids.entry(f.identity.as_str()).or_insert(0) += 1;
         }
-        let mut used = BTreeSet::new();
+        let mut used = HashSet::new();
         let mut failures = Vec::with_capacity(report.functions.len());
         for f in &report.functions {
             let absolute_failed = f.crap > report.threshold;

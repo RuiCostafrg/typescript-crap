@@ -179,3 +179,32 @@ fn anonymous_labels_normalize_only_generated_positions() {
         assert_eq!(super::stable_name(name), name);
     }
 }
+
+#[test]
+fn borrowed_rendering_matches_the_captured_snapshot_byte_for_byte() {
+    let cases = [
+        report(&[]),
+        report(&[
+            ("src/a.ts", "a", 1, 40.0),
+            (
+                "src/dir with space/ü.tsx",
+                "C::\"quoted\\\"\\n\u{7}",
+                2,
+                0.1,
+            ),
+            ("b.mts", "<anonymous@3:7>", 255, 1e20),
+            ("b.mts", "x", 0, 10.000000000000002),
+        ]),
+    ];
+    for mut case in cases {
+        for threshold in [10.0, 0.0, 12.5] {
+            case.threshold = threshold;
+            let mut borrowed = Vec::new();
+            Baseline::render_report_to(&case, &mut borrowed).unwrap();
+            assert_eq!(
+                String::from_utf8(borrowed).unwrap(),
+                Baseline::capture(&case).render().unwrap()
+            );
+        }
+    }
+}

@@ -32,6 +32,35 @@ coverage. Oximut is read-only for ts-crap and is unchanged.
   attributes in XML, and the new SARIF rule `TSCRAP003` for surviving or
   uncovered mutants. Machine output is unaffected by presentation options.
 
+- `Baseline::render_report_to` streams a report's baseline snapshot without
+  copying it first; it writes the same bytes as `Baseline::capture` followed by
+  `render_to`.
+
+### Changed
+
+- Function analysis evaluates node kinds through per-grammar tables of symbol
+  ids, hashes each function's tokens as one buffered stream, keeps owned lines
+  in a sorted vector and tracks ancestors during the tree walk instead of
+  asking tree-sitter for parents. Reports, identities and scores are byte for
+  byte unchanged (pinned by the golden fixtures and checked on a full VS Code
+  scan).
+- The GitHub Action fetches the Sigstore trusted root while the release assets
+  download, instead of afterwards. On GitHub-hosted runners this saves a median
+  0.55–0.67 seconds per install. What is verified, and the rule that nothing is
+  extracted or run before verification, are unchanged.
+- Release binaries no longer carry a symbol table (`strip = "symbols"` in the
+  `dist` profile). The Linux x86-64 archive shrinks by 7.5% (1.42 MB to 1.31 MB),
+  the Linux ARM64 archive by 10.3% and the macOS ARM64 archive by 7.3%. Panic
+  messages keep their file and line, but backtraces no longer show function
+  names. Builds from source with `--release` are unchanged.
+- The README compares install times and what each install path verifies, with
+  hosted-runner measurements.
+- Lower peak memory on baseline and stdout scans, with byte-identical output.
+  On the VS Code repository (431,594 functions, static Linux build), a
+  `--write-baseline` scan printing JSON to stdout fell from 480 MB to 178 MB, and
+  a `--baseline` scan from 466 MB to 432 MB. Stdout reports are staged in an
+  anonymous temporary file (in memory if none can be created) and still appear
+  only after every file is published.
 ## 2.4.0 — 2026-11-10
 
 Adds configurable excluded directories, syntax-error reporting that keeps

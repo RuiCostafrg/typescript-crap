@@ -1,7 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use super::Coverage;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
 
 fn load(value: serde_json::Value) -> anyhow::Result<Coverage> {
     let file = tempfile::NamedTempFile::new().unwrap();
@@ -74,14 +73,14 @@ fn owned_line_bounds_reject_zero_and_past_eof_with_or_without_hits() {
     for path in ["a.ts", "absent.ts"] {
         let view = coverage.for_source(path, source).unwrap();
         for line in [0, 2] {
-            assert!(view.evidence(&BTreeSet::from([line])).is_err());
+            assert!(view.evidence(&[line]).is_err());
         }
     }
     assert_eq!(
         coverage
             .for_source("a.ts", source)
             .unwrap()
-            .evidence(&BTreeSet::from([1]))
+            .evidence(&[1])
             .unwrap()
             .fraction,
         1.0
@@ -139,7 +138,7 @@ fn fractions_count_owned_statement_starts_not_all_reported_lines() {
         coverage
             .for_source("src/a.ts", source)
             .unwrap()
-            .evidence(&BTreeSet::from([1, 2, 3]))
+            .evidence(&[1, 2, 3])
             .unwrap()
             .fraction,
         1.0 / 3.0
@@ -148,7 +147,7 @@ fn fractions_count_owned_statement_starts_not_all_reported_lines() {
         coverage
             .for_source("absent.ts", source)
             .unwrap()
-            .evidence(&BTreeSet::from([1]))
+            .evidence(&[1])
             .unwrap()
             .fraction,
         0.0
@@ -157,7 +156,7 @@ fn fractions_count_owned_statement_starts_not_all_reported_lines() {
         coverage
             .for_source("src/a.ts", source)
             .unwrap()
-            .evidence(&BTreeSet::new())
+            .evidence(&[])
             .unwrap()
             .fraction,
         0.0
@@ -170,7 +169,7 @@ fn coverage_evidence_is_bounded_monotonic_and_distinguishes_absent_from_zero() {
     // Exhaustively vary absent/zero/covered evidence for three owned statements.
     let source = "a();\nb();\nc();\n";
     let hash = hex::encode(Sha256::digest(source.as_bytes()));
-    let owned = BTreeSet::from([1, 2, 3]);
+    let owned = [1, 2, 3];
     for mut state in 0..27 {
         let mut lines = serde_json::Map::new();
         for line in 1..=3 {
@@ -210,16 +209,109 @@ fn coverage_evidence_is_bounded_monotonic_and_distinguishes_absent_from_zero() {
         let absent = coverage
             .for_source("absent.ts", source)
             .unwrap()
-            .evidence(&BTreeSet::new())
+            .evidence(&[])
             .unwrap();
         assert!(!absent.complete);
         assert_eq!(absent.fraction, 0.0);
         let empty = coverage
             .for_source("a.ts", source)
             .unwrap()
-            .evidence(&BTreeSet::new())
+            .evidence(&[])
             .unwrap();
         assert!(empty.complete);
         assert_eq!(empty.fraction, 0.0);
     }
+}
+
+#[test]
+fn line_keys_keep_their_exact_rejections_and_messages() {
+    // Keys are raw JSON text, so escaped spellings reach the parser unchanged.
+    // "+5" parses as a usize and must still be rejected as non-canonical.
+    let hash = "0".repeat(64);
+    let cases: [(&str, Option<&str>); 16] = [
+        (
+            "+5",
+            Some("coverage line must be a positive canonical integer at line 1 column 119"),
+        ),
+        (
+            "05",
+            Some("coverage line must be a positive canonical integer at line 1 column 119"),
+        ),
+        (
+            "0",
+            Some("coverage line must be a positive canonical integer at line 1 column 118"),
+        ),
+        (
+            "00",
+            Some("coverage line must be a positive canonical integer at line 1 column 119"),
+        ),
+        (
+            "+0",
+            Some("coverage line must be a positive canonical integer at line 1 column 119"),
+        ),
+        (
+            "-1",
+            Some("invalid digit found in string at line 1 column 119"),
+        ),
+        (
+            "",
+            Some("cannot parse integer from empty string at line 1 column 117"),
+        ),
+        (
+            "abc",
+            Some("invalid digit found in string at line 1 column 120"),
+        ),
+        (
+            "1.5",
+            Some("invalid digit found in string at line 1 column 120"),
+        ),
+        (
+            " 1",
+            Some("invalid digit found in string at line 1 column 119"),
+        ),
+        (
+            "1 ",
+            Some("invalid digit found in string at line 1 column 119"),
+        ),
+        (
+            "18446744073709551616",
+            Some("number too large to fit in target type at line 1 column 137"),
+        ),
+        (
+            "１",
+            Some("invalid digit found in string at line 1 column 120"),
+        ),
+        (
+            "0\\u0035",
+            Some("coverage line must be a positive canonical integer at line 1 column 124"),
+        ),
+        (
+            "\\u002b5",
+            Some("coverage line must be a positive canonical integer at line 1 column 124"),
+        ),
+        ("\\u0035", None),
+    ];
+    for (key, expected) in cases {
+        let contents = format!(
+            r#"{{"version":1,"files":{{"a.ts":{{"sha256":"{hash}","lines":{{"{key}":1}}}}}}}}"#
+        );
+        let result = load_raw(&contents).map_err(|error| error.root_cause().to_string());
+        assert_eq!(
+            result.as_ref().err().map(String::as_str),
+            expected,
+            "key {key:?}"
+        );
+    }
+}
+
+#[test]
+fn map_keys_must_be_strings() {
+    use serde::de::DeserializeSeed;
+    let error = super::Key(|key: &str| Ok(key.to_owned()))
+        .deserialize(serde_json::json!(5))
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "invalid type: integer `5`, expected a string"
+    );
 }

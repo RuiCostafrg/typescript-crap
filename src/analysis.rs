@@ -1,8 +1,7 @@
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
-use std::collections::BTreeSet;
-use tree_sitter::{Node, Parser};
+use tree_sitter::{Language, Node, Parser};
 
 #[derive(Debug)]
 pub struct Method {
@@ -17,7 +16,8 @@ pub struct Method {
     pub start: (usize, usize),
     pub end: (usize, usize),
     pub complexity: u32,
-    pub lines: BTreeSet<usize>,
+    /// Owned statement lines, sorted and deduplicated.
+    pub lines: Vec<usize>,
 }
 
 fn is_function(kind: &str) -> bool {
@@ -30,6 +30,174 @@ fn is_function(kind: &str) -> bool {
             | "arrow_function"
             | "method_definition"
     )
+}
+
+// Flags for the node kinds the analyzer matches. `kind_flags` holds the only
+// kind-string matches; `Kinds` evaluates them once per grammar symbol id.
+const FUNCTION: u16 = 1 << 0;
+const TYPE_ONLY: u16 = 1 << 1;
+const DECISION: u16 = 1 << 2;
+const LOGICAL: u16 = 1 << 3;
+const OWNED_LINE: u16 = 1 << 4;
+const PARAMETER: u16 = 1 << 5;
+const PATTERN: u16 = 1 << 6;
+const CLASS: u16 = 1 << 7;
+const COMMENT: u16 = 1 << 8;
+const STATEMENT_BLOCK: u16 = 1 << 9;
+const NAMING_PARENT: u16 = 1 << 10;
+const ASSIGNMENT_PARENT: u16 = 1 << 11;
+
+fn kind_flags(kind: &str) -> u16 {
+    let mut flags = 0;
+    if is_function(kind) {
+        flags |= FUNCTION;
+    }
+    // Type-only branches such as conditional types do not affect runtime flow.
+    // "return_type" is a field name, not a kind, so it never matches; matching
+    // the field instead would change complexity and owned lines.
+    if matches!(kind, "type_annotation" | "type_parameters" | "return_type") {
+        flags |= TYPE_ONLY;
+    }
+    if matches!(
+        kind,
+        "if_statement"
+            | "for_statement"
+            | "for_in_statement"
+            | "while_statement"
+            | "do_statement"
+            | "catch_clause"
+            | "switch_case"
+            | "ternary_expression"
+    ) {
+        flags |= DECISION;
+    }
+    if matches!(
+        kind,
+        "binary_expression" | "augmented_assignment_expression"
+    ) {
+        flags |= LOGICAL;
+    }
+    if matches!(
+        kind,
+        "return_statement"
+            | "throw_statement"
+            | "expression_statement"
+            | "lexical_declaration"
+            | "variable_declaration"
+            | "if_statement"
+            | "for_statement"
+            | "for_in_statement"
+            | "while_statement"
+            | "do_statement"
+            | "switch_statement"
+            | "break_statement"
+            | "continue_statement"
+    ) {
+        flags |= OWNED_LINE;
+    }
+    if matches!(kind, "required_parameter" | "optional_parameter") {
+        flags |= PARAMETER;
+    }
+    if matches!(kind, "assignment_pattern" | "object_assignment_pattern") {
+        flags |= PATTERN;
+    }
+    if matches!(
+        kind,
+        "class_declaration" | "abstract_class_declaration" | "class"
+    ) {
+        flags |= CLASS;
+    }
+    if kind == "comment" {
+        flags |= COMMENT;
+    }
+    if kind == "statement_block" {
+        flags |= STATEMENT_BLOCK;
+    }
+    if matches!(
+        kind,
+        "variable_declarator" | "public_field_definition" | "pair"
+    ) {
+        flags |= NAMING_PARENT;
+    }
+    if kind == "assignment_expression" {
+        flags |= ASSIGNMENT_PARENT;
+    }
+    flags
+}
+
+/// Field ids used by the analyzer. `None` when a grammar lacks the field, which
+/// `child_by_field_name` would equally treat as no child.
+#[derive(Debug, Clone, Copy)]
+struct Fields {
+    body: Option<u16>,
+    key: Option<u16>,
+    left: Option<u16>,
+    name: Option<u16>,
+    operator: Option<u16>,
+    parameters: Option<u16>,
+    right: Option<u16>,
+    value: Option<u16>,
+}
+
+/// Per-grammar kind flags and names, indexed by symbol id. A kind can have
+/// several ids (named, anonymous, aliased), so every id is evaluated by its
+/// kind string; ids outside the table, such as ERROR's 65535, have no flags.
+#[derive(Debug)]
+struct Kinds {
+    flags: Vec<u16>,
+    names: Vec<Option<Box<str>>>,
+    fields: Fields,
+}
+
+impl Kinds {
+    fn new(language: &Language) -> Self {
+        let names: Vec<Option<Box<str>>> = (0..language.node_kind_count())
+            .map(|id| {
+                u16::try_from(id)
+                    .ok()
+                    .and_then(|id| language.node_kind_for_id(id))
+                    .map(Box::from)
+            })
+            .collect();
+        let flags = names
+            .iter()
+            .map(|kind| kind.as_deref().map_or(0, kind_flags))
+            .collect();
+        let field = |name: &str| language.field_id_for_name(name).map(|id| id.get());
+        Self {
+            flags,
+            names,
+            fields: Fields {
+                body: field("body"),
+                key: field("key"),
+                left: field("left"),
+                name: field("name"),
+                operator: field("operator"),
+                parameters: field("parameters"),
+                right: field("right"),
+                value: field("value"),
+            },
+        }
+    }
+
+    fn flags(&self, node: Node<'_>) -> u16 {
+        self.flags
+            .get(usize::from(node.kind_id()))
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// The kind string hashed into identities, without a symbol-name lookup.
+    fn kind<'a>(&'a self, node: Node<'a>) -> &'a str {
+        match self.names.get(usize::from(node.kind_id())) {
+            Some(Some(kind)) => kind,
+            _ => node.kind(),
+        }
+    }
+
+    fn child<'t>(node: Node<'t>, field: Option<u16>) -> Option<Node<'t>> {
+        field.and_then(|field| node.child_by_field_id(field))
+    }
 }
 
 fn text<'a>(node: Node<'_>, source: &'a str) -> &'a str {
@@ -54,26 +222,23 @@ fn skip_type_trivia(mut source: &str) -> &str {
     }
 }
 
-fn local_name(node: Node<'_>, source: &str) -> String {
-    if let Some(name) = node.child_by_field_name("name") {
+fn local_name(node: Node<'_>, parent: Option<Node<'_>>, source: &str, kinds: &Kinds) -> String {
+    let fields = kinds.fields;
+    if let Some(name) = Kinds::child(node, fields.name) {
         return text(name, source).into();
     }
-    if let Some(parent) = node.parent() {
-        match parent.kind() {
-            "variable_declarator" | "public_field_definition" | "pair" => {
-                if let Some(name) = parent
-                    .child_by_field_name("name")
-                    .or_else(|| parent.child_by_field_name("key"))
-                {
-                    return text(name, source).into();
-                }
+    if let Some(parent) = parent {
+        let flags = kinds.flags(parent);
+        if flags & NAMING_PARENT != 0 {
+            if let Some(name) =
+                Kinds::child(parent, fields.name).or_else(|| Kinds::child(parent, fields.key))
+            {
+                return text(name, source).into();
             }
-            "assignment_expression" => {
-                if let Some(left) = parent.child_by_field_name("left") {
-                    return text(left, source).into();
-                }
-            }
-            _ => {}
+        } else if flags & ASSIGNMENT_PARENT != 0
+            && let Some(left) = Kinds::child(parent, fields.left)
+        {
+            return text(left, source).into();
         }
     }
     format!(
@@ -139,37 +304,52 @@ fn walk(node: Node<'_>, mut visit: impl FnMut(Node<'_>) -> bool) {
     }
 }
 
+// The same preorder traversal as `walk`, also passing the visited node's
+// ancestors up to the walk's starting node (outermost first); called on a
+// tree's root, that is the `Node::parent` chain. `Node::parent` searches down
+// from the root on every call; the cursor already knows the path.
+fn walk_with_ancestors<'t>(node: Node<'t>, mut visit: impl FnMut(Node<'t>, &[Node<'t>]) -> bool) {
+    let mut cursor = node.walk();
+    let mut ancestors = Vec::new();
+    loop {
+        let current = cursor.node();
+        if visit(current, &ancestors) && cursor.goto_first_child() {
+            ancestors.push(current);
+            continue;
+        }
+        loop {
+            if cursor.goto_next_sibling() {
+                break;
+            }
+            if !cursor.goto_parent() {
+                return;
+            }
+            ancestors.pop();
+        }
+    }
+}
+
 // Each decision adds one independent execution path. Descendant functions are
-// scored separately, never charged to their enclosing function.
-fn metrics(node: Node<'_>, source: &str, complexity: &mut u32, lines: &mut BTreeSet<usize>) {
+// scored separately, never charged to their enclosing function. Owned lines are
+// pushed unsorted; the caller sorts and deduplicates them once.
+fn metrics(
+    node: Node<'_>,
+    source: &str,
+    kinds: &Kinds,
+    complexity: &mut u32,
+    lines: &mut Vec<usize>,
+) {
+    let fields = kinds.fields;
     walk(node, |node| {
-        if is_function(node.kind()) {
+        let flags = kinds.flags(node);
+        if flags & (FUNCTION | TYPE_ONLY) != 0 {
             return false;
         }
-        // Type-only branches such as conditional types do not affect runtime flow.
-        if matches!(
-            node.kind(),
-            "type_annotation" | "type_parameters" | "return_type"
-        ) {
-            return false;
-        }
-        if matches!(
-            node.kind(),
-            "if_statement"
-                | "for_statement"
-                | "for_in_statement"
-                | "while_statement"
-                | "do_statement"
-                | "catch_clause"
-                | "switch_case"
-                | "ternary_expression"
-        ) {
+        if flags & DECISION != 0 {
             *complexity += 1;
         }
-        if matches!(
-            node.kind(),
-            "binary_expression" | "augmented_assignment_expression"
-        ) && let Some(operator) = node.child_by_field_name("operator")
+        if flags & LOGICAL != 0
+            && let Some(operator) = Kinds::child(node, fields.operator)
             && matches!(
                 text(operator, source),
                 "&&" | "||" | "??" | "&&=" | "||=" | "??="
@@ -177,50 +357,40 @@ fn metrics(node: Node<'_>, source: &str, complexity: &mut u32, lines: &mut BTree
         {
             *complexity += 1;
         }
-        if matches!(
-            node.kind(),
-            "return_statement"
-                | "throw_statement"
-                | "expression_statement"
-                | "lexical_declaration"
-                | "variable_declaration"
-                | "if_statement"
-                | "for_statement"
-                | "for_in_statement"
-                | "while_statement"
-                | "do_statement"
-                | "switch_statement"
-                | "break_statement"
-                | "continue_statement"
-        ) {
-            lines.insert(node.start_position().row + 1);
+        if flags & OWNED_LINE != 0 {
+            lines.push(node.start_position().row + 1);
         }
-        let initializer = match node.kind() {
-            "required_parameter" | "optional_parameter" => node.child_by_field_name("value"),
-            "assignment_pattern" | "object_assignment_pattern" => node.child_by_field_name("right"),
-            _ => None,
+        let initializer = if flags & PARAMETER != 0 {
+            Kinds::child(node, fields.value)
+        } else if flags & PATTERN != 0 {
+            Kinds::child(node, fields.right)
+        } else {
+            None
         };
         if let Some(value) = initializer {
-            lines.insert(value.start_position().row + 1);
+            lines.push(value.start_position().row + 1);
         }
         true
     });
 }
 
-fn collect(node: Node<'_>, source: &str, out: &mut Vec<Method>) {
+// Hashed tokens are buffered and fed to SHA-256 in chunks: the digest of a
+// stream does not depend on how it is split.
+const HASH_CHUNK: usize = 16 * 1024;
+
+fn collect(node: Node<'_>, source: &str, kinds: &Kinds, out: &mut Vec<Method>) {
+    let fields = kinds.fields;
     let mut scopes: Vec<Scope<'_>> = Vec::new();
     let mut utf16 = Utf16Column::default();
-    walk(node, |node| {
-        let kind = node.kind();
-        let class_name = if matches!(
-            kind,
-            "class_declaration" | "abstract_class_declaration" | "class"
-        ) {
-            node.child_by_field_name("name")
+    let mut buffer = Vec::with_capacity(HASH_CHUNK);
+    walk_with_ancestors(node, |node, ancestors| {
+        let flags = kinds.flags(node);
+        let class_name = if flags & CLASS != 0 {
+            Kinds::child(node, fields.name)
         } else {
             None
         };
-        if !is_function(kind) && class_name.is_none() {
+        if flags & FUNCTION == 0 && class_name.is_none() {
             return true;
         }
         // Only scope events need to expire entries; intervening AST nodes do not
@@ -236,40 +406,49 @@ fn collect(node: Node<'_>, source: &str, out: &mut Vec<Method>) {
                 end: node.end_byte(),
                 name: ScopeName::Class(text(class_name, source)),
             });
-        } else if let Some(body) = node.child_by_field_name("body") {
-            let local = local_name(node, source);
+        } else if let Some(body) = Kinds::child(node, fields.body) {
+            let local = local_name(node, ancestors.last().copied(), source, kinds);
             let name = match scopes.last().map(|scope| &scope.name) {
                 Some(ScopeName::Class(class)) => format!("{class}::{local}"),
                 Some(ScopeName::Function(index)) => format!("{}::{local}", out[*index].name),
                 None => local,
             };
             let mut complexity = 1;
-            let mut lines = BTreeSet::new();
-            metrics(body, source, &mut complexity, &mut lines);
+            let mut lines = Vec::new();
+            metrics(body, source, kinds, &mut complexity, &mut lines);
             // Expression-bodied arrows have no statement node.
-            if body.kind() != "statement_block" {
-                lines.insert(body.start_position().row + 1);
+            if kinds.flags(body) & STATEMENT_BLOCK == 0 {
+                lines.push(body.start_position().row + 1);
             }
             // Default argument expressions execute as part of the function.
-            if let Some(parameters) = node.child_by_field_name("parameters") {
-                metrics(parameters, source, &mut complexity, &mut lines);
+            if let Some(parameters) = Kinds::child(node, fields.parameters) {
+                metrics(parameters, source, kinds, &mut complexity, &mut lines);
             }
+            lines.sort_unstable();
+            lines.dedup();
             // Hash owned tokens, excluding trivia and descendant functions (which
             // have their own identities). Pruning avoids quadratic hashing of
             // deeply nested functions; line shifts do not change identity.
             let mut hash = Sha256::new();
+            buffer.clear();
             walk(node, |token| {
-                if token.kind() == "comment" || (token != node && is_function(token.kind())) {
+                let flags = kinds.flags(token);
+                if flags & COMMENT != 0 || (token != node && flags & FUNCTION != 0) {
                     return false;
                 }
                 if token.child_count() == 0 {
-                    hash.update(token.kind().as_bytes());
-                    hash.update([0]);
-                    hash.update(text(token, source).as_bytes());
-                    hash.update([0]);
+                    buffer.extend_from_slice(kinds.kind(token).as_bytes());
+                    buffer.push(0);
+                    buffer.extend_from_slice(text(token, source).as_bytes());
+                    buffer.push(0);
+                    if buffer.len() >= HASH_CHUNK {
+                        hash.update(&buffer);
+                        buffer.clear();
+                    }
                 }
                 true
             });
+            hash.update(&buffer);
             out.push(Method {
                 identity: hex::encode(hash.finalize()),
                 name,
@@ -295,8 +474,15 @@ fn collect(node: Node<'_>, source: &str, out: &mut Vec<Method>) {
 /// reused between sources, so no stale incremental parse state is retained.
 #[derive(Default)]
 pub struct Analyzer {
-    typescript: Option<Parser>,
-    tsx: Option<Parser>,
+    typescript: Option<Grammar>,
+    tsx: Option<Grammar>,
+}
+
+/// A parser and the kind tables of the same language, created together so a
+/// tree is always read with its own grammar's symbol ids.
+struct Grammar {
+    parser: Parser,
+    kinds: Kinds,
 }
 
 impl std::fmt::Debug for Analyzer {
@@ -341,17 +527,21 @@ impl Analyzer {
         };
         if slot.is_none() {
             let mut parser = Parser::new();
-            let language = if tsx {
+            let language: Language = if tsx {
                 tree_sitter_typescript::LANGUAGE_TSX
             } else {
                 tree_sitter_typescript::LANGUAGE_TYPESCRIPT
-            };
+            }
+            .into();
             parser
-                .set_language(&language.into())
+                .set_language(&language)
                 .context("cannot initialize TypeScript parser")?;
-            *slot = Some(parser);
+            *slot = Some(Grammar {
+                parser,
+                kinds: Kinds::new(&language),
+            });
         }
-        let parser = slot.as_mut().context("TypeScript parser unavailable")?;
+        let Grammar { parser, kinds } = slot.as_mut().context("TypeScript parser unavailable")?;
         let mut parsed_source = Cow::Borrowed(source);
         let mut tree = parser
             .parse(source, None)
@@ -368,13 +558,14 @@ impl Analyzer {
             let mut separators = Vec::new();
             let mut type_exports = Vec::new();
             let mut token_end = 0;
-            walk(tree.root_node(), |node| {
+            walk_with_ancestors(tree.root_node(), |node, ancestors| {
+                let parent = ancestors.last().copied();
                 // TypeScript 5's `export type *` is parsed as an otherwise
                 // complete export with one ERROR containing only `type`.
                 // Erasing that type-only modifier preserves byte coordinates.
                 if node.is_error()
                     && text(node, &parsed_source) == "type"
-                    && let Some(parent) = node.parent()
+                    && let Some(parent) = parent
                     && parent.kind() == "export_statement"
                     && parent
                         .child_by_field_name("source")
@@ -398,21 +589,15 @@ impl Analyzer {
                     }
                 }
                 if node.kind() == "type_parameters"
-                    && node.parent().is_some_and(|parent| parent.is_error())
+                    && parent.is_some_and(|parent| parent.is_error())
                     && let Some(parameters) = node.next_named_sibling()
                     && parameters.kind() == "formal_parameters"
                     && !parameters.has_error()
                     && skip_type_trivia(&parsed_source[parameters.end_byte()..]).starts_with(':')
                 {
-                    let mut ancestor = node.parent();
-                    let mut in_type_body = false;
-                    while let Some(parent) = ancestor {
-                        if matches!(parent.kind(), "interface_body" | "object_type") {
-                            in_type_body = true;
-                            break;
-                        }
-                        ancestor = parent.parent();
-                    }
+                    let in_type_body = ancestors.iter().rev().any(|ancestor| {
+                        matches!(ancestor.kind(), "interface_body" | "object_type")
+                    });
                     let previous = &parsed_source[..token_end];
                     let gap = &parsed_source[token_end..node.start_byte()];
                     if in_type_body
@@ -425,7 +610,7 @@ impl Analyzer {
                 }
                 if node.is_missing()
                     && node.kind() == "}"
-                    && node.parent().is_some_and(|parent| {
+                    && parent.is_some_and(|parent| {
                         matches!(parent.kind(), "interface_body" | "object_type")
                     })
                 {
@@ -500,7 +685,7 @@ impl Analyzer {
             .into());
         }
         let mut out = Vec::new();
-        collect(tree.root_node(), source, &mut out);
+        collect(tree.root_node(), source, kinds, &mut out);
         Ok(out)
     }
 }

@@ -391,11 +391,12 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
             only,
         )
     });
+    let files_scanned = files.len();
     let report = Report {
         version: 1,
-        source_paths: files.clone(),
+        source_paths: files,
         threshold,
-        files_scanned: files.len(),
+        files_scanned,
         files_missing_coverage,
         functions_missing_coverage,
         completeness_failed,

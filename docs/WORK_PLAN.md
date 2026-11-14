@@ -1,6 +1,6 @@
 # Work plan and handoff (post-v2.2.1)
 
-Last updated 2026-11-10. This file preserves decisions and the parallel work
+Last updated 2026-11-13. This file preserves decisions and the parallel work
 split so any session can resume after a context reset. Update the status table
 when a stream changes state.
 
@@ -11,6 +11,9 @@ when a stream changes state.
 - [LINUX_DISTRIBUTION_STRATEGY.md](LINUX_DISTRIBUTION_STRATEGY.md):
   distribution options. A = npm package, B = shell installer hardening,
   C = GitHub Action, D = crates.io.
+- [PERFORMANCE_PLAN.md](PERFORMANCE_PLAN.md): scan speed, CPU, memory and
+  install-time work packages (WP0–WP6, D0–D5), with the measurements and the
+  constraints every change must keep.
 
 ## Owner decisions (2026-10-30)
 
@@ -52,6 +55,9 @@ when a stream changes state.
 | Roadmap v2.3 | `ROADMAP_V2_3.md` phases 1–3, in priority order (1.1 → 1.5, 2.1, 2.2, Phase 3, then later items) | Roadmap v2.3 implementation | `roadmap/` | 1.1–1.3 released in v2.3.0, 1.4 (#52) in v2.3.1; 1.5 quickstarts (#54), 2.1 excluded directories (#55), 2.2 syntax-error report (#59), Phase 3 repository tooling (#60) and the 1.6 multi-input importer (#61) released in v2.4.0; original v2.3 roadmap scope complete. Executed workspace/shard recipes for 1.6 follow, with 2.3–2.5 (next release) |
 | Distribution B + C | Installer hardening and GitHub Action | Distribution: installer hardening + GitHub Action | `distribution/` | B docs/CI (#41), static musl default (#44) and GitHub Action (#42) merged; decisions recorded in #45. Next: exact `--cert-identity` in the repo's own verification commands |
 | Distribution A (npm) | npm package with per-platform binaries and bundled helpers | Distribution A: npm package | `distribution/npm-` | Shipped: `typescript-crap@2.3.2` (npm `latest`, provenance, staged publishing approved with 2FA); published-release npm checks pass with npm, pnpm, Yarn and Bun (#48–#50, #53, #56, #57) |
+| Performance: core | `PERFORMANCE_PLAN.md` WP0 (golden identities, guard, hosted benchmark), then WP3 (analyzer CPU) | Perf core: safety net + analyzer CPU (WP0, WP3) | `perf/` | Started 2026-11-13 |
+| Performance: filesystem + parallel | WP1 (selection), WP2 (output preflight), then WP4 (bounded parallel analysis) once WP3 has merged | Perf filesystem + parallel scan (WP1, WP2, WP4) | `perf/` | Started 2026-11-13 |
+| Performance: install + memory | D0–D3 (GitHub Action and archive), D4 investigation, then WP5 (report and baseline memory) | Perf install track + memory (D0-D3, WP5) | `perf/` | Started 2026-11-13 |
 | Docs PRs | This file and the two plans; owner decisions | this coordinating thread | `docs/` | #40 merged; #45 decisions |
 
 Thread links are in T3: search thread titles above with `t3_thread_search`,

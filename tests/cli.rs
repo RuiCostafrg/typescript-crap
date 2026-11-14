@@ -435,6 +435,68 @@ fn symlinks_and_existing_outside_sources_cannot_escape_root() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn walks_skip_links_at_depth_and_explicit_paths_through_them_still_fail() {
+    use std::os::unix::fs::symlink;
+    let unsafe_source =
+        "export function unsafe(a: boolean,b: boolean){ if(a && b) return 1; return 0; }";
+    let dir = project(&[
+        ("a/b/c/real.ts", "export const real = () => 1;"),
+        ("a/b/c/d/deeper.ts", "export const deeper = () => 1;"),
+    ]);
+    let outside = project(&[("x/y/outside.ts", unsafe_source)]);
+    // A linked directory and a linked file, three and four levels down, inside
+    // and outside the project.
+    symlink(
+        dir.path().join("a/b/c/d"),
+        dir.path().join("a/b/c/inside-dir"),
+    )
+    .unwrap();
+    symlink(
+        outside.path().join("x"),
+        dir.path().join("a/b/c/outside-dir"),
+    )
+    .unwrap();
+    symlink(
+        dir.path().join("a/b/c/real.ts"),
+        dir.path().join("a/b/c/d/inside.ts"),
+    )
+    .unwrap();
+    symlink(
+        outside.path().join("x/y/outside.ts"),
+        dir.path().join("a/b/c/d/outside.ts"),
+    )
+    .unwrap();
+    for selection in [vec![], vec!["a"], vec!["a/b/c"]] {
+        let mut args = vec!["--format", "json"];
+        args.extend(selection);
+        let out = at(dir.path(), &args);
+        assert_eq!(out.status.code(), Some(0), "{out:?}");
+        let value = json(&out);
+        assert_eq!(value["files_scanned"], 2, "{value}");
+        let paths: Vec<_> = value["functions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|f| f["path"].as_str().unwrap().to_owned())
+            .collect();
+        assert_eq!(paths, ["a/b/c/d/deeper.ts", "a/b/c/real.ts"]);
+    }
+    for selection in [
+        "a/b/c/inside-dir",
+        "a/b/c/inside-dir/deeper.ts",
+        "a/b/c/outside-dir/y",
+        "a/b/c/outside-dir/y/outside.ts",
+        "a/b/c/d/inside.ts",
+        "a/b/c/d/outside.ts",
+    ] {
+        let out = at(dir.path(), &[selection]);
+        assert_eq!(out.status.code(), Some(2), "{selection}: {out:?}");
+        assert!(out.stdout.is_empty());
+    }
+}
+
 #[test]
 fn empty_and_type_only_projects_succeed_with_explicit_zero_counts() {
     let dir = project(&[("types.ts", "export interface Thing { name: string }")]);

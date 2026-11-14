@@ -513,3 +513,63 @@ fn excluded_directories_reject_an_explicit_null() {
         "{error:#}"
     );
 }
+
+#[test]
+/// A directory walk reports the same paths, and protects the same inputs, as
+/// selecting every file explicitly (which always resolves each path in full).
+fn walked_and_explicit_selection_agree_on_unicode_and_mixed_case_names() {
+    let files = [
+        "Src/CamelCase/MiXeD.ts",
+        "src/lower/deep/er/est.ts",
+        "Ünï cödé/naïve.ts",
+        "e\u{301}cole/de\u{301}ja\u{300}.tsx",
+        "日本語/ファイル.mts",
+        "UPPER/Index.CTS",
+    ];
+    let project = common::project(&files.iter().map(|file| (*file, SOURCE)).collect::<Vec<_>>());
+    let root = project.path();
+    let walked = scan(&ScanOptions {
+        root: root.into(),
+        ..Default::default()
+    })
+    .unwrap();
+    let explicit = scan(&ScanOptions {
+        root: root.into(),
+        paths: files[..5].iter().map(Into::into).collect(),
+        ..Default::default()
+    })
+    .unwrap();
+    let names = |report: &ts_crap::Report| -> Vec<String> {
+        report.functions.iter().map(|f| f.path.clone()).collect()
+    };
+    // `.CTS` is not a supported extension, so five files are scanned.
+    assert_eq!(walked.files_scanned, 5);
+    assert_eq!(names(&walked), names(&explicit));
+    let mut expected: Vec<String> = files[..5].iter().map(|file| (*file).to_owned()).collect();
+    expected.sort();
+    let mut reported = names(&walked);
+    reported.sort();
+    assert_eq!(reported, expected);
+    for file in &files[..5] {
+        let canonical = root.join(file).canonicalize().unwrap();
+        assert!(walked.is_source_path(&canonical), "{file}");
+        assert!(explicit.is_source_path(&canonical), "{file}");
+    }
+    assert!(!walked.is_source_path(&root.join("UPPER/Index.CTS")));
+}
+
+#[test]
+/// Excluded names apply below the selected directory, never to the project root
+/// or the selected directory's own path above the root.
+fn excluded_names_do_not_apply_to_the_root_or_a_selected_directory_name() {
+    let parent = common::project(&[
+        ("build/src/a.ts", SOURCE),
+        ("build/src/target/b.ts", SOURCE),
+        ("build/lib/c.ts", SOURCE),
+    ]);
+    let root = parent.path().join("build");
+    assert_eq!(paths(&cli(&root, &[], 0)), ["lib/c.ts", "src/a.ts"]);
+    assert_eq!(paths(&cli(&root, &["src"], 0)), ["src/a.ts"]);
+    // A selected directory that is itself excluded selects nothing.
+    assert_eq!(paths(&cli(&root, &["src/target"], 0)), Vec::<String>::new());
+}

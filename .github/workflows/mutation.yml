@@ -13,7 +13,8 @@ jobs:
   mutants:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Full-suite mutation inventory can exceed an hour; retain cleanup headroom.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -29,6 +30,9 @@ jobs:
           tool: cargo-mutants@27.1.0
       - name: Run all production mutations
         id: mutations
+        # A step timeout still permits the always() score/artifact steps below.
+        # Partial runs fail the score gate; they are never accepted as evidence.
+        timeout-minutes: 110
         shell: bash
         run: |
           set +e

@@ -166,3 +166,12 @@ breaks and UTF-16 columns while ownership retains Tree-sitter coordinates.
 All 14 mutation integration tests and strict Clippy pass after the fix, including
 regressions for LF/CRLF/CR/U+2028/U+2029 and unselected-mutant accounting.
 Hosted checks on the final head must still pass before merging.
+
+The first full mutation job on the reviewed head exceeded its one-hour workflow
+budget before publishing a score or artifacts. The 86 other checks passed.
+The latest main run tested 528 mutants in 38 minutes, while this branch contains
+687. The mutation job now allows 120 minutes, with a 110-minute step limit to
+leave time for the existing always-run score/artifact steps. Full production
+scope, the complete test suite, per-mutant/build timeouts and the 90% gate are
+unchanged. Partial runs still fail. Sharding was considered but deferred to
+avoid changing aggregation or required-check semantics within this feature.

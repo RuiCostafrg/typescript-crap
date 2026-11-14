@@ -19,11 +19,22 @@ SCAN = ROOT / 'action/scan.sh'
 IDENTITY = 'https://github.com/RuiCostafrg/typescript-crap/.github/workflows/release.yml@refs/tags/v2.2.1'
 
 FAKE_GH = r'''#!/usr/bin/env python3
-import fnmatch, json, os, shutil, sys
+import fnmatch, json, os, shutil, sys, time
 args = sys.argv[1:]
 with open(os.environ['GH_CALLS'], 'a') as calls:
     calls.write(json.dumps(args) + '\n')
+marks = os.environ.get('GH_MARKS')
+
+def wait_for(mark):
+    for _ in range(200):
+        if os.path.exists(os.path.join(marks, mark)):
+            return True
+        time.sleep(0.05)
+    return False
+
 if args[:2] == ['release', 'download']:
+    if 'GH_REQUIRE_OVERLAP' in os.environ and not wait_for('root-started'):
+        sys.exit('the trusted root was not fetched during the download')
     failures = os.environ.get('GH_DOWNLOAD_FAILURES')
     if failures:
         with open(failures) as f:
@@ -47,6 +58,11 @@ elif args[:2] == ['attestation', 'verify']:
     if os.path.basename(args[2]) in os.environ.get('GH_UNATTESTED', '').split():
         sys.exit('no matching attestation')
 elif args[:2] == ['attestation', 'trusted-root']:
+    if marks:
+        open(os.path.join(marks, 'root-started'), 'w').close()
+    time.sleep(float(os.environ.get('GH_TRUSTED_ROOT_DELAY', '0')))
+    if marks:
+        open(os.path.join(marks, 'root-finished'), 'w').close()
     if 'GH_NO_TRUSTED_ROOT' in os.environ:
         sys.exit('tuf refresh failed')
     if 'GH_EMPTY_TRUSTED_ROOT' not in os.environ:
@@ -195,11 +211,14 @@ class ActionScripts(unittest.TestCase):
                 self.assertEqual((self.root / 'path').read_text(), outputs['bin-dir'] + '\n')
                 self.assertEqual((self.root / 'env').read_text(), '')
                 calls = self.gh_calls()
-                self.assertEqual(calls, [
+                # The trusted root is fetched while the assets download, so
+                # either may be logged first.
+                self.assertCountEqual(calls[:2], [
                     ['release', 'download', 'v2.2.1', '--repo', 'RuiCostafrg/typescript-crap',
                      '--pattern', name, '--pattern', f'{name}.sha256',
                      '--dir', str(executable.parents[2] / 'download'), '--clobber'],
-                    ['attestation', 'trusted-root'],
+                    ['attestation', 'trusted-root']])
+                self.assertEqual(calls[2:], [
                     ['attestation', 'verify', str(executable.parents[2] / 'download' / name),
                      '--repo', 'RuiCostafrg/typescript-crap', '--cert-identity', IDENTITY,
                      '--source-ref', 'refs/tags/v2.2.1', '--deny-self-hosted-runners',
@@ -328,6 +347,33 @@ class ActionScripts(unittest.TestCase):
                 self.publish()
                 self.assert_rejected(self.install(**{variable: '1'}), message)
                 self.assertFalse([c for c in self.gh_calls() if c[:2] == ['attestation', 'verify']])
+                self.assert_nothing_ran()
+        # gh's own error is still shown, after the download's output.
+        self.assertIn('tuf refresh failed', self.install(GH_NO_TRUSTED_ROOT='1').stderr)
+
+    def assert_nothing_ran(self):
+        # Nothing was extracted and the downloaded binary never executed.
+        self.assertFalse((self.root / 'scan-calls.token').exists())
+        self.assertEqual(list(self.runner_temp.glob('ts-crap-action.*/tool/*')), [])
+
+    def test_fetches_the_trusted_root_while_the_assets_download(self):
+        # The fake download fails unless the trusted-root fetch has started.
+        marks = self.root / 'marks'
+        marks.mkdir()
+        self.publish()
+        result = self.install(GH_MARKS=str(marks), GH_REQUIRE_OVERLAP='1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_a_failed_download_waits_for_the_background_trusted_root(self):
+        # The script must not exit while gh is still writing its TUF cache. A
+        # missing asset fails the download at once, while the root is slow.
+        marks = self.root / 'marks'
+        marks.mkdir()
+        self.publish(target='aarch64-apple-darwin', helpers=False)
+        self.assert_rejected(self.install(GH_MARKS=str(marks), GH_TRUSTED_ROOT_DELAY='2'),
+                             'could not download')
+        self.assertTrue((marks / 'root-finished').exists())
+        self.assertFalse([c for c in self.gh_calls() if c[:2] == ['attestation', 'verify']])
 
     def test_a_missing_asset_rejects_the_install_before_any_verification(self):
         self.publish(helpers=False)
@@ -346,6 +392,7 @@ class ActionScripts(unittest.TestCase):
                 for asset in unattested.split():
                     self.assertIn(asset, result.stderr)
                 self.assertEqual((self.root / 'env').read_text(), '')
+                self.assert_nothing_ran()
 
     def test_rejects_unpinned_malformed_and_unsupported_versions(self):
         for version in ['', 'latest', '2.2', 'v', '2.2.1 ', '2.2.1;id', '$(id)', '2.2.1+build',
@@ -382,6 +429,7 @@ class ActionScripts(unittest.TestCase):
             with self.subTest(message=message):
                 self.publish(checksum=checksum)
                 self.assert_rejected(self.install(), message)
+                self.assert_nothing_ran()
 
     def test_rejects_missing_assets_and_releases(self):
         self.assert_rejected(self.install('2.9.9'), 'could not download v2.9.9')

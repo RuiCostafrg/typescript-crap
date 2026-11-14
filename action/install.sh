@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Installs a published ts-crap release for the GitHub Action (see action.yml).
-# Downloaded release files are data: nothing downloaded runs before its build
-# provenance and SHA-256 checksum verify, and no remote script is executed.
+# Downloaded release files are data: nothing downloaded runs or is extracted
+# before its build provenance and SHA-256 checksum verify, and no remote script
+# is executed.
 set -euo pipefail
 
 # The release source is fixed. It is deliberately not an input, so a workflow
@@ -18,6 +19,12 @@ fail() {
   echo "::error title=ts-crap setup::$*" >&2
   exit 1
 }
+
+# On any exit, let a background trusted-root fetch finish rather than leave it
+# running or kill it mid-write, which could leave a half-written TUF cache for
+# later gh calls in the job. The script's exit status is kept.
+root_pid=
+trap 'if [[ -n "$root_pid" ]]; then wait "$root_pid" 2>/dev/null || true; fi' EXIT
 
 version=${TS_CRAP_ACTION_VERSION:-}
 version=${version#v}
@@ -101,6 +108,15 @@ if [[ "$helpers" == true ]]; then
   patterns+=(--pattern ts-crap-coverage-helpers.zip --pattern ts-crap-coverage-helpers.zip.sha256)
   assets+=(ts-crap-coverage-helpers.zip)
 fi
+
+# gh refreshes the Sigstore trusted root over TUF on every verification, which
+# is most of its runtime. Fetch it once per install, through the same TUF
+# client, in the background while the assets download. Its errors are printed
+# after the download finishes, so the two outputs never interleave.
+trusted_root="$work/trusted-root.jsonl"
+gh attestation trusted-root > "$trusted_root" 2> "$work/trusted-root.err" &
+root_pid=$!
+
 # GitHub occasionally answers release downloads with a transient HTTP 5xx or a
 # network error, so try up to three times. "release not found" is retried too:
 # gh reports it when its published and draft lookups both fail, even if the
@@ -118,17 +134,17 @@ until gh release download "v$version" --repo "$REPOSITORY" "${patterns[@]}" --di
   attempt=$(( attempt + 1 ))
 done
 
-# gh refreshes the Sigstore trusted root over TUF on every verification, which
-# is most of its runtime. Fetch it once per install, through the same TUF client.
-trusted_root="$work/trusted-root.jsonl"
-gh attestation trusted-root > "$trusted_root" \
-  || fail "could not fetch the Sigstore trusted root"
-[[ -s "$trusted_root" ]] || fail "the Sigstore trusted root is empty"
-
 # Check every asset first, so a missing one can't leave a verifier running.
 for asset in "${assets[@]}"; do
   [[ -f "$download/$asset" ]] || fail "release v$version has no $asset"
 done
+root_status=0
+wait "$root_pid" || root_status=$?
+root_pid=
+cat "$work/trusted-root.err" >&2
+(( root_status == 0 )) || fail "could not fetch the Sigstore trusted root"
+[[ -s "$trusted_root" ]] || fail "the Sigstore trusted root is empty"
+
 pids=()
 for asset in "${assets[@]}"; do
   gh attestation verify "$download/$asset" --repo "$REPOSITORY" \

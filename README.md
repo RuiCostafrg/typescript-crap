@@ -191,9 +191,21 @@ The Action is the recommended way to run ts-crap in GitHub workflows:
   repository, adds nothing to your lockfile, and the same step runs on Linux,
   macOS and Windows runners. Only the optional coverage helpers need Node 24+.
 
-The verification has a small cost. On GitHub-hosted Linux runners with v2.3.2,
-installing the tool and scanning the same project took about 5 seconds with the
-Action, against about 2 seconds with `npm install` followed by the scan.
+The verification has a small cost, and almost all of it is one network round
+trip: `gh` refreshes the Sigstore trusted root over TUF on every run, which takes
+about 3 seconds on GitHub-hosted runners. These are install-only medians from
+hosted runners in November 2026, with v2.4.0 assets and empty caches
+([raw numbers](docs/measurements/install-action-2026-11-14.json)):
+
+| Install path | Ubuntu | macOS | Windows | Checked before the tool first runs |
+| --- | ---: | ---: | ---: | --- |
+| npm (`npm install --save-exact`) | 0.5 s | 1.2 s | 1.0 s | Registry integrity hashes, recorded in the lockfile. Build provenance only if you also run `npm audit signatures` |
+| Shell installer, pinned version | 0.4 s | 0.7 s | — | The archive's SHA-256 against the installer's embedded checksum, when `sha256sum` is available. Build provenance only if you [verify the installer first](#macos-and-linux) |
+| GitHub Action | 3.9 s | 4.3 s | 4.4 s | Build provenance against this repository's release workflow at the tag, then the SHA-256 and the reported version |
+
+npm is the fastest path. The Action figures are for releases after v2.4.0, which
+fetch the trusted root while the archive downloads; the v2.4.0 Action takes about
+0.5 seconds longer.
 
 Prefer npm if your job already runs `npm ci` and Node, or you want the same
 pinned version for local runs and CI. Adding ts-crap as a devDependency then

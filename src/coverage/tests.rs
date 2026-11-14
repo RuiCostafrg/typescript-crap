@@ -1,7 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use super::Coverage;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
 
 fn load(value: serde_json::Value) -> anyhow::Result<Coverage> {
     let file = tempfile::NamedTempFile::new().unwrap();
@@ -74,14 +73,14 @@ fn owned_line_bounds_reject_zero_and_past_eof_with_or_without_hits() {
     for path in ["a.ts", "absent.ts"] {
         let view = coverage.for_source(path, source).unwrap();
         for line in [0, 2] {
-            assert!(view.evidence(&BTreeSet::from([line])).is_err());
+            assert!(view.evidence(&[line]).is_err());
         }
     }
     assert_eq!(
         coverage
             .for_source("a.ts", source)
             .unwrap()
-            .evidence(&BTreeSet::from([1]))
+            .evidence(&[1])
             .unwrap()
             .fraction,
         1.0
@@ -139,7 +138,7 @@ fn fractions_count_owned_statement_starts_not_all_reported_lines() {
         coverage
             .for_source("src/a.ts", source)
             .unwrap()
-            .evidence(&BTreeSet::from([1, 2, 3]))
+            .evidence(&[1, 2, 3])
             .unwrap()
             .fraction,
         1.0 / 3.0
@@ -148,7 +147,7 @@ fn fractions_count_owned_statement_starts_not_all_reported_lines() {
         coverage
             .for_source("absent.ts", source)
             .unwrap()
-            .evidence(&BTreeSet::from([1]))
+            .evidence(&[1])
             .unwrap()
             .fraction,
         0.0
@@ -157,7 +156,7 @@ fn fractions_count_owned_statement_starts_not_all_reported_lines() {
         coverage
             .for_source("src/a.ts", source)
             .unwrap()
-            .evidence(&BTreeSet::new())
+            .evidence(&[])
             .unwrap()
             .fraction,
         0.0
@@ -170,7 +169,7 @@ fn coverage_evidence_is_bounded_monotonic_and_distinguishes_absent_from_zero() {
     // Exhaustively vary absent/zero/covered evidence for three owned statements.
     let source = "a();\nb();\nc();\n";
     let hash = hex::encode(Sha256::digest(source.as_bytes()));
-    let owned = BTreeSet::from([1, 2, 3]);
+    let owned = [1, 2, 3];
     for mut state in 0..27 {
         let mut lines = serde_json::Map::new();
         for line in 1..=3 {
@@ -210,14 +209,14 @@ fn coverage_evidence_is_bounded_monotonic_and_distinguishes_absent_from_zero() {
         let absent = coverage
             .for_source("absent.ts", source)
             .unwrap()
-            .evidence(&BTreeSet::new())
+            .evidence(&[])
             .unwrap();
         assert!(!absent.complete);
         assert_eq!(absent.fraction, 0.0);
         let empty = coverage
             .for_source("a.ts", source)
             .unwrap()
-            .evidence(&BTreeSet::new())
+            .evidence(&[])
             .unwrap();
         assert!(empty.complete);
         assert_eq!(empty.fraction, 0.0);

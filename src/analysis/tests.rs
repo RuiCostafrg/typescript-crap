@@ -169,6 +169,37 @@ fn owned_identity_and_metrics_survive_trivia_and_nested_edits() {
     );
 }
 
+// The kind-string and `Node::parent` naming that production replaced with kind
+// tables and an ancestor stack, kept as an independent reference.
+fn reference_local_name(node: tree_sitter::Node<'_>, source: &str) -> String {
+    if let Some(name) = node.child_by_field_name("name") {
+        return super::text(name, source).into();
+    }
+    if let Some(parent) = node.parent() {
+        match parent.kind() {
+            "variable_declarator" | "public_field_definition" | "pair" => {
+                if let Some(name) = parent
+                    .child_by_field_name("name")
+                    .or_else(|| parent.child_by_field_name("key"))
+                {
+                    return super::text(name, source).into();
+                }
+            }
+            "assignment_expression" => {
+                if let Some(left) = parent.child_by_field_name("left") {
+                    return super::text(left, source).into();
+                }
+            }
+            _ => {}
+        }
+    }
+    format!(
+        "<anonymous@{}:{}>",
+        node.start_position().row + 1,
+        node.start_position().column + 1
+    )
+}
+
 #[test]
 fn cached_names_and_columns_match_ancestor_and_prefix_reference() {
     isolated(
@@ -222,11 +253,11 @@ abstract class Abstract { abstract missing(): void; concrete() { return () => 15
                     {
                         // Deliberately use the original ancestor/prefix approach as
                         // a reference, independent of the production caches.
-                        let mut names = vec![super::local_name(node, source)];
+                        let mut names = vec![reference_local_name(node, source)];
                         let mut ancestor = node.parent();
                         while let Some(parent) = ancestor {
                             if super::is_function(parent.kind()) {
-                                names.push(super::local_name(parent, source));
+                                names.push(reference_local_name(parent, source));
                             } else if matches!(
                                 parent.kind(),
                                 "class_declaration" | "abstract_class_declaration" | "class"
@@ -425,6 +456,275 @@ fn every_node_kind_id_maps_back_to_its_kind_in_both_grammars() {
                 );
                 for kind in ["required_parameter", "optional_parameter"] {
                     assert!(ids(kind).len() > 1, "{kind}: {:?}", ids(kind));
+                }
+            }
+        },
+    );
+}
+
+fn languages() -> [(bool, tree_sitter::Language); 2] {
+    [
+        (false, tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()),
+        (true, tree_sitter_typescript::LANGUAGE_TSX.into()),
+    ]
+}
+
+// The tables must agree with the kind-string matches for every symbol id,
+// including duplicate, anonymous and hidden ids, and give nothing outside them.
+#[test]
+fn kind_tables_match_kind_strings_for_every_id() {
+    isolated(
+        "analysis::tests::kind_tables_match_kind_strings_for_every_id",
+        || {
+            for (_, language) in languages() {
+                let kinds = super::Kinds::new(&language);
+                let count = language.node_kind_count();
+                assert_eq!(kinds.flags.len(), count);
+                assert_eq!(kinds.names.len(), count);
+                for id in 0..u16::try_from(count).unwrap() {
+                    let kind = language.node_kind_for_id(id);
+                    assert_eq!(kinds.names[usize::from(id)].as_deref(), kind, "id {id}");
+                    assert_eq!(
+                        kinds.flags[usize::from(id)],
+                        kind.map_or(0, super::kind_flags),
+                        "id {id} {kind:?}"
+                    );
+                }
+                assert!(kinds.flags.get(usize::from(u16::MAX)).is_none());
+                for (field, id) in [
+                    ("body", kinds.fields.body),
+                    ("key", kinds.fields.key),
+                    ("left", kinds.fields.left),
+                    ("name", kinds.fields.name),
+                    ("operator", kinds.fields.operator),
+                    ("parameters", kinds.fields.parameters),
+                    ("right", kinds.fields.right),
+                    ("value", kinds.fields.value),
+                ] {
+                    assert_eq!(
+                        id,
+                        language.field_id_for_name(field).map(|id| id.get()),
+                        "{field}"
+                    );
+                    assert!(id.is_some(), "{field}");
+                }
+            }
+            // Every flag is set by at least one kind, and the known-dead
+            // "return_type" arm stays dead (it is a field name, not a kind).
+            for flag in [
+                super::FUNCTION,
+                super::TYPE_ONLY,
+                super::DECISION,
+                super::LOGICAL,
+                super::OWNED_LINE,
+                super::PARAMETER,
+                super::PATTERN,
+                super::CLASS,
+                super::COMMENT,
+                super::STATEMENT_BLOCK,
+                super::NAMING_PARENT,
+                super::ASSIGNMENT_PARENT,
+            ] {
+                for (_, language) in languages() {
+                    let kinds = super::Kinds::new(&language);
+                    assert!(kinds.flags.iter().any(|flags| flags & flag != 0), "{flag}");
+                }
+            }
+            for (_, language) in languages() {
+                let kinds = super::Kinds::new(&language);
+                assert!(
+                    !kinds
+                        .names
+                        .iter()
+                        .any(|name| name.as_deref() == Some("return_type"))
+                );
+            }
+            // Nodes outside the table (ERROR is 65535) have no flags and keep
+            // their own kind string.
+            for (path, source) in [
+                ("bad.ts", "const broken = ;"),
+                ("bad.tsx", "const f = <div>"),
+            ] {
+                let (_, language) = languages()[usize::from(path.ends_with(".tsx"))].clone();
+                let mut parser = tree_sitter::Parser::new();
+                parser.set_language(&language).unwrap();
+                let tree = parser.parse(source, None).unwrap();
+                let kinds = super::Kinds::new(&language);
+                let mut errors = 0;
+                super::walk(tree.root_node(), |node| {
+                    if node.kind_id() == u16::MAX {
+                        errors += 1;
+                        assert_eq!(kinds.flags(node), 0);
+                        assert_eq!(kinds.kind(node), "ERROR");
+                    } else {
+                        assert_eq!(kinds.flags(node), super::kind_flags(node.kind()));
+                        assert_eq!(kinds.kind(node), node.kind());
+                    }
+                    true
+                });
+                assert!(errors > 0, "{path}");
+            }
+        },
+    );
+}
+
+// The ancestor stack must equal the `Node::parent` chain for every node,
+// including inside ERROR and around MISSING nodes, and visit the same nodes.
+#[test]
+fn ancestor_stack_matches_parent_chain_for_every_node() {
+    isolated(
+        "analysis::tests::ancestor_stack_matches_parent_chain_for_every_node",
+        || {
+            let mut pruned = 0;
+            for (_, tree) in kind_trees() {
+                let mut walked = Vec::new();
+                super::walk(tree.root_node(), |node| {
+                    walked.push(node.id());
+                    true
+                });
+                let mut visited = Vec::new();
+                super::walk_with_ancestors(tree.root_node(), |node, ancestors| {
+                    visited.push(node.id());
+                    let mut chain = Vec::new();
+                    let mut parent = node.parent();
+                    while let Some(node) = parent {
+                        chain.push(node);
+                        parent = node.parent();
+                    }
+                    chain.reverse();
+                    assert_eq!(ancestors, chain.as_slice(), "{:?}", node.start_position());
+                    true
+                });
+                assert_eq!(visited, walked);
+                // Pruning a subtree skips its descendants and keeps the stack balanced.
+                super::walk_with_ancestors(tree.root_node(), |node, ancestors| {
+                    assert_eq!(ancestors.last().copied(), node.parent());
+                    if node.kind() == "statement_block" {
+                        pruned += 1;
+                        return false;
+                    }
+                    true
+                });
+            }
+            assert!(pruned > 0);
+        },
+    );
+}
+
+// An oracle written independently of `kind_flags`: every kind the analyzer
+// matches and the flags it must carry. Any other kind must have no flags.
+#[test]
+fn kind_tables_match_an_independent_literal_oracle() {
+    isolated(
+        "analysis::tests::kind_tables_match_an_independent_literal_oracle",
+        || {
+            use super::{
+                ASSIGNMENT_PARENT, CLASS, COMMENT, DECISION, FUNCTION, LOGICAL, NAMING_PARENT,
+                OWNED_LINE, PARAMETER, PATTERN, STATEMENT_BLOCK, TYPE_ONLY,
+            };
+            let oracle: &[(&str, u16)] = &[
+                ("function_declaration", FUNCTION),
+                ("generator_function_declaration", FUNCTION),
+                ("function_expression", FUNCTION),
+                ("generator_function", FUNCTION),
+                ("arrow_function", FUNCTION),
+                ("method_definition", FUNCTION),
+                ("type_annotation", TYPE_ONLY),
+                ("type_parameters", TYPE_ONLY),
+                ("if_statement", DECISION | OWNED_LINE),
+                ("for_statement", DECISION | OWNED_LINE),
+                ("for_in_statement", DECISION | OWNED_LINE),
+                ("while_statement", DECISION | OWNED_LINE),
+                ("do_statement", DECISION | OWNED_LINE),
+                ("catch_clause", DECISION),
+                ("switch_case", DECISION),
+                ("ternary_expression", DECISION),
+                ("binary_expression", LOGICAL),
+                ("augmented_assignment_expression", LOGICAL),
+                ("return_statement", OWNED_LINE),
+                ("throw_statement", OWNED_LINE),
+                ("expression_statement", OWNED_LINE),
+                ("lexical_declaration", OWNED_LINE),
+                ("variable_declaration", OWNED_LINE),
+                ("switch_statement", OWNED_LINE),
+                ("break_statement", OWNED_LINE),
+                ("continue_statement", OWNED_LINE),
+                ("required_parameter", PARAMETER),
+                ("optional_parameter", PARAMETER),
+                ("assignment_pattern", PATTERN),
+                ("object_assignment_pattern", PATTERN),
+                ("class_declaration", CLASS),
+                ("abstract_class_declaration", CLASS),
+                ("class", CLASS),
+                ("comment", COMMENT),
+                ("statement_block", STATEMENT_BLOCK),
+                ("variable_declarator", NAMING_PARENT),
+                ("public_field_definition", NAMING_PARENT),
+                ("pair", NAMING_PARENT),
+                ("assignment_expression", ASSIGNMENT_PARENT),
+            ];
+            for (_, language) in languages() {
+                let kinds = super::Kinds::new(&language);
+                for (id, flags) in kinds.flags.iter().enumerate() {
+                    let name = kinds.names[id].as_deref().unwrap_or("");
+                    let expected = oracle
+                        .iter()
+                        .find(|(kind, _)| *kind == name)
+                        .map_or(0, |(_, flags)| *flags);
+                    assert_eq!(*flags, expected, "id {id} {name:?}");
+                }
+                // Every oracle kind exists in both grammars.
+                for (kind, _) in oracle {
+                    assert!(
+                        kinds.names.iter().any(|name| name.as_deref() == Some(kind)),
+                        "{kind}"
+                    );
+                }
+            }
+        },
+    );
+}
+
+// Symbol ids differ between the grammars, so a tree read with the other
+// grammar's table would see wrong kinds. Each tree must use its own.
+#[test]
+fn each_grammar_needs_its_own_kind_table() {
+    isolated(
+        "analysis::tests::each_grammar_needs_its_own_kind_table",
+        || {
+            let [(_, typescript), (_, tsx)] = languages();
+            let (typescript, tsx) = (super::Kinds::new(&typescript), super::Kinds::new(&tsx));
+            assert_ne!(typescript.names, tsx.names);
+            for (path, source, _) in GOLDEN {
+                let (own, other) = if path.ends_with(".tsx") {
+                    (&tsx, &typescript)
+                } else {
+                    (&typescript, &tsx)
+                };
+                let (_, language) = languages()[usize::from(path.ends_with(".tsx"))].clone();
+                let mut parser = tree_sitter::Parser::new();
+                parser.set_language(&language).unwrap();
+                let tree = parser.parse(source, None).unwrap();
+                let mut mismatches = 0;
+                super::walk(tree.root_node(), |node| {
+                    assert_eq!(own.kind(node), node.kind());
+                    assert_eq!(own.flags(node), super::kind_flags(node.kind()));
+                    mismatches += usize::from(other.kind(node) != node.kind());
+                    true
+                });
+                assert!(mismatches > 0, "{path}");
+            }
+            // One analyzer alternating grammars matches fresh analyzers.
+            let mut shared = super::Analyzer::default();
+            for _ in 0..2 {
+                for (path, source, _) in GOLDEN {
+                    let fresh =
+                        golden_dump(&super::Analyzer::default().analyze(path, source).unwrap());
+                    assert_eq!(
+                        golden_dump(&shared.analyze(path, source).unwrap()),
+                        fresh,
+                        "{path}"
+                    );
                 }
             }
         },

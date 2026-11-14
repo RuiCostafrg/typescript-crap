@@ -6,7 +6,7 @@ use serde::{
 };
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, BTreeSet, btree_map::Entry},
+    collections::{BTreeMap, btree_map::Entry},
     fmt,
     marker::PhantomData,
     path::Path,
@@ -184,7 +184,8 @@ impl SourceCoverage<'_> {
     pub fn present(&self) -> bool {
         self.file.is_some()
     }
-    pub fn evidence(&self, owned_lines: &BTreeSet<usize>) -> Result<Evidence> {
+    /// `owned_lines` is sorted and deduplicated, as `analysis::Method::lines` is.
+    pub fn evidence(&self, owned_lines: &[usize]) -> Result<Evidence> {
         let mut complete = self.present();
         let mut covered = 0;
         for &line in owned_lines {

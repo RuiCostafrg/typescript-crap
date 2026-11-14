@@ -4,6 +4,12 @@
 
 ### Changed
 
+- Function analysis evaluates node kinds through per-grammar tables of symbol
+  ids, hashes each function's tokens as one buffered stream, keeps owned lines
+  in a sorted vector and tracks ancestors during the tree walk instead of
+  asking tree-sitter for parents. Reports, identities and scores are byte for
+  byte unchanged (pinned by the golden fixtures and checked on a full VS Code
+  scan).
 - The GitHub Action fetches the Sigstore trusted root while the release assets
   download, instead of afterwards. On GitHub-hosted runners this saves a median
   0.55–0.67 seconds per install. What is verified, and the rule that nothing is

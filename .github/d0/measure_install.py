@@ -19,6 +19,7 @@ REPO = 'RuiCostafrg/typescript-crap'
 VERSION = os.environ.get('MEASURE_VERSION', '2.4.0')
 IDENTITY = f'https://github.com/{REPO}/.github/workflows/release.yml@refs/tags/v{VERSION}'
 ITERATIONS = int(os.environ.get('MEASURE_ITERATIONS', '5'))
+PAIRS = int(os.environ.get('MEASURE_PAIRS', '4'))
 BASH = os.environ['MEASURE_BASH']
 CHECKOUT = Path(os.environ['GITHUB_WORKSPACE'])
 OUT = Path(sys.argv[1])
@@ -72,7 +73,7 @@ def sha256_tool(path):
         return subprocess.run(tool, stdin=data, capture_output=True, text=True, check=True).stdout.split()[0]
 
 
-def one_iteration(work):
+def one_iteration(work, index):
     row = {}
     cache = work / 'cache'
     download = work / 'download'
@@ -145,6 +146,20 @@ def one_iteration(work):
     row['install_sh_total_with_helpers'], _ = timed([BASH, str(CHECKOUT / 'action' / 'install.sh')],
                                                     script_env)
 
+    # Paired: main's install.sh against this checkout's, alternating which runs
+    # first, each with a cold TUF cache, so network drift hits both alike.
+    del script_env['TS_CRAP_ACTION_HELPERS']
+    scripts = {'base': os.environ['MEASURE_BASE_SCRIPT'], 'head': str(CHECKOUT / 'action' / 'install.sh')}
+    row['paired_base'], row['paired_head'] = [], []
+    for pair in range(PAIRS):
+        order = ['base', 'head'] if (index + pair) % 2 == 0 else ['head', 'base']
+        for label in order:
+            for name in ['path', 'output', 'env']:
+                (work / name).write_text('')
+            script_env['XDG_CACHE_HOME'] = str(work / f'paired-cache-{pair}-{label}')
+            elapsed, _ = timed([BASH, scripts[label]], script_env)
+            row[f'paired_{label}'].append(elapsed)
+
     # D5: other install paths, cold caches.
     npm = shutil.which('npm')
     if npm:
@@ -173,7 +188,7 @@ def main():
     rows = []
     for index in range(ITERATIONS):
         with tempfile.TemporaryDirectory(dir=os.environ.get('RUNNER_TEMP')) as directory:
-            row = one_iteration(Path(directory))
+            row = one_iteration(Path(directory), index)
             row['iteration'] = index + 1
             rows.append(row)
             print(json.dumps(row), flush=True)

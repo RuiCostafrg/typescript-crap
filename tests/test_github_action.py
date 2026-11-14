@@ -26,7 +26,7 @@ with open(os.environ['GH_CALLS'], 'a') as calls:
 marks = os.environ.get('GH_MARKS')
 
 def wait_for(mark):
-    for _ in range(200):
+    for _ in range(600):
         if os.path.exists(os.path.join(marks, mark)):
             return True
         time.sleep(0.05)
@@ -363,6 +363,19 @@ class ActionScripts(unittest.TestCase):
         self.publish()
         result = self.install(GH_MARKS=str(marks), GH_REQUIRE_OVERLAP='1')
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_retries_the_download_while_the_trusted_root_is_fetched(self):
+        marks = self.root / 'marks'
+        marks.mkdir()
+        failures = self.root / 'failures'
+        failures.write_text('1')
+        self.publish()
+        result = self.install(GH_MARKS=str(marks), GH_REQUIRE_OVERLAP='1', GH_TRUSTED_ROOT_DELAY='0.5',
+                              GH_DOWNLOAD_FAILURES=str(failures))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('HTTP 500', result.stderr)
+        self.assertEqual(self.download_calls(), 2)
+        self.assertEqual(self.gh_calls().count(['attestation', 'trusted-root']), 1)
 
     def test_a_failed_download_waits_for_the_background_trusted_root(self):
         # The script must not exit while gh is still writing its TUF cache. A

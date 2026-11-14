@@ -191,9 +191,9 @@ The Action is the recommended way to run ts-crap in GitHub workflows:
   repository, adds nothing to your lockfile, and the same step runs on Linux,
   macOS and Windows runners. Only the optional coverage helpers need Node 24+.
 
-The verification has a small cost, and almost all of it is one network round
-trip: `gh` refreshes the Sigstore trusted root over TUF on every run, which takes
-about 3 seconds on GitHub-hosted runners. These are install-only medians from
+The verification has a small cost, and almost all of it is one TUF refresh:
+`gh` updates the Sigstore trusted root on every run, which takes about 3 seconds
+on GitHub-hosted runners. These are install-only medians from
 hosted runners in November 2026, with v2.4.0 assets and empty caches
 ([raw numbers](docs/measurements/install-action-2026-11-14.json)):
 
@@ -205,7 +205,7 @@ hosted runners in November 2026, with v2.4.0 assets and empty caches
 
 npm is the fastest path. The Action figures are for releases after v2.4.0, which
 fetch the trusted root while the archive downloads; the v2.4.0 Action takes about
-0.5 seconds longer.
+0.6 seconds longer.
 
 Prefer npm if your job already runs `npm ci` and Node, or you want the same
 pinned version for local runs and CI. Adding ts-crap as a devDependency then

@@ -20,11 +20,22 @@ fail() {
   exit 1
 }
 
-# On any exit, let a background trusted-root fetch finish rather than leave it
-# running or kill it mid-write, which could leave a half-written TUF cache for
-# later gh calls in the job. The script's exit status is kept.
+# On any exit, give a background trusted-root fetch up to 30 seconds to finish
+# rather than leave it running or cut it off mid-write, which could leave a
+# half-written TUF cache for later gh calls in the job. A fetch that is still
+# stalled after that is stopped. The script's exit status is kept.
 root_pid=
-trap 'if [[ -n "$root_pid" ]]; then wait "$root_pid" 2>/dev/null || true; fi' EXIT
+finish_root_fetch() {
+  [[ -n "$root_pid" ]] || return 0
+  local tenths=0
+  while kill -0 "$root_pid" 2>/dev/null && (( tenths < 300 )); do
+    sleep 0.1
+    tenths=$(( tenths + 1 ))
+  done
+  kill "$root_pid" 2>/dev/null || true
+  wait "$root_pid" 2>/dev/null || true
+}
+trap finish_root_fetch EXIT
 
 version=${TS_CRAP_ACTION_VERSION:-}
 version=${version#v}

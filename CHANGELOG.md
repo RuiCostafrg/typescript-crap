@@ -28,6 +28,15 @@
   anonymous temporary file (in memory if none can be created) and still appear
   only after every file is published.
 
+- The CI performance guard compares report bytes: on pull requests the
+  candidate must reproduce the base's report for every scanner workload unless
+  the pull request is labelled `output-change`, and repeated runs must agree.
+  New workloads cover a mixed corpus with multi-MiB files, an existing
+  `--output` destination, a deep directory tree and a `--baseline` scan.
+- An opt-in `corpus-benchmark` workflow measures full scans of a pinned
+  VS Code commit with the x86-64 glibc and static musl builds
+  (`scripts/bench-corpus.py`).
+
 ### Added
 
 - `Baseline::render_report_to` streams a report's baseline snapshot without

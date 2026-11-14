@@ -1,0 +1,71 @@
+name: corpus-benchmark
+# Opt-in evidence, not a gate: full scans of a pinned VS Code commit with the
+# shipped x86-64 glibc and static musl builds. Results go to the job summary
+# and an artifact; commit noteworthy runs under docs/measurements/.
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Measured runs per build and destination mode
+        default: "3"
+        required: false
+  # Validate edits to the benchmark itself.
+  pull_request:
+    paths:
+      - .github/workflows/corpus-benchmark.yml
+      - scripts/bench-corpus.py
+permissions:
+  contents: read
+concurrency:
+  group: corpus-benchmark-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  vscode:
+    if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
+    timeout-minutes: 90
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out the pinned corpus
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: microsoft/vscode
+          ref: f42f0a1102cedb0047aed92bcdf1f4ba422d02b8
+          path: corpus/vscode
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.90.0
+          targets: x86_64-unknown-linux-gnu, x86_64-unknown-linux-musl
+      - name: Install musl and GNU time
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y musl-tools time file
+      - name: Build the shipped profile for both Linux targets
+        run: |
+          cargo build --locked --profile dist --target x86_64-unknown-linux-gnu --bin ts-crap
+          cargo build --locked --profile dist --target x86_64-unknown-linux-musl --bin ts-crap
+          linkage="$(file -b target/x86_64-unknown-linux-musl/dist/ts-crap)"
+          echo "musl build: $linkage"
+          grep -Eq 'statically linked|static-pie linked' <<<"$linkage"
+      - name: Benchmark
+        env:
+          RUNS: ${{ inputs.runs || '3' }}
+        run: |
+          [[ "$RUNS" =~ ^[1-9][0-9]?$ ]] || { echo "runs must be 1-99" >&2; exit 1; }
+          python3 scripts/bench-corpus.py --corpus corpus/vscode --corpus-name microsoft/vscode \
+            --scanner glibc=target/x86_64-unknown-linux-gnu/dist/ts-crap \
+            --scanner musl=target/x86_64-unknown-linux-musl/dist/ts-crap \
+            --runs "$RUNS" --output target/corpus-benchmark/results.json \
+            --summary "$GITHUB_STEP_SUMMARY"
+      - name: Retain benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: corpus-benchmark
+          path: target/corpus-benchmark/results.json
+          if-no-files-found: warn
+          retention-days: 30

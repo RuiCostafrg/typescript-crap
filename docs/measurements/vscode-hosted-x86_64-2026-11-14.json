@@ -1,0 +1,258 @@
+{
+  "version": 1,
+  "command": [
+    "ts-crap",
+    "--root",
+    "<corpus>",
+    "--on-syntax-error",
+    "report",
+    "--format",
+    "json",
+    "--output",
+    "<report.json>"
+  ],
+  "corpus": {
+    "name": "microsoft/vscode",
+    "commit": "f42f0a1102cedb0047aed92bcdf1f4ba422d02b8"
+  },
+  "candidate_commit": "ea37f374518b068dcd715e941d887388ea7888b0",
+  "runs": 3,
+  "report": {
+    "bytes": 184383769,
+    "functions": 431594,
+    "files_scanned": 15246,
+    "syntax_errors": 50,
+    "failed": true
+  },
+  "report_consistent": true,
+  "report_sha256s": [
+    "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+  ],
+  "machine": {
+    "platform": "Linux-7.0.0-1016-aws-x86_64-with-glibc2.43",
+    "cpu": "Intel(R) Xeon(R) 6975P-C",
+    "cpus": 4,
+    "runner": "GitHub Actions 1000020927",
+    "image": "ubuntu26",
+    "image_version": "20261111.82.6",
+    "time_tool": [
+      "time (GNU Time) UNKNOWN"
+    ]
+  },
+  "results": {
+    "glibc": {
+      "binary_sha256": "3d3b09958939d65c85c83d0fcb0cd4900c31bfc5d81076a97f176e7b3d870b5e",
+      "version": "ts-crap 2.4.0",
+      "linkage": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 3.2.0, BuildID[sha1]=0b6b283a67908bbb5bf83cef7d2bfc16fa2244f9, not stripped",
+      "summary": {
+        "absent": {
+          "runs": 3,
+          "wall_s": {
+            "median": 34.949226119,
+            "min": 34.60346745999999,
+            "max": 34.960315234999996
+          },
+          "user_s": {
+            "median": 34.47,
+            "min": 34.15,
+            "max": 34.5
+          },
+          "system_s": {
+            "median": 0.44,
+            "min": 0.43,
+            "max": 0.45
+          },
+          "peak_rss_kib": {
+            "median": 233640,
+            "min": 233524,
+            "max": 233748
+          }
+        },
+        "existing": {
+          "runs": 3,
+          "wall_s": {
+            "median": 34.739452478999965,
+            "min": 34.682060761,
+            "max": 34.874353841000016
+          },
+          "user_s": {
+            "median": 34.17,
+            "min": 34.15,
+            "max": 34.31
+          },
+          "system_s": {
+            "median": 0.54,
+            "min": 0.51,
+            "max": 0.55
+          },
+          "peak_rss_kib": {
+            "median": 233792,
+            "min": 233772,
+            "max": 233792
+          }
+        }
+      },
+      "observations": {
+        "absent": [
+          {
+            "user_s": 34.15,
+            "system_s": 0.43,
+            "peak_rss_kib": 233748,
+            "exit_status": 1,
+            "wall_s": 34.60346745999999,
+            "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+          },
+          {
+            "user_s": 34.5,
+            "system_s": 0.44,
+            "peak_rss_kib": 233524,
+            "exit_status": 1,
+            "wall_s": 34.960315234999996,
+            "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+          },
+          {
+            "user_s": 34.47,
+            "system_s": 0.45,
+            "peak_rss_kib": 233640,
+            "exit_status": 1,
+            "wall_s": 34.949226119,
+            "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+          }
+        ],
+        "existing": [
+          {
+            "user_s": 34.15,
+            "system_s": 0.51,
+            "peak_rss_kib": 233792,
+            "exit_status": 1,
+            "wall_s": 34.682060761,
+            "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+          },
+          {
+            "user_s": 34.31,
+            "system_s": 0.54,
+            "peak_rss_kib": 233792,
+            "exit_status": 1,
+            "wall_s": 34.874353841000016,
+            "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+          },
+          {
+            "user_s": 34.17,
+            "system_s": 0.55,
+            "peak_rss_kib": 233772,
+            "exit_status": 1,
+            "wall_s": 34.739452478999965,
+            "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+          }
+        ]
+      }
+    },
+    "musl": {
+      "binary_sha256": "5380e4160bb774f52d804e3c024cc18c040ee685cfdfed3abf86ef6d2f8a6352",
+      "version": "ts-crap 2.4.0",
+      "linkage": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, BuildID[sha1]=87560e96dacd2b603e1fe6a7faef2b5c21d9f446, not stripped",
+      "summary": {
+        "absent": {
+          "runs": 3,
+          "wall_s": {
+            "median": 47.505616094000004,
+            "min": 47.494752507000044,
+            "max": 48.03745893099995
+          },
+          "user_s": {
+            "median": 46.18,
+            "min": 46.15,
+            "max": 46.54
+          },
+          "system_s": {
+            "median": 1.3,
+            "min": 1.29,
+            "max": 1.44
+          },
+          "peak_rss_kib": {
+            "median": 198872,
+            "min": 198760,
+            "max": 198876
+          }
+        },
+        "existing": {
+          "runs": 3,
+          "wall_s": {
+            "median": 47.60979162399997,
+            "min": 47.59824934800008,
+            "max": 47.68597020000004
+          },
+          "user_s": {
+            "median": 46.17,
+            "min": 46.08,
+            "max": 46.19
+          },
+          "system_s": {
+            "median": 1.45,
+            "min": 1.39,
+            "max": 1.47
+          },
+          "peak_rss_kib": {
+            "median": 198868,
+            "min": 198740,
+            "max": 198872
+          }
+        }
+      },
+      "observations": {
+        "absent": [
+          {
+            "user_s": 46.18,
+            "system_s": 1.29,
+            "peak_rss_kib": 198872,
+            "exit_status": 1,
+            "wall_s": 47.505616094000004,
+            "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+          },
+          {
+            "user_s": 46.15,
+            "system_s": 1.3,
+            "peak_rss_kib": 198760,
+            "exit_status": 1,
+            "wall_s": 47.494752507000044,
+            "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+          },
+          {
+            "user_s": 46.54,
+            "system_s": 1.44,
+            "peak_rss_kib": 198876,
+            "exit_status": 1,
+            "wall_s": 48.03745893099995,
+            "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+          }
+        ],
+        "existing": [
+          {
+            "user_s": 46.19,
+            "system_s": 1.45,
+            "peak_rss_kib": 198740,
+            "exit_status": 1,
+            "wall_s": 47.68597020000004,
+            "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+          },
+          {
+            "user_s": 46.17,
+            "system_s": 1.39,
+            "peak_rss_kib": 198868,
+            "exit_status": 1,
+            "wall_s": 47.60979162399997,
+            "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+          },
+          {
+            "user_s": 46.08,
+            "system_s": 1.47,
+            "peak_rss_kib": 198872,
+            "exit_status": 1,
+            "wall_s": 47.59824934800008,
+            "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+          }
+        ]
+      }
+    }
+  }
+}

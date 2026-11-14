@@ -137,8 +137,10 @@ Before anything downloaded runs, the action:
 
 1. Downloads the archive and its `.sha256` with `gh` into a fresh directory
    under `RUNNER_TEMP`, making up to three attempts when the error is transient.
-2. Fetches the Sigstore trusted root once per install (`gh attestation trusted-root`),
-   then runs `gh attestation verify --custom-trusted-root` with an exact
+   Meanwhile it fetches the Sigstore trusted root once per install
+   (`gh attestation trusted-root`, a full TUF refresh). Either failing stops the
+   install.
+2. Once both are done, runs `gh attestation verify --custom-trusted-root` with an exact
    `--cert-identity` for this
    repository's `release.yml` at `refs/tags/vVERSION`, plus `--source-ref` and
    `--deny-self-hosted-runners`. An exact identity is used because `gh`

@@ -1,0 +1,729 @@
+{
+ "summary": "Per-step timing of the GitHub Action install path on GitHub-hosted runners (D0), the paired effect of fetching the Sigstore trusted root during the download (D1), dist-profile binary sizes with strip = \"symbols\" (D2), and the TUF cache investigation (D4). Seconds are wall time from Python perf_counter around each subprocess; every iteration starts gh with an empty XDG_CACHE_HOME, as on a fresh hosted VM.",
+ "date": "2026-11-14",
+ "release_measured": "2.4.0",
+ "harness": "Temporary .github/d0/measure_install.py and .github/workflows/d0-install-timing.yml on PR #76 (removed before merge). 2 VMs x 5 iterations per runner; the paired block runs main's and the PR's action/install.sh alternately, 4 pairs per iteration, alternating which goes first.",
+ "how_to_read": {
+  "download_archive_and_sidecar": "gh release download of the archive and its .sha256 (what the Action does)",
+  "download_archive_only": "the same without the sidecar (D3 saving = difference)",
+  "trusted_root_cold": "gh attestation trusted-root with an empty TUF cache",
+  "trusted_root_warm": "the same right after, with the TUF cache populated (D4 upper bound)",
+  "verify_archive": "gh attestation verify with --custom-trusted-root and the exact identity flags",
+  "verify_archive_json": "the same with --format json --jq selecting the archive's named subject digest",
+  "overlap_download_and_root_wall": "download and trusted-root started together, until both finish",
+  "install_sh_total": "action/install.sh end to end from the checkout under test",
+  "paired_install_sh": "main's install.sh (base, serial) against the PR's (head, D1); head_minus_base_median is the median per-pair difference",
+  "npm_install": "npm install --save-exact typescript-crap@2.4.0 into an empty project with an empty npm cache",
+  "shell_installer": "curl ... /v2.4.0/ts-crap-installer.sh | sh with TS_CRAP_UNMANAGED_INSTALL"
+ },
+ "runs": {
+  "v2_4_0_install_sh": {
+   "run": "https://github.com/RuiCostafrg/typescript-crap/actions/runs/43539860193",
+   "runners": {
+    "macos-26": {
+     "gh": "gh version 2.103.3 (2026-10-26)",
+     "image_version": "20261102.0473.1",
+     "target": "aarch64-apple-darwin",
+     "seconds": {
+      "download_archive_and_sidecar": {
+       "median": 0.703,
+       "min": 0.583,
+       "max": 1.153,
+       "n": 10
+      },
+      "trusted_root_cold": {
+       "median": 3.374,
+       "min": 2.534,
+       "max": 3.914,
+       "n": 10
+      },
+      "verify_archive": {
+       "median": 0.731,
+       "min": 0.524,
+       "max": 1.002,
+       "n": 10
+      },
+      "sidecar_checksum": {
+       "median": 0.009,
+       "min": 0.005,
+       "max": 0.034,
+       "n": 10
+      },
+      "extract": {
+       "median": 0.09,
+       "min": 0.075,
+       "max": 0.117,
+       "n": 10
+      },
+      "first_version": {
+       "median": 0.005,
+       "min": 0.005,
+       "max": 0.011,
+       "n": 10
+      },
+      "download_archive_only": {
+       "median": 0.65,
+       "min": 0.606,
+       "max": 0.756,
+       "n": 10
+      },
+      "trusted_root_warm": {
+       "median": 3.096,
+       "min": 1.942,
+       "max": 3.38,
+       "n": 10
+      },
+      "verify_archive_json": {
+       "median": 0.709,
+       "min": 0.579,
+       "max": 0.819,
+       "n": 10
+      },
+      "overlap_download_done": {
+       "median": 0.682,
+       "min": 0.577,
+       "max": 1.284,
+       "n": 10
+      },
+      "overlap_download_and_root_wall": {
+       "median": 3.126,
+       "min": 2.261,
+       "max": 3.571,
+       "n": 10
+      },
+      "install_sh_total": {
+       "median": 4.777,
+       "min": 3.941,
+       "max": 5.797,
+       "n": 10
+      },
+      "install_sh_total_with_helpers": {
+       "median": 4.88,
+       "min": 4.459,
+       "max": 5.399,
+       "n": 10
+      },
+      "npm_install": {
+       "median": 1.332,
+       "min": 0.547,
+       "max": 2.978,
+       "n": 10
+      },
+      "npm_first_version": {
+       "median": 0.073,
+       "min": 0.052,
+       "max": 0.172,
+       "n": 10
+      },
+      "shell_installer": {
+       "median": 0.708,
+       "min": 0.562,
+       "max": 1.396,
+       "n": 10
+      },
+      "shell_installer_first_version": {
+       "median": 0.005,
+       "min": 0.004,
+       "max": 0.01,
+       "n": 10
+      }
+     }
+    },
+    "ubuntu-26.04": {
+     "gh": "gh version 2.103.3 (2026-10-26)",
+     "image_version": "20261111.196.1",
+     "target": "x86_64-unknown-linux-musl",
+     "seconds": {
+      "download_archive_and_sidecar": {
+       "median": 0.453,
+       "min": 0.394,
+       "max": 0.56,
+       "n": 10
+      },
+      "trusted_root_cold": {
+       "median": 3.093,
+       "min": 2.5,
+       "max": 3.313,
+       "n": 10
+      },
+      "verify_archive": {
+       "median": 0.488,
+       "min": 0.384,
+       "max": 0.689,
+       "n": 10
+      },
+      "sidecar_checksum": {
+       "median": 0.004,
+       "min": 0.003,
+       "max": 0.004,
+       "n": 10
+      },
+      "extract": {
+       "median": 0.066,
+       "min": 0.045,
+       "max": 0.079,
+       "n": 10
+      },
+      "first_version": {
+       "median": 0.001,
+       "min": 0.001,
+       "max": 0.001,
+       "n": 10
+      },
+      "download_archive_only": {
+       "median": 0.425,
+       "min": 0.367,
+       "max": 0.5,
+       "n": 10
+      },
+      "trusted_root_warm": {
+       "median": 2.629,
+       "min": 2.189,
+       "max": 3.479,
+       "n": 10
+      },
+      "verify_archive_json": {
+       "median": 0.481,
+       "min": 0.339,
+       "max": 0.94,
+       "n": 10
+      },
+      "overlap_download_done": {
+       "median": 0.467,
+       "min": 0.372,
+       "max": 0.53,
+       "n": 10
+      },
+      "overlap_download_and_root_wall": {
+       "median": 3.01,
+       "min": 2.83,
+       "max": 3.637,
+       "n": 10
+      },
+      "install_sh_total": {
+       "median": 4.107,
+       "min": 3.632,
+       "max": 4.704,
+       "n": 10
+      },
+      "install_sh_total_with_helpers": {
+       "median": 3.842,
+       "min": 3.622,
+       "max": 5.057,
+       "n": 10
+      },
+      "npm_install": {
+       "median": 0.498,
+       "min": 0.343,
+       "max": 4.823,
+       "n": 10
+      },
+      "npm_first_version": {
+       "median": 0.03,
+       "min": 0.021,
+       "max": 0.035,
+       "n": 10
+      },
+      "shell_installer": {
+       "median": 0.327,
+       "min": 0.231,
+       "max": 0.506,
+       "n": 10
+      },
+      "shell_installer_first_version": {
+       "median": 0.001,
+       "min": 0.001,
+       "max": 0.001,
+       "n": 10
+      }
+     }
+    },
+    "windows-2022": {
+     "gh": "gh version 2.103.3 (2026-10-26)",
+     "image_version": "20261112.366.7",
+     "target": "x86_64-pc-windows-msvc",
+     "seconds": {
+      "download_archive_and_sidecar": {
+       "median": 0.565,
+       "min": 0.45,
+       "max": 4.146,
+       "n": 10
+      },
+      "trusted_root_cold": {
+       "median": 3.394,
+       "min": 2.804,
+       "max": 3.598,
+       "n": 10
+      },
+      "verify_archive": {
+       "median": 0.649,
+       "min": 0.419,
+       "max": 0.947,
+       "n": 10
+      },
+      "sidecar_checksum": {
+       "median": 0.019,
+       "min": 0.019,
+       "max": 0.026,
+       "n": 10
+      },
+      "extract": {
+       "median": 0.055,
+       "min": 0.054,
+       "max": 0.093,
+       "n": 10
+      },
+      "first_version": {
+       "median": 0.011,
+       "min": 0.01,
+       "max": 0.011,
+       "n": 10
+      },
+      "download_archive_only": {
+       "median": 0.518,
+       "min": 0.418,
+       "max": 1.024,
+       "n": 10
+      },
+      "trusted_root_warm": {
+       "median": 3.17,
+       "min": 2.87,
+       "max": 3.481,
+       "n": 10
+      },
+      "verify_archive_json": {
+       "median": 0.643,
+       "min": 0.438,
+       "max": 0.911,
+       "n": 10
+      },
+      "overlap_download_done": {
+       "median": 0.549,
+       "min": 0.492,
+       "max": 0.644,
+       "n": 10
+      },
+      "overlap_download_and_root_wall": {
+       "median": 3.099,
+       "min": 2.745,
+       "max": 3.947,
+       "n": 10
+      },
+      "install_sh_total": {
+       "median": 4.662,
+       "min": 4.118,
+       "max": 5.182,
+       "n": 10
+      },
+      "install_sh_total_with_helpers": {
+       "median": 5.042,
+       "min": 4.559,
+       "max": 5.58,
+       "n": 10
+      },
+      "npm_install": {
+       "median": 1.058,
+       "min": 1.04,
+       "max": 7.367,
+       "n": 10
+      },
+      "npm_first_version": {
+       "median": 0.07,
+       "min": 0.064,
+       "max": 0.095,
+       "n": 10
+      }
+     }
+    }
+   }
+  },
+  "paired_main_vs_d1": {
+   "run": "https://github.com/RuiCostafrg/typescript-crap/actions/runs/43565226739",
+   "runners": {
+    "macos-26": {
+     "gh": "gh version 2.103.3 (2026-10-26)",
+     "image_version": "20261102.0473.1",
+     "target": "aarch64-apple-darwin",
+     "seconds": {
+      "download_archive_and_sidecar": {
+       "median": 0.71,
+       "min": 0.496,
+       "max": 1.183,
+       "n": 10
+      },
+      "trusted_root_cold": {
+       "median": 3.278,
+       "min": 3.028,
+       "max": 4.055,
+       "n": 10
+      },
+      "verify_archive": {
+       "median": 0.757,
+       "min": 0.698,
+       "max": 1.018,
+       "n": 10
+      },
+      "sidecar_checksum": {
+       "median": 0.01,
+       "min": 0.006,
+       "max": 0.024,
+       "n": 10
+      },
+      "extract": {
+       "median": 0.094,
+       "min": 0.077,
+       "max": 0.148,
+       "n": 10
+      },
+      "first_version": {
+       "median": 0.006,
+       "min": 0.004,
+       "max": 0.01,
+       "n": 10
+      },
+      "download_archive_only": {
+       "median": 0.58,
+       "min": 0.541,
+       "max": 1.343,
+       "n": 10
+      },
+      "trusted_root_warm": {
+       "median": 3.087,
+       "min": 2.635,
+       "max": 3.834,
+       "n": 10
+      },
+      "verify_archive_json": {
+       "median": 0.813,
+       "min": 0.662,
+       "max": 0.914,
+       "n": 10
+      },
+      "overlap_download_done": {
+       "median": 0.564,
+       "min": 0.517,
+       "max": 0.659,
+       "n": 10
+      },
+      "overlap_download_and_root_wall": {
+       "median": 3.102,
+       "min": 2.748,
+       "max": 3.557,
+       "n": 10
+      },
+      "install_sh_total": {
+       "median": 4.24,
+       "min": 3.597,
+       "max": 5.152,
+       "n": 10
+      },
+      "install_sh_total_with_helpers": {
+       "median": 4.183,
+       "min": 3.866,
+       "max": 4.967,
+       "n": 10
+      },
+      "npm_install": {
+       "median": 1.189,
+       "min": 0.545,
+       "max": 2.874,
+       "n": 10
+      },
+      "npm_first_version": {
+       "median": 0.102,
+       "min": 0.061,
+       "max": 0.14,
+       "n": 10
+      },
+      "shell_installer": {
+       "median": 0.689,
+       "min": 0.45,
+       "max": 0.934,
+       "n": 10
+      },
+      "shell_installer_first_version": {
+       "median": 0.006,
+       "min": 0.004,
+       "max": 0.033,
+       "n": 10
+      }
+     },
+     "paired_install_sh": {
+      "n_pairs": 40,
+      "base_median": 4.778,
+      "head_median": 4.323,
+      "head_minus_base_median": -0.546,
+      "head_faster_in_pairs": 31
+     }
+    },
+    "ubuntu-26.04": {
+     "gh": "gh version 2.103.3 (2026-10-26)",
+     "image_version": "20261111.196.1",
+     "target": "x86_64-unknown-linux-musl",
+     "seconds": {
+      "download_archive_and_sidecar": {
+       "median": 0.536,
+       "min": 0.365,
+       "max": 0.801,
+       "n": 10
+      },
+      "trusted_root_cold": {
+       "median": 3.197,
+       "min": 2.815,
+       "max": 3.747,
+       "n": 10
+      },
+      "verify_archive": {
+       "median": 0.53,
+       "min": 0.409,
+       "max": 0.758,
+       "n": 10
+      },
+      "sidecar_checksum": {
+       "median": 0.004,
+       "min": 0.004,
+       "max": 0.004,
+       "n": 10
+      },
+      "extract": {
+       "median": 0.064,
+       "min": 0.055,
+       "max": 0.074,
+       "n": 10
+      },
+      "first_version": {
+       "median": 0.001,
+       "min": 0.001,
+       "max": 0.001,
+       "n": 10
+      },
+      "download_archive_only": {
+       "median": 0.529,
+       "min": 0.372,
+       "max": 0.788,
+       "n": 10
+      },
+      "trusted_root_warm": {
+       "median": 3.048,
+       "min": 2.124,
+       "max": 3.662,
+       "n": 10
+      },
+      "verify_archive_json": {
+       "median": 0.542,
+       "min": 0.357,
+       "max": 0.767,
+       "n": 10
+      },
+      "overlap_download_done": {
+       "median": 0.532,
+       "min": 0.392,
+       "max": 0.637,
+       "n": 10
+      },
+      "overlap_download_and_root_wall": {
+       "median": 3.155,
+       "min": 2.655,
+       "max": 3.848,
+       "n": 10
+      },
+      "install_sh_total": {
+       "median": 3.711,
+       "min": 2.715,
+       "max": 4.357,
+       "n": 10
+      },
+      "install_sh_total_with_helpers": {
+       "median": 4.086,
+       "min": 3.321,
+       "max": 4.343,
+       "n": 10
+      },
+      "npm_install": {
+       "median": 0.497,
+       "min": 0.433,
+       "max": 2.823,
+       "n": 10
+      },
+      "npm_first_version": {
+       "median": 0.032,
+       "min": 0.027,
+       "max": 0.034,
+       "n": 10
+      },
+      "shell_installer": {
+       "median": 0.428,
+       "min": 0.219,
+       "max": 0.693,
+       "n": 10
+      },
+      "shell_installer_first_version": {
+       "median": 0.001,
+       "min": 0.001,
+       "max": 0.001,
+       "n": 10
+      }
+     },
+     "paired_install_sh": {
+      "n_pairs": 40,
+      "base_median": 4.357,
+      "head_median": 3.936,
+      "head_minus_base_median": -0.573,
+      "head_faster_in_pairs": 36
+     }
+    },
+    "windows-2022": {
+     "gh": "gh version 2.103.3 (2026-10-26)",
+     "image_version": "20261112.366.7",
+     "target": "x86_64-pc-windows-msvc",
+     "seconds": {
+      "download_archive_and_sidecar": {
+       "median": 0.58,
+       "min": 0.494,
+       "max": 4.168,
+       "n": 10
+      },
+      "trusted_root_cold": {
+       "median": 3.497,
+       "min": 2.814,
+       "max": 3.795,
+       "n": 10
+      },
+      "verify_archive": {
+       "median": 0.706,
+       "min": 0.538,
+       "max": 1.001,
+       "n": 10
+      },
+      "sidecar_checksum": {
+       "median": 0.019,
+       "min": 0.011,
+       "max": 0.027,
+       "n": 10
+      },
+      "extract": {
+       "median": 0.055,
+       "min": 0.037,
+       "max": 0.093,
+       "n": 10
+      },
+      "first_version": {
+       "median": 0.016,
+       "min": 0.012,
+       "max": 0.026,
+       "n": 10
+      },
+      "download_archive_only": {
+       "median": 0.588,
+       "min": 0.516,
+       "max": 0.74,
+       "n": 10
+      },
+      "trusted_root_warm": {
+       "median": 3.131,
+       "min": 2.465,
+       "max": 4.029,
+       "n": 10
+      },
+      "verify_archive_json": {
+       "median": 0.725,
+       "min": 0.539,
+       "max": 0.889,
+       "n": 10
+      },
+      "overlap_download_done": {
+       "median": 0.632,
+       "min": 0.567,
+       "max": 0.915,
+       "n": 10
+      },
+      "overlap_download_and_root_wall": {
+       "median": 3.41,
+       "min": 2.927,
+       "max": 3.685,
+       "n": 10
+      },
+      "install_sh_total": {
+       "median": 4.591,
+       "min": 4.345,
+       "max": 5.412,
+       "n": 10
+      },
+      "install_sh_total_with_helpers": {
+       "median": 4.616,
+       "min": 4.153,
+       "max": 5.071,
+       "n": 10
+      },
+      "npm_install": {
+       "median": 1.003,
+       "min": 0.576,
+       "max": 7.107,
+       "n": 10
+      },
+      "npm_first_version": {
+       "median": 0.067,
+       "min": 0.055,
+       "max": 0.073,
+       "n": 10
+      }
+     },
+     "paired_install_sh": {
+      "n_pairs": 40,
+      "base_median": 5.145,
+      "head_median": 4.395,
+      "head_minus_base_median": -0.668,
+      "head_faster_in_pairs": 36
+     }
+    }
+   }
+  }
+ },
+ "decisions": {
+  "D1": "Kept. Paired median saving 0.55 s (macOS), 0.57 s (Ubuntu), 0.67 s (Windows) per install; head faster in 31-36 of 40 pairs per runner.",
+  "D3": "Skipped. The .sha256 sidecar adds 0.03-0.05 s (median) to the download on every runner, under the 0.2 s threshold; gh fetches the assets concurrently. --format json --jq adds no measurable verify time, so a name-bound attested-digest check stays possible as a separate hardening change.",
+  "D4": "Dropped. See d4_tuf_cache."
+ },
+ "d2_dist_sizes_bytes": {
+  "run": "https://github.com/RuiCostafrg/typescript-crap/actions/runs/43539860193",
+  "method": "cargo build --locked --profile dist --target T on the release runner OS, first with CARGO_PROFILE_DIST_STRIP=debuginfo (before), then the new default; archive = tar -cJf of the release file set (binary, LICENSE, README.md, CHANGELOG.md, plus musl-COPYRIGHT on Linux). The before build reproduces the published v2.4.0 x86_64 musl binary size within 80 bytes (published 7123640).",
+  "x86_64-unknown-linux-musl": {
+   "binary_before": 7123560,
+   "binary_after": 6546888,
+   "archive_before": 1419656,
+   "archive_after": 1312688
+  },
+  "aarch64-unknown-linux-musl": {
+   "binary_before": 6712808,
+   "binary_after": 5837640,
+   "archive_before": 1245900,
+   "archive_after": 1117932
+  },
+  "aarch64-apple-darwin": {
+   "binary_before": 6249424,
+   "binary_after": 5766752,
+   "archive_before": 1167208,
+   "archive_after": 1081820
+  },
+  "x86_64-pc-windows-msvc": "not measured; MSVC binaries keep symbols in a separate PDB that is not shipped"
+ },
+ "d4_tuf_cache": {
+  "location": "$XDG_CACHE_HOME/gh/.sigstore/root (default ~/.cache/gh/.sigstore/root): tuf-repo-cdn.sigstore.dev/ and tuf-repo.github.com/, each with root, timestamp, snapshot and targets metadata plus targets/trusted_root.json, and a <repo>.json file holding lastTimestamp.",
+  "freshness": "With a populated cache and the network blocked (HTTPS_PROXY to a closed port), gh 2.95.0 fails with 'tuf refresh failed: Get https://tuf-repo-cdn.sigstore.dev/15.root.json', so it refreshes against Sigstore on every run; a warm run on hosted gh 2.103.3 still takes 2.6-3.2 s, consistent with a network refresh.",
+  "saving_hosted_median_s": {
+   "ubuntu-26.04": [
+    3.093,
+    2.629
+   ],
+   "macos-26": [
+    3.374,
+    3.096
+   ],
+   "windows-2022": [
+    3.394,
+    3.17
+   ]
+  },
+  "decision": "Dropped. A warm cache saves only 0.2-0.5 s, about what an actions/cache restore round trip costs, plus a save step and the caller's cache quota. Restoring the directory would also make a cache entry, writable by other workflow runs in the repository, the TUF trust anchor instead of the root embedded in gh; that is a cache keyed by what the cache supplies."
+ }
+}

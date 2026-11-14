@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The GitHub Action fetches the Sigstore trusted root while the release assets
+  download, instead of afterwards. On GitHub-hosted runners this saves a median
+  0.55–0.67 seconds per install. What is verified, and the rule that nothing is
+  extracted or run before verification, are unchanged.
+- Release binaries no longer carry a symbol table (`strip = "symbols"` in the
+  `dist` profile). The Linux x86-64 archive shrinks by 7.5% (1.42 MB to 1.31 MB),
+  the Linux ARM64 archive by 10.3% and the macOS ARM64 archive by 7.3%. Panic
+  messages keep their file and line, but backtraces no longer show function
+  names. Builds from source with `--release` are unchanged.
+- The README compares install times and what each install path verifies, with
+  hosted-runner measurements.
+
 ## 2.4.0 — 2026-11-10
 
 Adds configurable excluded directories, syntax-error reporting that keeps

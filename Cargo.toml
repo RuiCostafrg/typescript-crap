@@ -99,3 +99,7 @@ strip = "debuginfo"
 [profile.dist]
 inherits = "release"
 lto = "thin"
+# Shipped binaries drop the symbol table too (7-10% of the archive). Panic
+# messages keep their file and line; only backtraces lose function names.
+# Local --release builds keep symbols for profiling.
+strip = "symbols"

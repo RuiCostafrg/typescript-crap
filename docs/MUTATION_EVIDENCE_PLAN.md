@@ -6,7 +6,8 @@ contract contradicts it.
 
 **Status 2026-11-14: M1–M4 implemented and locally validated. The recommended
 behavior is recorded in [MUTATION_EVIDENCE.md](MUTATION_EVIDENCE.md).
-M5 documentation and local checks are complete; the draft PR is next.**
+M5 is complete: documentation and local checks are recorded below, and
+[draft PR #81](https://github.com/RuiCostafrg/typescript-crap/pull/81) is open.**
 
 ## Goal
 
@@ -103,6 +104,8 @@ are recorded in
 [MUTATION_EVIDENCE.md](MUTATION_EVIDENCE.md#rejected-alternatives).
 
 ### M5 — Documentation and draft PR
+
+**Status: complete. One draft PR, five milestone commits; no merge or release.**
 
 - README section, schema docs, CHANGELOG entry, a reproducible example.
 - Run the repo's local checks; state which were skipped on this host and why.

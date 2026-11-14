@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+Optional mutation-testing evidence from Oximut, additive and opt-in: a
+function with a surviving or unreached mutant now fails even at 100% line
+coverage. Oximut is read-only for ts-crap and is unchanged.
+
+### Added
+
+- `--mutation-report FILE` (and `ScanExtensions::mutation_report` in the Rust
+  library) accepts an Oximut report (`schemaVersion` 1, tested against
+  1.0.0-rc.1) describing the same checkout and root. Surviving or
+  no-coverage mutants fail a separate mutation gate regardless of complexity
+  or the CRAP threshold; existing CRAP scores, coverage, thresholds and
+  baseline behavior are unchanged, and baselines cannot suppress
+  mutation-gate failures. Functions with no mutants or only inconclusive
+  mutants are unchanged. Subset/unknown mutator scope is labelled partial
+  evidence that can fail functions but never proves adequacy.
+  `kill_ratio`, `effective_coverage` and `effective_crap` are informational
+  estimates only.
+- Freshness binding without a source hash: each mutant's Oximut ID digest is
+  recomputed from the root-relative path, the whole source and the edit, so
+  any source change since the run is rejected with exit 2. This reproduces
+  the pinned rc1 derivation, is not a public stable hash contract, and
+  selected files the report has no mutants for carry no freshness binding.
+  The design, load validation, mutant-to-function ownership, and rejected
+  alternatives are documented in `docs/MUTATION_EVIDENCE.md`.
+- Mutation evidence in every report format: the additive `mutation` object in
+  JSON (documented in `schemas/report-v1.schema.json`), a mutation section
+  and table in text and HTML, `<mutation-evidence>` and per-function
+  attributes in XML, and the new SARIF rule `TSCRAP003` for surviving or
+  uncovered mutants. Machine output is unaffected by presentation options.
+
 ## 2.4.0 — 2026-11-10
 
 Adds configurable excluded directories, syntax-error reporting that keeps

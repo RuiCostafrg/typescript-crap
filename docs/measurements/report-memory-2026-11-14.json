@@ -1,0 +1,225 @@
+{
+ "summary": "Paired peak RSS of baseline and stdout scans on a real corpus, before (main) and after WP5 (borrowed baseline rendering, stdout staged in an anonymous temporary file, moved source_paths, hash maps in Baseline::apply, allocation-free coverage line keys). Every output (stdout, baseline file, SARIF file) was byte-identical between the two builds in every run.",
+ "date": "2026-11-14",
+ "run": "https://github.com/RuiCostafrg/typescript-crap/actions/runs/43571929699",
+ "runner": "ubuntu-26.04, x86_64-unknown-linux-musl, cargo build --profile dist (the shipped Linux build)",
+ "base_sha": "f9d061b188d2a1c8f300f062803787d83a39f0e7",
+ "corpus": {
+  "repository": "microsoft/vscode",
+  "commit": "f42f0a1102cedb0047aed92bcdf1f4ba422d02b8",
+  "files_scanned": 15246,
+  "functions": 431594,
+  "excluded_syntax_error_files": 50,
+  "note": "Files with syntax errors are excluded with --exclude, because --write-baseline refuses incomplete scans."
+ },
+ "method": "GNU time -v around each run; main and WP5 alternate, 3 pairs per mode. --baseline and --write-baseline cannot be combined (clap conflict), so they are measured separately; the --baseline runs use a baseline written by the same scan.",
+ "modes": {
+  "write_baseline_stdout_json": {
+   "base_peak_rss_kib_median": 480252,
+   "head_peak_rss_kib_median": 178152,
+   "saving_kib": 302100,
+   "saving_percent": 62.9,
+   "outputs_identical": true,
+   "output_digests": {
+    "baseline.json": "ffbd79176043ed7f9bb9cac2fd450fd1dd9524a1e814118280a60c188f1704ce",
+    "stdout": "e3e6310674ee00dece8cfdc6a9879cdeffd067590588c79a155714be701dbcb3"
+   },
+   "observations": {
+    "base": [
+     {
+      "peak_rss_kib": 480372,
+      "wall": "0:55.13",
+      "exit": 1,
+      "digests": {
+       "baseline.json": "ffbd79176043ed7f9bb9cac2fd450fd1dd9524a1e814118280a60c188f1704ce",
+       "stdout": "e3e6310674ee00dece8cfdc6a9879cdeffd067590588c79a155714be701dbcb3"
+      }
+     },
+     {
+      "peak_rss_kib": 480252,
+      "wall": "0:55.12",
+      "exit": 1,
+      "digests": {
+       "baseline.json": "ffbd79176043ed7f9bb9cac2fd450fd1dd9524a1e814118280a60c188f1704ce",
+       "stdout": "e3e6310674ee00dece8cfdc6a9879cdeffd067590588c79a155714be701dbcb3"
+      }
+     },
+     {
+      "peak_rss_kib": 480136,
+      "wall": "0:55.01",
+      "exit": 1,
+      "digests": {
+       "baseline.json": "ffbd79176043ed7f9bb9cac2fd450fd1dd9524a1e814118280a60c188f1704ce",
+       "stdout": "e3e6310674ee00dece8cfdc6a9879cdeffd067590588c79a155714be701dbcb3"
+      }
+     }
+    ],
+    "head": [
+     {
+      "peak_rss_kib": 178004,
+      "wall": "0:55.10",
+      "exit": 1,
+      "digests": {
+       "baseline.json": "ffbd79176043ed7f9bb9cac2fd450fd1dd9524a1e814118280a60c188f1704ce",
+       "stdout": "e3e6310674ee00dece8cfdc6a9879cdeffd067590588c79a155714be701dbcb3"
+      }
+     },
+     {
+      "peak_rss_kib": 178152,
+      "wall": "0:55.00",
+      "exit": 1,
+      "digests": {
+       "baseline.json": "ffbd79176043ed7f9bb9cac2fd450fd1dd9524a1e814118280a60c188f1704ce",
+       "stdout": "e3e6310674ee00dece8cfdc6a9879cdeffd067590588c79a155714be701dbcb3"
+      }
+     },
+     {
+      "peak_rss_kib": 178192,
+      "wall": "0:55.18",
+      "exit": 1,
+      "digests": {
+       "baseline.json": "ffbd79176043ed7f9bb9cac2fd450fd1dd9524a1e814118280a60c188f1704ce",
+       "stdout": "e3e6310674ee00dece8cfdc6a9879cdeffd067590588c79a155714be701dbcb3"
+      }
+     }
+    ]
+   }
+  },
+  "baseline_stdout_json": {
+   "base_peak_rss_kib_median": 466192,
+   "head_peak_rss_kib_median": 432220,
+   "saving_kib": 33972,
+   "saving_percent": 7.3,
+   "outputs_identical": true,
+   "output_digests": {
+    "stdout": "7d8cf28eefc56c1a88219e7508eba5f6dd8f3d6e8ee1754fdff56ac1c9a11208"
+   },
+   "observations": {
+    "base": [
+     {
+      "peak_rss_kib": 466192,
+      "wall": "0:57.77",
+      "exit": 1,
+      "digests": {
+       "stdout": "7d8cf28eefc56c1a88219e7508eba5f6dd8f3d6e8ee1754fdff56ac1c9a11208"
+      }
+     },
+     {
+      "peak_rss_kib": 466100,
+      "wall": "0:57.50",
+      "exit": 1,
+      "digests": {
+       "stdout": "7d8cf28eefc56c1a88219e7508eba5f6dd8f3d6e8ee1754fdff56ac1c9a11208"
+      }
+     },
+     {
+      "peak_rss_kib": 466268,
+      "wall": "0:57.61",
+      "exit": 1,
+      "digests": {
+       "stdout": "7d8cf28eefc56c1a88219e7508eba5f6dd8f3d6e8ee1754fdff56ac1c9a11208"
+      }
+     }
+    ],
+    "head": [
+     {
+      "peak_rss_kib": 432364,
+      "wall": "0:56.23",
+      "exit": 1,
+      "digests": {
+       "stdout": "7d8cf28eefc56c1a88219e7508eba5f6dd8f3d6e8ee1754fdff56ac1c9a11208"
+      }
+     },
+     {
+      "peak_rss_kib": 432220,
+      "wall": "0:56.43",
+      "exit": 1,
+      "digests": {
+       "stdout": "7d8cf28eefc56c1a88219e7508eba5f6dd8f3d6e8ee1754fdff56ac1c9a11208"
+      }
+     },
+     {
+      "peak_rss_kib": 432128,
+      "wall": "0:56.13",
+      "exit": 1,
+      "digests": {
+       "stdout": "7d8cf28eefc56c1a88219e7508eba5f6dd8f3d6e8ee1754fdff56ac1c9a11208"
+      }
+     }
+    ]
+   }
+  },
+  "baseline_output_sarif": {
+   "base_peak_rss_kib_median": 466184,
+   "head_peak_rss_kib_median": 432096,
+   "saving_kib": 34088,
+   "saving_percent": 7.3,
+   "outputs_identical": true,
+   "output_digests": {
+    "r.sarif": "06b525dd9dc415be6eabbf90c4b6b291b72c2cf390cf2d55be32c28cbcfc89b6",
+    "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "observations": {
+    "base": [
+     {
+      "peak_rss_kib": 466184,
+      "wall": "0:57.33",
+      "exit": 1,
+      "digests": {
+       "r.sarif": "06b525dd9dc415be6eabbf90c4b6b291b72c2cf390cf2d55be32c28cbcfc89b6",
+       "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+     },
+     {
+      "peak_rss_kib": 466228,
+      "wall": "0:56.75",
+      "exit": 1,
+      "digests": {
+       "r.sarif": "06b525dd9dc415be6eabbf90c4b6b291b72c2cf390cf2d55be32c28cbcfc89b6",
+       "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+     },
+     {
+      "peak_rss_kib": 466176,
+      "wall": "0:57.11",
+      "exit": 1,
+      "digests": {
+       "r.sarif": "06b525dd9dc415be6eabbf90c4b6b291b72c2cf390cf2d55be32c28cbcfc89b6",
+       "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+     }
+    ],
+    "head": [
+     {
+      "peak_rss_kib": 432200,
+      "wall": "0:55.44",
+      "exit": 1,
+      "digests": {
+       "r.sarif": "06b525dd9dc415be6eabbf90c4b6b291b72c2cf390cf2d55be32c28cbcfc89b6",
+       "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+     },
+     {
+      "peak_rss_kib": 432096,
+      "wall": "0:55.60",
+      "exit": 1,
+      "digests": {
+       "r.sarif": "06b525dd9dc415be6eabbf90c4b6b291b72c2cf390cf2d55be32c28cbcfc89b6",
+       "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+     },
+     {
+      "peak_rss_kib": 432052,
+      "wall": "0:55.53",
+      "exit": 1,
+      "digests": {
+       "r.sarif": "06b525dd9dc415be6eabbf90c4b6b291b72c2cf390cf2d55be32c28cbcfc89b6",
+       "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+     }
+    ]
+   }
+  }
+ },
+ "reading": "In --baseline runs the peak occurs while the loaded baseline and the report are both alive, before any rendering, so staging stdout does not move it; the saving there comes from the hash maps and the moved source_paths. With --write-baseline the peak was the cloned snapshot plus the stdout String; both are gone."
+}

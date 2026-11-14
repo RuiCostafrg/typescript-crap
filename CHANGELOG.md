@@ -15,6 +15,18 @@
   names. Builds from source with `--release` are unchanged.
 - The README compares install times and what each install path verifies, with
   hosted-runner measurements.
+- Lower peak memory on baseline and stdout scans, with byte-identical output.
+  On the VS Code repository (431,594 functions, static Linux build), a
+  `--write-baseline` scan printing JSON to stdout fell from 480 MB to 178 MB, and
+  a `--baseline` scan from 466 MB to 432 MB. Stdout reports are staged in an
+  anonymous temporary file (in memory if none can be created) and still appear
+  only after every file is published.
+
+### Added
+
+- `Baseline::render_report_to` streams a report's baseline snapshot without
+  copying it first; it writes the same bytes as `Baseline::capture` followed by
+  `render_to`.
 
 ## 2.4.0 — 2026-11-10
 

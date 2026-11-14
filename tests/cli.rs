@@ -653,3 +653,57 @@ sys.exit(subprocess.call(sys.argv[1:], restore_signals=False))
     );
     assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 2);
 }
+
+#[test]
+fn stdout_reports_match_output_files_whether_staged_on_disk_or_in_memory() {
+    let dir = tempfile::tempdir().unwrap();
+    // An unusable temporary directory makes the CLI hold stdout in memory.
+    let missing = dir.path().join("no-such-temp-dir");
+    for format in ["text", "json", "xml", "html", "sarif"] {
+        let output = dir.path().join(format!("report.{format}"));
+        let written = run(&["--format", format, "--output", output.to_str().unwrap()]);
+        assert_eq!(written.status.code(), Some(1), "{written:?}");
+        let expected = fs::read(&output).unwrap();
+        let staged = run(&["--format", format]);
+        let in_memory = Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+            .args(["--root", fixture().to_str().unwrap(), "--format", format])
+            .env("TMPDIR", &missing)
+            .env("TMP", &missing)
+            .env("TEMP", &missing)
+            .output()
+            .unwrap();
+        for out in [&staged, &in_memory] {
+            assert_eq!(out.status.code(), Some(1), "{format}: {out:?}");
+            assert!(out.stderr.is_empty(), "{format}: {out:?}");
+            assert_eq!(out.stdout, expected, "{format}");
+        }
+    }
+}
+
+#[test]
+fn written_baseline_matches_the_library_snapshot() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("baseline.json");
+    let out = run(&["--write-baseline", path.to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    let report = ts_crap::scan(&ts_crap::ScanOptions {
+        root: fixture(),
+        paths: Vec::new(),
+        threshold: None,
+        coverage: None,
+        diff: None,
+        pr: None,
+        config: None,
+        include: Vec::new(),
+        exclude: Vec::new(),
+        require_coverage: None,
+        fail_on_empty: None,
+    })
+    .unwrap();
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        ts_crap::baseline::Baseline::capture(&report)
+            .render()
+            .unwrap()
+    );
+}

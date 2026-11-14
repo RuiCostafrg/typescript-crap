@@ -2,7 +2,7 @@
 use anyhow::{Context, Result, bail};
 use serde::{
     Deserialize, Deserializer,
-    de::{Error, MapAccess, Visitor},
+    de::{DeserializeSeed, Error, MapAccess, Visitor},
 };
 use sha2::{Digest, Sha256};
 use std::{
@@ -32,8 +32,32 @@ struct FileCoverage {
 // duplicates such as {"1":0,"1":1} must be rejected while entries are streamed.
 struct UniqueMap<K, V> {
     label: &'static str,
-    key: fn(String) -> Result<K, String>,
+    key: fn(&str) -> Result<K, String>,
     value: PhantomData<fn() -> V>,
+}
+
+// Converts each map key from the parser's string, borrowed when possible, so a
+// key that is parsed (such as a line number) is never copied into a String.
+struct Key<K>(fn(&str) -> Result<K, String>);
+
+impl<'de, K> DeserializeSeed<'de> for Key<K> {
+    type Value = Result<K, String>;
+
+    fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> Result<Self::Value, D::Error> {
+        deserializer.deserialize_str(self)
+    }
+}
+
+impl<K> Visitor<'_> for Key<K> {
+    type Value = Result<K, String>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a string")
+    }
+
+    fn visit_str<E: Error>(self, raw: &str) -> Result<Self::Value, E> {
+        Ok((self.0)(raw))
+    }
 }
 
 impl<'de, K: Ord + fmt::Display, V: Deserialize<'de>> Visitor<'de> for UniqueMap<K, V> {
@@ -45,8 +69,9 @@ impl<'de, K: Ord + fmt::Display, V: Deserialize<'de>> Visitor<'de> for UniqueMap
 
     fn visit_map<A: MapAccess<'de>>(self, mut access: A) -> Result<Self::Value, A::Error> {
         let mut map = BTreeMap::new();
-        while let Some(raw) = access.next_key::<String>()? {
-            let key = (self.key)(raw).map_err(A::Error::custom)?;
+        while let Some(key) = access.next_key_seed(Key(self.key))? {
+            // Raised here, after the key is read, like any other map error.
+            let key = key.map_err(A::Error::custom)?;
             match map.entry(key) {
                 Entry::Vacant(entry) => {
                     entry.insert(access.next_value()?);
@@ -69,7 +94,7 @@ impl<'de, K: Ord + fmt::Display, V: Deserialize<'de>> Visitor<'de> for UniqueMap
 fn deserialize_unique<'de, D, K, V>(
     deserializer: D,
     label: &'static str,
-    key: fn(String) -> Result<K, String>,
+    key: fn(&str) -> Result<K, String>,
 ) -> Result<BTreeMap<K, V>, D::Error>
 where
     D: Deserializer<'de>,
@@ -88,7 +113,9 @@ fn deserialize_lines<'de, D: Deserializer<'de>>(
 ) -> Result<BTreeMap<usize, u64>, D::Error> {
     deserialize_unique(deserializer, "line", |line| {
         let number = line.parse::<usize>().map_err(|error| error.to_string())?;
-        if number == 0 || number.to_string() != line {
+        // What parse accepts is an optional '+' then ASCII digits, so a nonzero
+        // number is canonical exactly when there is no sign or leading zero.
+        if number == 0 || line.starts_with(['+', '0']) {
             return Err("coverage line must be a positive canonical integer".into());
         }
         Ok(number)
@@ -98,7 +125,7 @@ fn deserialize_lines<'de, D: Deserializer<'de>>(
 fn deserialize_files<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<BTreeMap<String, FileCoverage>, D::Error> {
-    deserialize_unique(deserializer, "file path", Ok)
+    deserialize_unique(deserializer, "file path", |path| Ok(path.to_owned()))
 }
 
 /// A view bound to one validated source snapshot. Cannot outlive the loaded report.

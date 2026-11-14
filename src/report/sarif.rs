@@ -24,7 +24,7 @@ struct Tool {
 #[derive(Serialize)]
 struct Driver {
     name: &'static str,
-    rules: [Rule; 2],
+    rules: Vec<Rule>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -82,8 +82,12 @@ impl Serialize for Results<'_> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let report = self.0;
         let mut sequence = serializer.serialize_seq(None)?;
-        for f in report.functions.iter().filter(|f| f.failed) {
-            sequence.serialize_element(&finding(f, report.threshold))?;
+        let mutation = report.mutation.as_ref().map(|m| &m.functions);
+        for (index, f) in report.functions.iter().enumerate() {
+            if f.failed {
+                let evidence = mutation.map(|m| &m[index]).filter(|m| m.failed);
+                sequence.serialize_element(&finding(f, report.threshold, evidence))?;
+            }
         }
         // Each unparsable file is located missing evidence under the completeness rule.
         for e in &report.syntax_errors {
@@ -132,18 +136,30 @@ fn uri(path: &str) -> String {
     }
     uri
 }
-fn finding(f: &FunctionScore, threshold: f64) -> Finding<'_> {
+fn finding<'a>(
+    f: &'a FunctionScore,
+    threshold: f64,
+    mutation: Option<&crate::FunctionMutation>,
+) -> Finding<'a> {
     let uri = uri(&f.path);
+    let text = match mutation {
+        Some(m) => format!(
+            "{} has {} surviving and {} uncovered mutants; mutation gate failed (CRAP {:.3}, threshold {})",
+            f.name, m.survived, m.no_coverage, f.crap, threshold
+        ),
+        None => format!(
+            "{} has CRAP {:.3} (threshold {})",
+            f.name, f.crap, threshold
+        ),
+    };
     Finding {
-        rule_id: "TSCRAP001",
-        level: "error",
-        message: Message {
-            text: format!(
-                "{} has CRAP {:.3} (threshold {})",
-                f.name, f.crap, threshold
-            )
-            .into(),
+        rule_id: if mutation.is_some() {
+            "TSCRAP003"
+        } else {
+            "TSCRAP001"
         },
+        level: "error",
+        message: Message { text: text.into() },
         partial_fingerprints: Some(Fingerprints {
             function: &f.identity,
         }),
@@ -163,14 +179,24 @@ fn finding(f: &FunctionScore, threshold: f64) -> Finding<'_> {
     }
 }
 pub(super) fn write(report: &Report, mut writer: impl Write) -> anyhow::Result<()> {
-    let rules = [
+    let mut rules: Vec<_> = [
         ("TSCRAP001", "CRAP threshold exceeded"),
         ("TSCRAP002", "Missing quality evidence"),
     ]
     .map(|(id, text)| Rule {
         id,
         short_description: Message { text: text.into() },
-    });
+    })
+    .into_iter()
+    .collect();
+    if report.mutation.is_some() {
+        rules.push(Rule {
+            id: "TSCRAP003",
+            short_description: Message {
+                text: "Surviving or uncovered mutants".into(),
+            },
+        });
+    }
     let document = Document {
         schema: "https://json.schemastore.org/sarif-2.1.0.json",
         version: "2.1.0",

@@ -1,4 +1,7 @@
-use crate::{Format, FunctionScore, RenderOptions, Report, Sort};
+use crate::{
+    EvidenceKind, Format, FunctionMutation, FunctionScore, MutationEvidence, MutatorScope,
+    RenderOptions, Report, Sort,
+};
 use anyhow::Result;
 use std::io::Write;
 mod sarif;
@@ -33,13 +36,18 @@ fn escape(s: &str) -> String {
     escaped
 }
 
-fn presentation_rows<'a>(report: &'a Report, options: &RenderOptions) -> Vec<&'a FunctionScore> {
+/// Visible rows with their index in `Report::functions`.
+fn presentation_rows<'a>(
+    report: &'a Report,
+    options: &RenderOptions,
+) -> Vec<(usize, &'a FunctionScore)> {
     let mut rows: Vec<_> = report
         .functions
         .iter()
-        .filter(|f| !options.only_failing || f.failed)
+        .enumerate()
+        .filter(|(_, f)| !options.only_failing || f.failed)
         .collect();
-    rows.sort_by(|a, b| {
+    rows.sort_by(|(_, a), (_, b)| {
         let location = (&a.path, a.line, a.column).cmp(&(&b.path, b.line, b.column));
         match options.sort {
             Sort::Path => location,
@@ -58,6 +66,7 @@ pub fn render_to<W: Write>(
     options: &RenderOptions,
     mut s: W,
 ) -> Result<()> {
+    let mutation_only = report.failed_by_mutation_only();
     match format {
         Format::Sarif => {
             sarif::write(report, &mut s)?;
@@ -76,7 +85,7 @@ pub fn render_to<W: Write>(
                 report.files_scanned,
                 report.functions.len()
             )?;
-            for f in &rows {
+            for &(index, f) in &rows {
                 writeln!(
                     s,
                     "{}:{}:{}  {}  {}  {:.1}%  {:.3}  {}",
@@ -87,7 +96,7 @@ pub fn render_to<W: Write>(
                     f.complexity,
                     f.coverage * 100.0,
                     f.crap,
-                    if f.failed { "FAIL" } else { "PASS" }
+                    status(f.failed, mutation_only[index])
                 )?;
             }
             writeln!(
@@ -104,6 +113,9 @@ pub fn render_to<W: Write>(
                 for e in &report.syntax_errors {
                     writeln!(s, "  {}", terminal(&e.message))?;
                 }
+            }
+            if let Some(mutation) = &report.mutation {
+                mutation_text(mutation, &rows, &mut s)?;
             }
             if report.functions.is_empty() {
                 s.write_all(b"No implemented TypeScript functions found in the selection.\n")?;
@@ -128,10 +140,28 @@ pub fn render_to<W: Write>(
                 report.functions_missing_coverage,
                 report.completeness_failed
             )?;
-            for f in &report.functions {
+            if let Some(m) = &report.mutation {
                 writeln!(
                     s,
-                    "  <function path=\"{}\" name=\"{}\" line=\"{}\" column=\"{}\" end-line=\"{}\" complexity=\"{}\" coverage=\"{}\" crap=\"{}\" failed=\"{}\"/>",
+                    "  <mutation-evidence tool=\"oximut\" run-complete=\"{}\" mutators=\"{}\" mutator-families=\"{}\" mutants-in-functions=\"{}\" mutants-outside-functions=\"{}\" mutants-outside-selection=\"{}\" files-without-mutants=\"{}\" functions-failed-by-mutation-only=\"{}\"/>",
+                    m.run_complete,
+                    match m.mutators {
+                        MutatorScope::All => "all",
+                        MutatorScope::Subset => "subset",
+                        _ => "unknown",
+                    },
+                    xml_attribute(&m.mutator_families.join(",")),
+                    m.mutants_in_functions,
+                    m.mutants_outside_functions,
+                    m.mutants_outside_selection,
+                    m.files_without_mutants,
+                    m.functions_failed_by_mutation_only
+                )?;
+            }
+            for (index, f) in report.functions.iter().enumerate() {
+                write!(
+                    s,
+                    "  <function path=\"{}\" name=\"{}\" line=\"{}\" column=\"{}\" end-line=\"{}\" complexity=\"{}\" coverage=\"{}\" crap=\"{}\" failed=\"{}\"",
                     xml_attribute(&f.path),
                     xml_attribute(&f.name),
                     f.line,
@@ -142,6 +172,21 @@ pub fn render_to<W: Write>(
                     f.crap,
                     f.failed
                 )?;
+                if let Some(m) = report.mutation.as_ref().map(|m| &m.functions[index]) {
+                    write!(
+                        s,
+                        " mutants=\"{}\" killed=\"{}\" survived=\"{}\" no-coverage=\"{}\" inconclusive=\"{}\"",
+                        m.mutants,
+                        m.killed,
+                        m.survived,
+                        m.no_coverage,
+                        inconclusive(m)
+                    )?;
+                    if let Some(crap) = m.effective_crap {
+                        write!(s, " effective-crap=\"{crap}\"")?;
+                    }
+                }
+                s.write_all(b"/>\n")?;
             }
             for e in &report.syntax_errors {
                 writeln!(
@@ -166,7 +211,7 @@ pub fn render_to<W: Write>(
                 report.files_scanned,
                 report.functions.len()
             )?;
-            for f in &rows {
+            for &(index, f) in &rows {
                 write!(
                     s,
                     "<tr data-failed=\"{}\"><td><code>{}:{}:{}</code></td><td><code>{}</code></td><td>{}</td><td>{:.1}%</td><td>{:.3}</td><td class=\"{}\">{}</td></tr>",
@@ -179,7 +224,7 @@ pub fn render_to<W: Write>(
                     f.coverage * 100.0,
                     f.crap,
                     if f.failed { "fail" } else { "pass" },
-                    if f.failed { "FAIL" } else { "PASS" }
+                    status(f.failed, mutation_only[index])
                 )?;
             }
             write!(
@@ -190,6 +235,9 @@ pub fn render_to<W: Write>(
                 report.files_missing_coverage,
                 report.functions_missing_coverage
             )?;
+            if let Some(mutation) = &report.mutation {
+                mutation_html(mutation, &rows, &mut s)?;
+            }
             if !report.syntax_errors.is_empty() {
                 write!(
                     s,
@@ -205,6 +253,143 @@ pub fn render_to<W: Write>(
             s.write_all(b"</body></html>\n")?;
         }
     }
+    Ok(())
+}
+
+fn status(failed: bool, mutation_only: bool) -> &'static str {
+    match (failed, mutation_only) {
+        (true, true) => "FAIL (mutation)",
+        (true, false) => "FAIL",
+        (false, _) => "PASS",
+    }
+}
+
+fn mutators(mutation: &MutationEvidence) -> String {
+    match mutation.mutators {
+        MutatorScope::All => "all families".to_owned(),
+        MutatorScope::Subset => format!(
+            "subset {} (partial evidence: other families were not run)",
+            mutation.mutator_families.join(",")
+        ),
+        _ => "unknown (partial evidence: the report does not name its families)".to_owned(),
+    }
+}
+
+fn mutation_heading(mutation: &MutationEvidence) -> String {
+    format!(
+        "Mutation evidence (oximut): {} mutants in functions, {} outside functions, {} in unselected files; {} selected files have no mutants. Mutators: {}{}",
+        mutation.mutants_in_functions,
+        mutation.mutants_outside_functions,
+        mutation.mutants_outside_selection,
+        mutation.files_without_mutants,
+        mutators(mutation),
+        if mutation.run_complete {
+            ""
+        } else {
+            "; incomplete run: inconclusive mutants count neither way"
+        }
+    )
+}
+
+fn unkilled(f: &FunctionMutation) -> bool {
+    f.survived + f.no_coverage > 0
+}
+
+fn inconclusive(f: &FunctionMutation) -> usize {
+    f.mutants - f.killed - f.survived - f.no_coverage
+}
+
+fn percent(value: Option<f64>) -> String {
+    value.map_or("n/a".to_owned(), |v| format!("{:.1}%", v * 100.0))
+}
+
+fn effective_crap(f: &FunctionMutation) -> String {
+    f.effective_crap
+        .map_or("n/a".to_owned(), |crap| format!("{crap:.3}"))
+}
+
+/// Visible functions with unkilled mutants; the JSON report lists every function.
+fn mutation_text(
+    mutation: &MutationEvidence,
+    rows: &[(usize, &FunctionScore)],
+    mut s: impl Write,
+) -> Result<()> {
+    writeln!(s, "{}", terminal(&mutation_heading(mutation)))?;
+    let mut heading = true;
+    for &(index, _) in rows {
+        let f = &mutation.functions[index];
+        if !unkilled(f) {
+            continue;
+        }
+        if heading {
+            s.write_all(
+                b"PATH:LINE:COLUMN  FUNCTION  KILLED  SURVIVED  NO-COVERAGE  INCONCLUSIVE  EFFECTIVE-COVERAGE  EFFECTIVE-CRAP  STATUS\n",
+            )?;
+            heading = false;
+        }
+        writeln!(
+            s,
+            "{}:{}:{}  {}  {}  {}  {}  {}  {}  {}  {}",
+            terminal(&f.path),
+            f.line,
+            f.column,
+            terminal(&f.name),
+            f.killed,
+            f.survived,
+            f.no_coverage,
+            inconclusive(f),
+            percent(f.effective_coverage),
+            effective_crap(f),
+            if f.failed { "FAIL" } else { "PASS" }
+        )?;
+    }
+    let none = mutation
+        .functions
+        .iter()
+        .filter(|f| f.evidence == EvidenceKind::None)
+        .count();
+    writeln!(
+        s,
+        "Mutation gate: {} functions pass on CRAP and fail the mutation gate; {} functions have no mutants",
+        mutation.functions_failed_by_mutation_only, none
+    )?;
+    Ok(())
+}
+
+fn mutation_html(
+    mutation: &MutationEvidence,
+    rows: &[(usize, &FunctionScore)],
+    mut s: impl Write,
+) -> Result<()> {
+    write!(
+        s,
+        "<h2>Mutation evidence</h2><p>{}</p><p>The mutation gate fails on any surviving or uncovered mutant. Effective coverage and effective CRAP are informational estimates. {} functions pass on CRAP and fail the mutation gate.</p><table><caption>Functions with surviving or uncovered mutants</caption><thead><tr><th>Relative path : line : column</th><th>Function</th><th>Killed</th><th>Survived</th><th>No coverage</th><th>Inconclusive</th><th>Effective coverage</th><th>Effective CRAP</th><th>Gate</th></tr></thead><tbody>",
+        escape(&mutation_heading(mutation)),
+        mutation.functions_failed_by_mutation_only
+    )?;
+    for &(index, _) in rows {
+        let f = &mutation.functions[index];
+        if !unkilled(f) {
+            continue;
+        }
+        write!(
+            s,
+            "<tr><td><code>{}:{}:{}</code></td><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td class=\"{}\">{}</td></tr>",
+            escape(&f.path),
+            f.line,
+            f.column,
+            escape(&f.name),
+            f.killed,
+            f.survived,
+            f.no_coverage,
+            inconclusive(f),
+            percent(f.effective_coverage),
+            effective_crap(f),
+            if f.failed { "fail" } else { "pass" },
+            if f.failed { "FAIL" } else { "PASS" }
+        )?;
+    }
+    s.write_all(b"</tbody></table>")?;
     Ok(())
 }
 

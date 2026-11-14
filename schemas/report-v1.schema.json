@@ -127,6 +127,210 @@
         }
       }
     },
+    "mutation": {
+      "type": "object",
+      "description": "Oximut mutation evidence, present only with --mutation-report (ts-crap 2.5.0 or later). `functions` is parallel to `functions` in the report. Any surviving or uncovered mutant fails a separate mutation gate regardless of the CRAP threshold; `effective_coverage` and `effective_crap` are informational estimates only. Subset/unknown mutator scope is partial evidence that may fail functions but never proves adequacy. Cross-field invariants (parallel function lists, count sums, gate consistency) are validated by executable contract tests, not this schema.",
+      "required": [
+        "tool",
+        "report_schema_version",
+        "run_complete",
+        "mutators",
+        "mutator_families",
+        "mutants_in_functions",
+        "mutants_outside_functions",
+        "mutants_outside_selection",
+        "files_with_mutants",
+        "files_without_mutants",
+        "functions_failed_by_mutation_only",
+        "functions"
+      ],
+      "properties": {
+        "tool": {
+          "const": "oximut"
+        },
+        "report_schema_version": {
+          "const": 1,
+          "description": "Oximut report schemaVersion the evidence was read from."
+        },
+        "run_complete": {
+          "type": "boolean",
+          "description": "Oximut's summary.complete. An incomplete run has inconclusive mutants."
+        },
+        "mutators": {
+          "enum": [
+            "all",
+            "subset",
+            "unknown"
+          ],
+          "description": "Which mutator families the run generated, as far as its diagnostics say. Newer releases may add values."
+        },
+        "mutator_families": {
+          "type": "array",
+          "description": "Families named by a subset report, sorted; empty otherwise.",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z-]+$"
+          }
+        },
+        "mutants_in_functions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mutants_outside_functions": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Mutants in selected files that no scored function owns."
+        },
+        "mutants_outside_selection": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Mutants in files this scan did not select. Not validated or used."
+        },
+        "files_with_mutants": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "files_without_mutants": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Selected files the report has no mutants for: no mutation evidence either way."
+        },
+        "functions_failed_by_mutation_only": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Functions whose CRAP score passes and whose mutation gate fails."
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "name",
+              "line",
+              "column",
+              "identity",
+              "evidence",
+              "mutants",
+              "killed",
+              "survived",
+              "no_coverage",
+              "timeout",
+              "invalid",
+              "infrastructure_error",
+              "resource_exhausted",
+              "skipped",
+              "kill_ratio",
+              "effective_coverage",
+              "effective_crap",
+              "failed"
+            ],
+            "properties": {
+              "path": {
+                "$ref": "#/$defs/path"
+              },
+              "name": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "column": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "One-based UTF-8 byte column."
+              },
+              "identity": {
+                "$ref": "#/$defs/sha256",
+                "description": "Same function fingerprint as the parallel scored function."
+              },
+              "evidence": {
+                "enum": [
+                  "none",
+                  "inconclusive",
+                  "scored"
+                ],
+                "description": "How much mutation evidence the function has. Newer releases may add values."
+              },
+              "mutants": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "All mutants the function owns, whatever their outcome."
+              },
+              "killed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "survived": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "no_coverage": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "No test reached the mutant."
+              },
+              "timeout": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "invalid": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "infrastructure_error": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "resource_exhausted": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "skipped": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "kill_ratio": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1,
+                "description": "killed / (killed + survived + no_coverage), Oximut's own score definition; null unless evidence is scored."
+              },
+              "effective_coverage": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1,
+                "description": "min(coverage, kill_ratio): mutation evidence never raises coverage. Informational only."
+              },
+              "effective_crap": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 1.7976931348623157e+308,
+                "description": "CRAP at effective_coverage; never below the function's crap. Informational only."
+              },
+              "failed": {
+                "type": "boolean",
+                "description": "Any surviving or uncovered mutant fails, regardless of complexity or threshold."
+              }
+            }
+          }
+        },
+        "source_binding": {
+          "type": "string",
+          "description": "Pinned source binding used for selected files with mutants; currently oximut-1.0.0-rc.1-mutant-id. No binding is claimed for files without mutants."
+        }
+      }
+    },
     "syntax_errors": {
       "type": "array",
       "description": "Unparsable selected sources, present only with --on-syntax-error report (ts-crap 2.4.0 or later). Any entry fails the completeness gate.",

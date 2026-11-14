@@ -154,3 +154,15 @@ checks and this draft is not release acceptance. A real browser check was not
 run: no browser executable is installed here; HTML output and gate markers are
 covered by the integration suite. Oximut test execution is blocked by PRoot's
 process-tree checks, so reconstructed fixture provenance is recorded explicitly.
+
+## Merge follow-up
+
+The owner subsequently authorized babysitting and an admin merge once CI is
+green. The branch was synchronized with main's analyzer and memory improvements;
+75 focused tests and strict Clippy passed after conflict resolution. Independent
+GLM review found a producer-position mismatch for lone CR and Unicode line
+separators. That blocker is fixed: input positions use Oximut's JavaScript line
+breaks and UTF-16 columns while ownership retains Tree-sitter coordinates.
+All 14 mutation integration tests and strict Clippy pass after the fix, including
+regressions for LF/CRLF/CR/U+2028/U+2029 and unselected-mutant accounting.
+Hosted checks on the final head must still pass before merging.

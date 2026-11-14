@@ -281,13 +281,7 @@ pub(crate) fn crap(complexity: u32, coverage: f64) -> f64 {
 }
 
 impl FunctionMutation {
-    pub(crate) fn new(
-        method: &Method,
-        path: &str,
-        counts: Counts,
-        coverage: f64,
-        _threshold: f64,
-    ) -> Self {
+    pub(crate) fn new(method: &Method, path: &str, counts: Counts, coverage: f64) -> Self {
         let kill_ratio = counts.kill_ratio();
         // A kill is not a line hit: evidence can only lower coverage.
         let effective_coverage = kill_ratio.map(|ratio| coverage.min(ratio));
@@ -363,16 +357,38 @@ struct Cursor {
     row: usize,
     line_start: usize,
     scanned: usize,
+    report_row: usize,
+    report_column: usize,
+    previous_cr: bool,
 }
 
 impl Cursor {
     fn at(&mut self, source: &str, offset: usize) -> Point {
-        for (index, _) in source[self.scanned..offset].match_indices('\n') {
-            self.row += 1;
-            self.line_start = self.scanned + index + 1;
+        for (index, ch) in source[self.scanned..offset].char_indices() {
+            // Ownership follows Tree-sitter's LF rows and UTF-8 byte columns.
+            if ch == '\n' {
+                self.row += 1;
+                self.line_start = self.scanned + index + 1;
+            }
+            // Oximut positions follow JavaScript line separators and UTF-16.
+            if ch == '\n' && self.previous_cr {
+                self.previous_cr = false;
+                continue;
+            }
+            if matches!(ch, '\n' | '\r' | '\u{2028}' | '\u{2029}') {
+                self.report_row += 1;
+                self.report_column = 0;
+            } else {
+                self.report_column += ch.len_utf16();
+            }
+            self.previous_cr = ch == '\r';
         }
         self.scanned = offset;
         (self.row, offset - self.line_start)
+    }
+
+    fn reported(&self) -> Point {
+        (self.report_row + 1, self.report_column + 1)
     }
 }
 
@@ -433,7 +449,8 @@ impl Mutation {
                     && entry.location.start.column > 0
                     && entry.location.end.line > 0
                     && entry.location.end.column > 0,
-                "Oximut mutant line and column must be one based"
+                "Oximut mutant {} in {relative} must have one-based line and column",
+                short(&entry.id)
             );
             ensure!(
                 ids.insert(entry.id.clone()),
@@ -543,15 +560,16 @@ impl Mutation {
             }
             let start = cursor.at(source, mutant.start);
             // Later mutants may start inside this one; resume from its start.
-            let end = { cursor }.at(source, mutant.end);
-            for (offset, (row, column), reported) in [
-                (mutant.start, start, mutant.start_position),
-                (mutant.end, end, mutant.end_position),
+            let mut end_cursor = cursor;
+            let end = end_cursor.at(source, mutant.end);
+            for (expected, reported) in [
+                (cursor.reported(), mutant.start_position),
+                (end_cursor.reported(), mutant.end_position),
             ] {
-                let utf16_column = source[offset - column..offset].encode_utf16().count() + 1;
                 ensure!(
-                    reported == (row + 1, utf16_column),
-                    "Oximut location disagrees with byte offsets in {relative_path}"
+                    reported == expected,
+                    "Oximut location disagrees with byte offsets in {relative_path}: mutant {} reports {reported:?}, expected {expected:?} (line, UTF-16 column)",
+                    short(&mutant.id)
                 );
             }
             spans.push((start, end));

@@ -45,6 +45,9 @@ the mutant's whole edit, matching CRAP ownership: nested functions own their
 own mutants and are scored separately. A mutant with no owning function — for
 example module-level code, or an edit spanning a function boundary — belongs to
 no function; it is counted in `mutants_outside_functions` and fails no gate.
+Ownership uses Tree-sitter LF rows and UTF-8 byte columns. The redundant input
+locations are checked separately using Oximut's JavaScript line separators
+(LF, CR, CRLF, U+2028 and U+2029) and UTF-16 columns.
 Ownership uses the analyzed function spans, so an unparsable selected file
 (retained under `--on-syntax-error report`) owns no functions: its mutants are
 still validated for freshness and counted, but never scored.

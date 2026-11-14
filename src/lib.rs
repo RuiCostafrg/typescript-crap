@@ -340,7 +340,7 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
             let mut failed = crap > threshold;
             if let Some(owned) = &mut owned {
                 let counts = owned.next().unwrap_or_default();
-                let evidence = FunctionMutation::new(&method, &relative, counts, cov, threshold);
+                let evidence = FunctionMutation::new(&method, &relative, counts, cov);
                 failed |= evidence.failed;
                 mutated.push(evidence);
             }

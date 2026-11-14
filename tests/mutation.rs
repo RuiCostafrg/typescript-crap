@@ -129,9 +129,20 @@ fn edit(
 /// A minimal valid report the loader accepts; the recorded fixtures cover the
 /// long form, this covers the cases they do not.
 fn position(source: &str, offset: usize) -> Value {
-    let prefix = &source[..offset];
-    let line = prefix.bytes().filter(|&b| b == b'\n').count() + 1;
-    let column = prefix.rsplit('\n').next().unwrap().encode_utf16().count() + 1;
+    let (mut line, mut column, mut previous_cr) = (1, 1, false);
+    for ch in source[..offset].chars() {
+        if ch == '\n' && previous_cr {
+            previous_cr = false;
+            continue;
+        }
+        if matches!(ch, '\n' | '\r' | '\u{2028}' | '\u{2029}') {
+            line += 1;
+            column = 1;
+        } else {
+            column += ch.len_utf16();
+        }
+        previous_cr = ch == '\r';
+    }
     json!({"offset":offset,"line":line,"column":column})
 }
 
@@ -928,4 +939,75 @@ fn all_formats_agree_on_the_mutation_gate() {
         findings[0]["partialFingerprints"]["function/v1"],
         report.functions[2].identity
     );
+}
+
+#[test]
+fn producer_line_separators_validate_without_changing_nested_ownership() {
+    for separator in ["\n", "\r\n", "\r", "\u{2028}", "\u{2029}"] {
+        let source = format!(
+            "export function outer() {{ const s = `𝒳{separator}é`; const inner = () => true; return inner(); }}\n"
+        );
+        let edit = edit(&source, "true", 0, "boolean-literal", "false", "survived");
+        let (_project, root, input) = synthetic_project(
+            &[("separators.ts", &source)],
+            "separators.ts",
+            &source,
+            &[edit],
+        );
+        let document: Value = serde_json::from_str(&fs::read_to_string(&input).unwrap()).unwrap();
+        let start = &document["mutants"][0]["location"]["start"];
+        assert_eq!(start["line"], 2);
+        assert_eq!(
+            start["column"],
+            "é`; const inner = () => ".encode_utf16().count() + 1
+        );
+        let report = scanned(&root, &input);
+        let evidence = report.mutation.as_ref().unwrap();
+        assert_eq!(report.functions[1].name, "outer::inner");
+        assert_eq!(evidence.functions[0].mutants, 0);
+        assert_eq!(evidence.functions[1].survived, 1, "separator {separator:?}");
+        assert!(report.failed);
+        // The producer's redundant line/column data is still validated.
+        let mut invalid = document;
+        invalid["mutants"][0]["location"]["start"]["column"] = json!(1);
+        fs::write(&input, serde_json::to_vec(&invalid).unwrap()).unwrap();
+        let error = scan_with(&options(&root), &with_mutation_report(&input))
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("Oximut location disagrees"), "{error}");
+    }
+}
+
+#[test]
+fn unselected_mutants_are_counted_without_affecting_selected_function_evidence() {
+    let source = "export function f() { return true; }\n";
+    let edit_a = edit(source, "true", 0, "boolean-literal", "false", "survived");
+    let (_project, root, input) = synthetic_project(
+        &[("a.ts", source), ("b.ts", source)],
+        "a.ts",
+        source,
+        &[edit_a],
+    );
+    let mut document: Value = serde_json::from_str(&fs::read_to_string(&input).unwrap()).unwrap();
+    let edit_b = edit(source, "true", 0, "boolean-literal", "false", "survived");
+    let second = synthetic_report(&root, "b.ts", source, &[edit_b]);
+    document["mutants"]
+        .as_array_mut()
+        .unwrap()
+        .push(second["mutants"][0].clone());
+    for key in ["total", "survived", "scoreDenominator"] {
+        document["summary"][key] = json!(2);
+    }
+    fs::write(&input, serde_json::to_vec(&document).unwrap()).unwrap();
+    let mut options = options(&root);
+    options.paths = vec![PathBuf::from("a.ts")];
+    let report = scan_with(&options, &with_mutation_report(&input)).unwrap();
+    let evidence = report.mutation.unwrap();
+    assert_eq!(report.functions.len(), 1);
+    assert_eq!(evidence.mutants_in_functions, 1);
+    assert_eq!(evidence.mutants_outside_selection, 1);
+    assert_eq!(evidence.mutants_outside_functions, 0);
+    assert_eq!(evidence.functions[0].survived, 1);
+    assert_eq!(evidence.files_with_mutants, 1);
+    assert_eq!(evidence.files_without_mutants, 0);
 }

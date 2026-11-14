@@ -4,6 +4,8 @@ mod analysis;
 pub mod baseline;
 mod config;
 mod coverage;
+mod mutation;
+pub use mutation::{EvidenceKind, FunctionMutation, MutationEvidence, MutatorScope};
 mod report;
 pub use report::terminal as escape_terminal;
 mod selection;
@@ -48,6 +50,9 @@ pub enum OnSyntaxError {
 #[non_exhaustive]
 pub struct ScanExtensions {
     pub on_syntax_error: OnSyntaxError,
+    /// Oximut JSON report (schema version 1) for these sources, relative to the
+    /// caller's current directory. None, the default, leaves every result unchanged.
+    pub mutation_report: Option<PathBuf>,
 }
 
 /// A selected source that could not be parsed, at its first syntax error.
@@ -162,6 +167,11 @@ pub struct Report {
     /// fails the completeness gate. Omitted from JSON when empty.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub syntax_errors: Vec<UnparsedFile>,
+    /// Mutation evidence (only with `ScanExtensions::mutation_report`). A function
+    /// it lists as failed also has `FunctionScore::failed` set. Omitted from JSON
+    /// when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mutation: Option<MutationEvidence>,
 }
 
 impl Report {
@@ -171,6 +181,20 @@ impl Report {
         self.source_paths
             .binary_search_by(|candidate| candidate.as_path().cmp(path))
             .is_ok()
+    }
+
+    /// For each function, whether mutation evidence alone puts it over the
+    /// threshold. Baselines govern functions whose CRAP score already exceeds it.
+    pub(crate) fn failed_by_mutation_only(&self) -> Vec<bool> {
+        match &self.mutation {
+            Some(mutation) => self
+                .functions
+                .iter()
+                .zip(&mutation.functions)
+                .map(|(f, m)| m.failed && f.crap <= self.threshold)
+                .collect(),
+            None => vec![false; self.functions.len()],
+        }
     }
 }
 
@@ -224,6 +248,14 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
         .as_deref()
         .map(coverage::Coverage::load)
         .transpose()?;
+    let mutation = extensions
+        .mutation_report
+        .as_deref()
+        .map(|path| mutation::Mutation::load(path, &root))
+        .transpose()?;
+    // Parallel to `functions` when mutation evidence is supplied.
+    let mut mutated = Vec::new();
+    let (mut mutants_in_selection, mut files_with_mutants) = (0, 0);
     let mut functions = Vec::new();
     let mut files_missing_coverage = 0;
     let mut functions_missing_coverage = 0;
@@ -258,6 +290,12 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
                     .transpose()?;
                 files_missing_coverage +=
                     usize::from(source_coverage.as_ref().is_none_or(|c| !c.present()));
+                // Nor stale mutation evidence; an unparsed file owns no functions.
+                if let Some(mutation) = &mutation {
+                    let mutants = mutation.for_source(&relative, &source)?.len();
+                    mutants_in_selection += mutants;
+                    files_with_mutants += usize::from(mutants > 0);
+                }
                 syntax_errors.push(UnparsedFile {
                     path: relative.clone(),
                     line: issue.line,
@@ -280,6 +318,16 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
             .transpose()?;
         let missing_file = source_coverage.as_ref().is_none_or(|c| !c.present());
         files_missing_coverage += usize::from(missing_file);
+        // Validate mutation evidence even for files with no implemented functions.
+        let source_mutants = mutation
+            .as_ref()
+            .map(|mutation| mutation.for_source(&relative, &source))
+            .transpose()?;
+        let mut owned = source_mutants.as_ref().map(|mutants| {
+            mutants_in_selection += mutants.len();
+            files_with_mutants += usize::from(mutants.len() > 0);
+            mutants.assign(&methods).into_iter()
+        });
         for method in methods {
             let evidence = source_coverage
                 .as_ref()
@@ -288,8 +336,14 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
                 .unwrap_or_default();
             functions_missing_coverage += usize::from(!evidence.complete);
             let cov = evidence.fraction;
-            let cc = f64::from(method.complexity);
-            let crap = cc * cc * (1.0 - cov).powi(3) + cc;
+            let crap = mutation::crap(method.complexity, cov);
+            let mut failed = crap > threshold;
+            if let Some(owned) = &mut owned {
+                let counts = owned.next().unwrap_or_default();
+                let evidence = FunctionMutation::new(&method, &relative, counts, cov);
+                failed |= evidence.failed;
+                mutated.push(evidence);
+            }
             functions.push(FunctionScore {
                 identity: method.identity,
                 path: relative.clone(),
@@ -301,19 +355,42 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
                 complexity: method.complexity,
                 coverage: cov,
                 crap,
-                failed: crap > threshold,
+                failed,
             });
         }
     }
     if let Some(reader) = &mut committed {
         reader.finish()?;
     }
-    functions
-        .sort_unstable_by(|a, b| (&a.path, a.line, a.column).cmp(&(&b.path, b.line, b.column)));
+    if mutation.is_some() {
+        // Sort both lists with one permutation so they stay parallel.
+        let mut pairs: Vec<_> = functions.into_iter().zip(mutated).collect();
+        pairs.sort_unstable_by(|(a, _), (b, _)| {
+            (&a.path, a.line, a.column).cmp(&(&b.path, b.line, b.column))
+        });
+        (functions, mutated) = pairs.into_iter().unzip();
+    } else {
+        functions
+            .sort_unstable_by(|a, b| (&a.path, a.line, a.column).cmp(&(&b.path, b.line, b.column)));
+    }
     // An unparsable file is unscored evidence: the scan is incomplete under any policy.
     let completeness_failed = (fail_on_empty && functions.is_empty())
         || (require_coverage && (files_missing_coverage > 0 || functions_missing_coverage > 0))
         || !syntax_errors.is_empty();
+    let only = functions
+        .iter()
+        .zip(&mutated)
+        .filter(|(f, m)| m.failed && f.crap <= threshold)
+        .count();
+    let mutation = mutation.map(|mutation| {
+        mutation.summary(
+            mutated,
+            mutants_in_selection,
+            files_with_mutants,
+            files.len() - files_with_mutants,
+            only,
+        )
+    });
     let files_scanned = files.len();
     let report = Report {
         version: 1,
@@ -326,6 +403,7 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
         failed: completeness_failed || functions.iter().any(|f| f.failed),
         functions,
         syntax_errors,
+        mutation,
     };
     Ok(report)
 }

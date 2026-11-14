@@ -22,6 +22,7 @@ include = [
     "/packaging/**",
     "/docs/COVERAGE_HELPERS.md",
     "/docs/COMPATIBILITY.md",
+    "/docs/MUTATION_EVIDENCE.md",
     "/docs/VERIFICATION.md",
     "/docs/MIGRATING_TO_V1.md",
     "/docs/MIGRATING_TO_V2.md",

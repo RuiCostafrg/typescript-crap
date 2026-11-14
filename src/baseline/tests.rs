@@ -13,6 +13,7 @@ fn report(entries: &[(&str, &str, u8, f64)]) -> Report {
         functions_missing_coverage: 0,
         completeness_failed: false,
         syntax_errors: Vec::new(),
+        mutation: None,
         functions: entries
             .iter()
             .map(|&(path, name, identity, crap)| FunctionScore {

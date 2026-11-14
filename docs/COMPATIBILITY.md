@@ -162,3 +162,22 @@ validation, and candidate archive/helper/installer verification. Publish through
 the protected release workflow; live Homebrew synchronization and a clean
 published-tool CI-guide run supply publication evidence. Do not claim release
 acceptance from a branch's local tests alone or bypass failed quality checks.
+
+## Opt-in Oximut mutation evidence (unreleased)
+
+`--mutation-report` and `ScanExtensions::mutation_report` add evidence without
+changing the CRAP formula, coverage, or threshold. The JSON version-1 report
+omits `mutation` unless requested; when present it records per-function counts,
+mutator scope, run completeness, and the pinned source binding. A surviving or
+uncovered mutant fails an independent gate even below the CRAP threshold.
+`functions[].failed` and report `failed` include this gate; CRAP baselines cannot
+suppress it. Invalid or mismatched evidence exits 2; a valid gate failure exits
+1. Default output and exit behavior remain unchanged. SARIF adds `TSCRAP003`
+only with mutation evidence; CRAP-only findings retain `TSCRAP001`.
+
+This reader targets Oximut 1.0.0-rc.1's observed mutant-ID derivation because its
+schema-1 report has no source hashes. IDs bind whole source bytes for files
+with mutants; different derivations are rejected. Files with no mutants have
+no mutation evidence or freshness binding. Diagnostic mutator-family labels
+are observational; subset/unknown scope cannot establish complete adequacy.
+See [the design note](MUTATION_EVIDENCE.md) for limitations and upstream needs.

@@ -11,6 +11,10 @@ pub struct Method {
     pub column: usize,
     pub column_utf16: usize,
     pub end_line: usize,
+    /// Zero-based (row, UTF-8 byte column) node span. Unlike byte offsets, these
+    /// are unchanged by the separator repairs applied before parsing.
+    pub start: (usize, usize),
+    pub end: (usize, usize),
     pub complexity: u32,
     /// Owned statement lines, sorted and deduplicated.
     pub lines: Vec<usize>,
@@ -452,6 +456,8 @@ fn collect(node: Node<'_>, source: &str, kinds: &Kinds, out: &mut Vec<Method>) {
                 column: node.start_position().column + 1,
                 column_utf16: utf16.at(node, source),
                 end_line: node.end_position().row + 1,
+                start: (node.start_position().row, node.start_position().column),
+                end: (node.end_position().row, node.end_position().column),
                 complexity,
                 lines,
             });

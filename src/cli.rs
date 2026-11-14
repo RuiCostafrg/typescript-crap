@@ -50,6 +50,10 @@ struct Args {
     /// Explicit file move mapping for changed functions, OLD=NEW
     #[arg(long, requires = "baseline")]
     baseline_rename: Vec<String>,
+    /// Oximut mutation report (schemaVersion 1) for the same sources and root;
+    /// surviving or uncovered mutants fail a separate mutation gate
+    #[arg(long)]
+    mutation_report: Option<PathBuf>,
     /// Abort on a source that does not parse (fail), or score the rest, list it and
     /// fail the completeness gate (report)
     #[arg(long, value_enum, default_value = "fail")]
@@ -109,7 +113,7 @@ pub fn execute() -> Result<bool> {
         .flatten()
         .map(PathBuf::as_path)
         .collect();
-    let mut protected: Vec<_> = [&args.coverage, &args.baseline]
+    let mut protected: Vec<_> = [&args.coverage, &args.baseline, &args.mutation_report]
         .into_iter()
         .flatten()
         .map(PathBuf::as_path)
@@ -120,6 +124,7 @@ pub fn execute() -> Result<bool> {
     let publication = crate::output::DestinationPlan::new(&args.root, destinations, protected)?;
     let mut extensions = ScanExtensions::default();
     extensions.on_syntax_error = args.on_syntax_error;
+    extensions.mutation_report = args.mutation_report.clone();
     let mut report = ts_crap::scan_with(
         &ScanOptions {
             root: args.root.clone(),

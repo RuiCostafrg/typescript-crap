@@ -781,6 +781,53 @@ fn mutation_row(report: &Report, name: &str, status: &str) -> String {
 }
 
 #[test]
+fn baselines_hold_crap_scores_only_and_never_suppress_the_mutation_gate() {
+    let (project, root) = subject_project();
+    let survivor = write_report(
+        &project,
+        "full.json",
+        &substituted(&fixture("full.json"), &root),
+    );
+    // A snapshot taken before any mutation evidence exists records only CRAP.
+    let baseline = Baseline::capture(&scan(&options(&root)).unwrap());
+    let baseline = Baseline::load(baseline.render().unwrap().as_bytes()).unwrap();
+    let mut gated = scanned(&root, &survivor);
+    assert!(gated.failed);
+    baseline.apply(&mut gated, &[]).unwrap();
+    let uncalled = index_of(&gated, "uncalled");
+    assert!(gated.functions[uncalled].failed, "{gated:?}");
+    assert!(gated.failed);
+
+    // The same snapshot leaves an all-killed run passing.
+    let killed = write_report(
+        &project,
+        "killed.json",
+        &serde_json::to_string(&all_killed_report(&root)).unwrap(),
+    );
+    let mut clean = scanned(&root, &killed);
+    assert!(!clean.failed);
+    baseline.apply(&mut clean, &[]).unwrap();
+    assert!(!clean.functions[uncalled].failed, "{clean:?}");
+    assert!(!clean.failed);
+
+    // A baseline may excuse an unchanged CRAP violation; the mutation gate
+    // must still fail even when CRAP itself exceeds the threshold.
+    let source = "export function complex(x: number) { if (x > 0) return true; if (x > 1) return false; if (x > 2) return false; return false; }\n";
+    let edit = edit(source, "true", 0, "boolean-literal", "false", "survived");
+    let (_project, root, input) =
+        synthetic_project(&[("complex.ts", source)], "complex.ts", source, &[edit]);
+    let mut plain = scan(&options(&root)).unwrap();
+    assert!(plain.functions[0].crap > plain.threshold);
+    let baseline = Baseline::capture(&plain);
+    baseline.apply(&mut plain, &[]).unwrap();
+    assert!(!plain.failed);
+    let mut gated = scanned(&root, &input);
+    baseline.apply(&mut gated, &[]).unwrap();
+    assert!(gated.failed);
+    assert!(gated.functions[0].failed);
+}
+
+#[test]
 fn all_formats_agree_on_the_mutation_gate() {
     let (project, root) = subject_project();
     let report_path = write_report(

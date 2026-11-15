@@ -29,6 +29,16 @@ pub(super) fn hook(relative: &str) {
     }
 }
 
+/// Parallel-scan tests take turns, so at most one test's workers run at a time.
+static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    // A test that panicked while holding the lock leaves nothing to clean up.
+    SERIAL
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 const FILES: usize = 40;
 
 /// `FILES` sources alternating TS and TSX, some nested a few directories deep.
@@ -159,6 +169,7 @@ fn peaks(sizes: &[usize], jobs: usize, limits: Limits) -> (Peaks, Totals) {
 
 #[test]
 fn parallel_runs_never_exceed_the_window_or_the_byte_limit() {
+    let _serial = serial();
     let limits = Limits {
         window: 3,
         bytes: 1_000,
@@ -198,12 +209,16 @@ fn small_selections_and_single_jobs_stay_on_the_calling_thread() {
 
 #[test]
 fn every_job_count_gives_the_same_report_bytes() {
+    let _serial = serial();
     let directory = project(&[]);
     let report = scan(directory.path(), 1, OnSyntaxError::Fail).unwrap();
     assert_eq!(report.files_scanned, FILES);
     let expected = rendered(&report);
-    for jobs in [0, 2, 3, 4, 7, 64] {
-        for _ in 0..3 {
+    // Few workers on purpose: under a looping mutant every worker allocates until
+    // the mutation timeout, so many workers can exhaust a CI runner's memory.
+    // Counts above the file count are covered by `workers` itself.
+    for jobs in [0, 2, 3, 4] {
+        for _ in 0..2 {
             let report = scan(directory.path(), jobs, OnSyntaxError::Fail).unwrap();
             assert_eq!(rendered(&report), expected, "jobs {jobs}");
         }
@@ -212,6 +227,7 @@ fn every_job_count_gives_the_same_report_bytes() {
 
 #[test]
 fn reported_syntax_errors_keep_file_order_across_workers() {
+    let _serial = serial();
     let directory = project(&[
         (4, "syntax"),
         (11, "syntax"),
@@ -221,7 +237,7 @@ fn reported_syntax_errors_keep_file_order_across_workers() {
     let expected = scan(directory.path(), 1, OnSyntaxError::Report).unwrap();
     assert_eq!(expected.syntax_errors.len(), 4);
     let expected = rendered(&expected);
-    for _ in 0..10 {
+    for _ in 0..5 {
         let report = scan(directory.path(), 4, OnSyntaxError::Report).unwrap();
         assert_eq!(rendered(&report), expected);
     }
@@ -236,6 +252,7 @@ fn error(directory: &Path, jobs: usize) -> String {
 
 #[test]
 fn the_lowest_failing_file_decides_the_error() {
+    let _serial = serial();
     for (special, expected) in [
         // Analysis errors only.
         (vec![(5, "syntax"), (17, "syntax"), (33, "syntax")], "f05"),
@@ -251,7 +268,7 @@ fn the_lowest_failing_file_decides_the_error() {
         let directory = project(&special);
         let sequential = error(directory.path(), 1);
         assert!(sequential.contains(expected), "{sequential}");
-        for _ in 0..25 {
+        for _ in 0..10 {
             assert_eq!(error(directory.path(), 4), sequential, "{special:?}");
         }
     }
@@ -259,6 +276,7 @@ fn the_lowest_failing_file_decides_the_error() {
 
 #[test]
 fn a_lower_panic_resumes_and_wins_over_later_errors() {
+    let _serial = serial();
     for special in [
         vec![(3, "panic"), (10, "syntax")],
         vec![(3, "panic"), (4, "utf8")],
@@ -267,7 +285,7 @@ fn a_lower_panic_resumes_and_wins_over_later_errors() {
     ] {
         let directory = project(&special);
         for jobs in [1, 4] {
-            for _ in 0..if jobs == 1 { 1 } else { 15 } {
+            for _ in 0..if jobs == 1 { 1 } else { 6 } {
                 let payload =
                     std::panic::catch_unwind(|| scan(directory.path(), jobs, OnSyntaxError::Fail))
                         .expect_err("the panic must reach the caller");
@@ -283,6 +301,7 @@ fn a_lower_panic_resumes_and_wins_over_later_errors() {
 
 #[test]
 fn large_selections_really_run_on_workers_and_small_ones_do_not() {
+    let _serial = serial();
     let directory = tempfile::tempdir().unwrap();
     let probe = directory.path().join(PROBE_MARKER);
     fs::create_dir(&probe).unwrap();

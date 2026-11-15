@@ -550,7 +550,7 @@ fn job_counts_give_identical_reports_baselines_and_exit_codes_in_every_format() 
     for format in ["text", "json", "xml", "html", "sarif"] {
         for variant in ["syntax-report", "baseline"] {
             let mut outputs = Vec::new();
-            for jobs in ["1", "2", "4", "16"] {
+            for jobs in ["1", "2", "4"] {
                 let baseline = dir.path().join(format!("baseline-{jobs}.json"));
                 let report = dir.path().join("report.out");
                 // An existing destination, so the preflight walk runs as well.

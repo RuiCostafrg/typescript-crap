@@ -64,6 +64,10 @@ relabeling old imported evidence.
   results; each unparsable file fails the completeness gate. In Rust, `scan_with`
   with the `#[non_exhaustive]` `ScanExtensions` and `OnSyntaxError` types carries
   the option, so `ScanOptions` keeps its fields and `scan` is unchanged.
+- `--jobs N` (added after 2.4.0) sets the analysis worker count. The CLI defaults to the
+  available cores, at most 4; the library field `ScanExtensions::jobs` defaults
+  to 1, so `scan` and `scan_with` start no threads unless asked. Output and the
+  reported error are the same for every value.
 - Existing JSON fields retain names, types, units, and meaning. Minor releases may
   add output fields; consumers must ignore unknown output fields. Whitespace,
   object-key order, human tables/HTML markup, exact diagnostics, and displayed

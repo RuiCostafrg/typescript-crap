@@ -4,6 +4,7 @@ mod analysis;
 pub mod baseline;
 mod config;
 mod coverage;
+mod pipeline;
 mod report;
 pub use report::terminal as escape_terminal;
 mod selection;
@@ -48,6 +49,11 @@ pub enum OnSyntaxError {
 #[non_exhaustive]
 pub struct ScanExtensions {
     pub on_syntax_error: OnSyntaxError,
+    /// Worker threads that analyze selected files; 0 and 1 (the default) analyze
+    /// on the calling thread. Selections of fewer than 32 files always do. Files
+    /// are still read and verified on the calling thread in order, and the report
+    /// and any error are the same for every value.
+    pub jobs: usize,
 }
 
 /// A selected source that could not be parsed, at its first syntax error.
@@ -224,17 +230,13 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
         .as_deref()
         .map(coverage::Coverage::load)
         .transpose()?;
-    let mut functions = Vec::new();
-    let mut files_missing_coverage = 0;
-    let mut functions_missing_coverage = 0;
-    let mut syntax_errors = Vec::new();
-    let mut analyzer = analysis::Analyzer::default();
+    let mut totals = pipeline::Totals::default();
     let mut committed = if files.is_empty() || selection.committed.is_empty() {
         None
     } else {
         Some(selection::BlobReader::new(&root)?)
     };
-    for path in &files {
+    let mut load = |path: &PathBuf| -> Result<(String, String)> {
         let relative = validation::source_path(path.strip_prefix(&root)?)?;
         let source =
             std::fs::read_to_string(path).with_context(|| format!("cannot read {relative}"))?;
@@ -245,69 +247,23 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
                 .context("selected source has no committed identity")?;
             reader.verify(oid, path, &source)?;
         }
-        let methods = match analyzer.analyze(&relative, &source) {
-            Ok(methods) => methods,
-            Err(error) if extensions.on_syntax_error == OnSyntaxError::Report => {
-                let Some(issue) = error.downcast_ref::<analysis::SyntaxError>() else {
-                    return Err(error);
-                };
-                // Reporting syntax errors must not hide stale or invalid coverage.
-                let source_coverage = coverage
-                    .as_ref()
-                    .map(|coverage| coverage.for_source(&relative, &source))
-                    .transpose()?;
-                files_missing_coverage +=
-                    usize::from(source_coverage.as_ref().is_none_or(|c| !c.present()));
-                syntax_errors.push(UnparsedFile {
-                    path: relative.clone(),
-                    line: issue.line,
-                    column: issue.column,
-                    column_utf16: issue.column_utf16,
-                    // Saved reports may be shared independently of repository access.
-                    message: format!(
-                        "invalid TypeScript syntax in {}:{}:{} (UTF-8 byte column)",
-                        issue.path, issue.line, issue.column
-                    ),
-                });
-                continue;
-            }
-            Err(error) => return Err(error),
-        };
-        // Validate coverage even for selected files with no implemented functions.
-        let source_coverage = coverage
-            .as_ref()
-            .map(|cov| cov.for_source(&relative, &source))
-            .transpose()?;
-        let missing_file = source_coverage.as_ref().is_none_or(|c| !c.present());
-        files_missing_coverage += usize::from(missing_file);
-        for method in methods {
-            let evidence = source_coverage
-                .as_ref()
-                .map(|coverage| coverage.evidence(&method.lines))
-                .transpose()?
-                .unwrap_or_default();
-            functions_missing_coverage += usize::from(!evidence.complete);
-            let cov = evidence.fraction;
-            let cc = f64::from(method.complexity);
-            let crap = cc * cc * (1.0 - cov).powi(3) + cc;
-            functions.push(FunctionScore {
-                identity: method.identity,
-                path: relative.clone(),
-                name: method.name,
-                line: method.line,
-                column: method.column,
-                column_utf16: method.column_utf16,
-                end_line: method.end_line,
-                complexity: method.complexity,
-                coverage: cov,
-                crap,
-                failed: crap > threshold,
-            });
-        }
-    }
+        Ok((relative, source))
+    };
+    let context = pipeline::FileContext {
+        coverage: coverage.as_ref(),
+        threshold,
+        on_syntax_error: extensions.on_syntax_error,
+    };
+    pipeline::run(&files, extensions.jobs, &mut load, &context, &mut totals)?;
     if let Some(reader) = &mut committed {
         reader.finish()?;
     }
+    let pipeline::Totals {
+        mut functions,
+        files_missing_coverage,
+        functions_missing_coverage,
+        syntax_errors,
+    } = totals;
     functions
         .sort_unstable_by(|a, b| (&a.path, a.line, a.column).cmp(&(&b.path, b.line, b.column)));
     // An unparsable file is unscored evidence: the scan is incomplete under any policy.

@@ -45,6 +45,15 @@
 
 ### Added
 
+- `--jobs N` analyzes selections of 32 files or more on up to N worker threads.
+  The CLI defaults to the available cores, at most 4. Files are still read and
+  verified against Git in path order on one thread. Workers only parse, bind
+  coverage and score, and results are merged in path order. Reports, baselines,
+  exit codes and the reported error (the first failing file in path order,
+  including panics) are the same for every N. In-flight source text is capped
+  at 64 MiB, and a larger file is analyzed alone.
+- `ScanExtensions::jobs` for library callers. It defaults to 1, so `scan` and
+  `scan_with` start no threads unless asked.
 - `Baseline::render_report_to` streams a report's baseline snapshot without
   copying it first; it writes the same bytes as `Baseline::capture` followed by
   `render_to`.

@@ -54,6 +54,10 @@ struct Args {
     /// fail the completeness gate (report)
     #[arg(long, value_enum, default_value = "fail")]
     on_syntax_error: OnSyntaxError,
+    /// Analyze with up to N worker threads (default: available cores, at most 4).
+    /// Selections under 32 files use one thread; reports do not depend on N
+    #[arg(long, value_name = "N")]
+    jobs: Option<std::num::NonZeroUsize>,
     /// Report format; defaults to a readable table
     #[arg(long, value_enum, default_value = "text")]
     format: Format,
@@ -69,6 +73,13 @@ struct Args {
     /// Write report to this file rather than stdout (also written on gate failure)
     #[arg(long, short)]
     output: Option<PathBuf>,
+}
+
+/// More workers than this gave no gain on the measured machines.
+const MAX_DEFAULT_JOBS: usize = 4;
+
+fn default_jobs() -> usize {
+    std::thread::available_parallelism().map_or(1, |cores| cores.get().min(MAX_DEFAULT_JOBS))
 }
 
 fn threshold(raw: &str) -> Result<f64, String> {
@@ -120,6 +131,9 @@ pub fn execute() -> Result<bool> {
     let publication = crate::output::DestinationPlan::new(&args.root, destinations, protected)?;
     let mut extensions = ScanExtensions::default();
     extensions.on_syntax_error = args.on_syntax_error;
+    extensions.jobs = args
+        .jobs
+        .map_or_else(default_jobs, std::num::NonZeroUsize::get);
     let mut report = ts_crap::scan_with(
         &ScanOptions {
             root: args.root.clone(),
@@ -212,5 +226,15 @@ impl StagedReport {
         }
         stdout.flush()?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn default_jobs_use_the_available_cores_up_to_four() {
+        let cores = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+        assert_eq!(super::default_jobs(), cores.min(super::MAX_DEFAULT_JOBS));
+        assert_eq!(super::MAX_DEFAULT_JOBS, 4);
     }
 }

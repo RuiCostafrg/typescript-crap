@@ -27,6 +27,11 @@ const MAX_IN_FLIGHT_BYTES: usize = 64 << 20;
 /// Files handed out but not yet merged, per worker. Bounds both the queue and
 /// the reorder buffer.
 const WINDOW_PER_WORKER: usize = 2;
+/// Larger sources are analyzed on the calling thread. glibc gives each thread
+/// its own heap and keeps each one near its high-water mark, which is set by
+/// the largest parse it performed. Keeping large parses in the calling thread's
+/// heap, as in a sequential scan, keeps the workers' heaps small.
+const INLINE_SOURCE_BYTES: usize = 128 << 10;
 
 /// How much work may be outstanding at once.
 #[derive(Clone, Copy)]
@@ -35,6 +40,8 @@ struct Limits {
     window: usize,
     /// Source bytes handed out but not yet returned by a worker.
     bytes: usize,
+    /// Sources larger than this are analyzed on the calling thread.
+    inline: usize,
 }
 
 /// The most work that was outstanding during one parallel run.
@@ -42,6 +49,8 @@ struct Limits {
 struct Peaks {
     handed_out: usize,
     in_flight_bytes: usize,
+    /// Files analyzed on the calling thread.
+    inline: usize,
 }
 /// Matches the usual main-thread stack rather than the smaller spawned default.
 const WORKER_STACK_BYTES: usize = 8 << 20;
@@ -181,6 +190,7 @@ pub(crate) fn run(
         let limits = Limits {
             window: jobs.saturating_mul(WINDOW_PER_WORKER),
             bytes: MAX_IN_FLIGHT_BYTES,
+            inline: INLINE_SOURCE_BYTES,
         };
         parallel(paths, jobs, limits, load, context, totals).map(drop)
     } else {
@@ -275,8 +285,13 @@ impl Merge<'_> {
             .map_err(|_| anyhow!("analysis workers stopped unexpectedly"))?;
         self.received += 1;
         self.in_flight_bytes = self.in_flight_bytes.saturating_sub(done.bytes);
-        self.failed |= !matches!(done.outcome, Ok(Ok(_)));
-        self.pending.insert(done.index, done.outcome);
+        self.accept(done.index, done.outcome);
+        Ok(())
+    }
+
+    fn accept(&mut self, index: usize, outcome: thread::Result<Result<FileOutcome>>) {
+        self.failed |= !matches!(outcome, Ok(Ok(_)));
+        self.pending.insert(index, outcome);
         // Stop at the first failure: it decides the scan unless a lower index fails.
         while let Some(entry) = self.pending.first_entry() {
             if *entry.key() != self.merged || !matches!(entry.get(), Ok(Ok(_))) {
@@ -287,7 +302,6 @@ impl Merge<'_> {
             }
             self.merged += 1;
         }
-        Ok(())
     }
 }
 
@@ -337,6 +351,7 @@ fn parallel(
         let mut sent = 0;
         let mut stopped = None;
         let mut peaks = Peaks::default();
+        let mut analyzer = None;
         for (index, path) in paths.iter().enumerate() {
             if merge.failed {
                 break;
@@ -350,6 +365,32 @@ fn parallel(
                 }
             };
             let size = source.len();
+            if size > limits.inline {
+                // A file over the byte limit still runs alone.
+                while !merge.failed
+                    && merge.in_flight_bytes > 0
+                    && merge.in_flight_bytes.saturating_add(size) > limits.bytes
+                {
+                    merge.receive(&results)?;
+                }
+                if merge.failed {
+                    break;
+                }
+                let analyzer = analyzer.get_or_insert_with(analysis::Analyzer::default);
+                let outcome = catch_unwind(AssertUnwindSafe(|| {
+                    analyze_file(analyzer, context, &relative, &source)
+                }));
+                if outcome.is_err() {
+                    *analyzer = analysis::Analyzer::default();
+                }
+                drop(source);
+                // Counted as handed out and returned, so the drain below still balances.
+                sent += 1;
+                merge.received += 1;
+                merge.accept(index, outcome);
+                peaks.inline += 1;
+                continue;
+            }
             while !merge.failed
                 && must_wait(limits, sent - merge.merged, merge.in_flight_bytes, size)
             {

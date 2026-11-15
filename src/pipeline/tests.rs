@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use super::{
-    FileContext, Limits, MAX_IN_FLIGHT_BYTES, MIN_PARALLEL_FILES, Peaks, Totals, must_wait,
-    parallel, workers,
+    FileContext, INLINE_SOURCE_BYTES, Limits, MAX_IN_FLIGHT_BYTES, MIN_PARALLEL_FILES, Peaks,
+    Totals, must_wait, parallel, workers,
 };
 use crate::{Format, OnSyntaxError, ScanExtensions, ScanOptions, render, scan_with};
 use std::{
@@ -127,6 +127,7 @@ fn bounds_wait_for_the_window_and_for_in_flight_bytes() {
     let limits = Limits {
         window: 8,
         bytes: MAX_IN_FLIGHT_BYTES,
+        inline: usize::MAX,
     };
     assert!(!must_wait(limits, 0, 0, 0));
     assert!(!must_wait(limits, 7, 0, 10));
@@ -142,14 +143,24 @@ fn bounds_wait_for_the_window_and_for_in_flight_bytes() {
     assert!(must_wait(limits, 1, 1, usize::MAX));
 }
 
-/// Runs `parallel` directly over in-memory sources with small limits.
-fn peaks(sizes: &[usize], jobs: usize, limits: Limits) -> (Peaks, Totals) {
+/// Runs `parallel` directly over in-memory sources with small limits. Indices
+/// in `broken` hold a syntax error.
+fn run_parallel(
+    sizes: &[usize],
+    broken: &[usize],
+    jobs: usize,
+    limits: Limits,
+) -> (anyhow::Result<Peaks>, Totals) {
     let paths: Vec<PathBuf> = (0..sizes.len())
         .map(|index| PathBuf::from(format!("f{index:03}.ts")))
         .collect();
     let mut load = |path: &PathBuf| -> anyhow::Result<(String, String)> {
         let index: usize = path.to_str().unwrap()[1..4].parse().unwrap();
-        let body = format!("export function f{index}() {{ return {index}; }}\n");
+        let body = if broken.contains(&index) {
+            "export function broken( {\n".to_owned()
+        } else {
+            format!("export function f{index}() {{ return {index}; }}\n")
+        };
         // Pad with a comment to the requested size.
         let padding = sizes[index].saturating_sub(body.len() + 3);
         Ok((
@@ -163,8 +174,21 @@ fn peaks(sizes: &[usize], jobs: usize, limits: Limits) -> (Peaks, Totals) {
         on_syntax_error: OnSyntaxError::Fail,
     };
     let mut totals = Totals::default();
-    let peaks = parallel(&paths, jobs, limits, &mut load, &context, &mut totals).unwrap();
+    let peaks = parallel(&paths, jobs, limits, &mut load, &context, &mut totals);
     (peaks, totals)
+}
+
+fn peaks(sizes: &[usize], jobs: usize, limits: Limits) -> (Peaks, Totals) {
+    let (peaks, totals) = run_parallel(sizes, &[], jobs, limits);
+    (peaks.unwrap(), totals)
+}
+
+fn names(totals: &Totals) -> Vec<&str> {
+    totals.functions.iter().map(|f| f.path.as_str()).collect()
+}
+
+fn expected_names(count: usize) -> Vec<String> {
+    (0..count).map(|index| format!("f{index:03}.ts")).collect()
 }
 
 #[test]
@@ -173,19 +197,19 @@ fn parallel_runs_never_exceed_the_window_or_the_byte_limit() {
     let limits = Limits {
         window: 3,
         bytes: 1_000,
+        inline: usize::MAX,
     };
     for _ in 0..10 {
         let (seen, totals) = peaks(&[300; 40], 4, limits);
         assert!(seen.handed_out <= 3, "{seen:?}");
         assert!(seen.in_flight_bytes <= 1_000, "{seen:?}");
+        assert_eq!(seen.inline, 0);
         // Three 300-byte files fit; work did overlap.
         assert!(
             seen.handed_out >= 1 && seen.in_flight_bytes >= 300,
             "{seen:?}"
         );
-        let names: Vec<_> = totals.functions.iter().map(|f| f.path.as_str()).collect();
-        let expected: Vec<_> = (0..40).map(|index| format!("f{index:03}.ts")).collect();
-        assert_eq!(names, expected);
+        assert_eq!(names(&totals), expected_names(40));
     }
     // A file over the byte limit runs alone: nothing else is in flight with it.
     let mut sizes = vec![100; 40];
@@ -194,12 +218,50 @@ fn parallel_runs_never_exceed_the_window_or_the_byte_limit() {
     for _ in 0..10 {
         let (seen, totals) = peaks(&sizes, 4, limits);
         assert!(seen.in_flight_bytes <= 5_000, "{seen:?}");
-        assert_eq!(totals.functions.len(), 40);
+        assert_eq!(names(&totals), expected_names(40));
     }
 }
+
+#[test]
+fn large_files_run_on_the_calling_thread_in_file_order() {
+    let _serial = serial();
+    let limits = Limits {
+        window: 4,
+        bytes: 1_000,
+        inline: 500,
+    };
+    let mut sizes = vec![100; 40];
+    for index in [0, 7, 8, 20, 39] {
+        sizes[index] = 600;
+    }
+    // Over the byte limit too: it runs alone, on the calling thread.
+    sizes[30] = 5_000;
+    for _ in 0..5 {
+        let (seen, totals) = peaks(&sizes, 3, limits);
+        assert_eq!(seen.inline, 6, "{seen:?}");
+        // Inline sources never count as handed out to workers.
+        assert!(seen.in_flight_bytes <= 400, "{seen:?}");
+        assert_eq!(names(&totals), expected_names(40));
+    }
+    // The lowest failing file wins whether it ran inline or on a worker.
+    for (broken, expected) in [
+        (vec![7, 3], "f003"),
+        (vec![7, 12], "f007"),
+        (vec![25, 30], "f025"),
+        (vec![30, 35], "f030"),
+    ] {
+        for _ in 0..5 {
+            let (result, _) = run_parallel(&sizes, &broken, 3, limits);
+            let error = format!("{:#}", result.unwrap_err());
+            assert!(error.contains(expected), "{broken:?}: {error}");
+        }
+    }
+}
+
 #[test]
 fn small_selections_and_single_jobs_stay_on_the_calling_thread() {
     assert_eq!(MIN_PARALLEL_FILES, 32);
+    assert_eq!(INLINE_SOURCE_BYTES, 128 << 10);
     assert_eq!(workers(4, MIN_PARALLEL_FILES - 1), 1);
     assert_eq!(workers(4, MIN_PARALLEL_FILES), 4);
     assert_eq!(workers(0, 100), 1);

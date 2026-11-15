@@ -30,7 +30,10 @@ const WINDOW_PER_WORKER: usize = 2;
 /// Larger sources are analyzed on the calling thread. glibc gives each thread
 /// its own heap and keeps each one near its high-water mark, which is set by
 /// the largest parse it performed. Keeping large parses in the calling thread's
-/// heap, as in a sequential scan, keeps the workers' heaps small.
+/// heap, as in a sequential scan, keeps the workers' heaps small (VS Code,
+/// glibc, 4 jobs: 1.59x to 1.36x of sequential peak RSS; with `rehome`, 1.14x).
+/// Lower thresholds saved little more memory and cost speed: 64 KiB gave 1.10x
+/// at 1.52x the speed, against 1.14x at 1.64x here.
 const INLINE_SOURCE_BYTES: usize = 128 << 10;
 
 /// How much work may be outstanding at once.
@@ -269,6 +272,30 @@ fn must_wait(limits: Limits, handed_out: usize, in_flight_bytes: usize, size: us
         || (in_flight_bytes > 0 && in_flight_bytes.saturating_add(size) > limits.bytes)
 }
 
+/// Copy a worker's result into the calling thread's heap and free the worker's
+/// copy. glibc keeps a heap per thread; a report string a worker allocated
+/// would otherwise live to the end of the scan and keep that worker's heap from
+/// shrinking after each file. Measured on the VS Code corpus (glibc, 4 jobs),
+/// this took peak RSS from 1.36x to 1.14x of a sequential scan.
+fn rehome(outcome: &mut FileOutcome) {
+    let functions = std::mem::take(&mut outcome.functions);
+    let mut copied = Vec::with_capacity(functions.len());
+    for function in &functions {
+        copied.push(FunctionScore {
+            identity: function.identity.as_str().to_owned(),
+            path: function.path.as_str().to_owned(),
+            name: function.name.as_str().to_owned(),
+            ..*function
+        });
+    }
+    drop(functions);
+    outcome.functions = copied;
+    if let Some(error) = &mut outcome.syntax_error {
+        error.path = error.path.as_str().to_owned();
+        error.message = error.message.as_str().to_owned();
+    }
+}
+
 /// Results received from workers, merged into `totals` in file order.
 struct Merge<'t> {
     totals: &'t mut Totals,
@@ -287,7 +314,11 @@ impl Merge<'_> {
             .map_err(|_| anyhow!("analysis workers stopped unexpectedly"))?;
         self.received += 1;
         self.in_flight_bytes = self.in_flight_bytes.saturating_sub(done.bytes);
-        self.accept(done.index, done.outcome);
+        let mut outcome = done.outcome;
+        if let Ok(Ok(file)) = &mut outcome {
+            rehome(file);
+        }
+        self.accept(done.index, outcome);
         Ok(())
     }
 

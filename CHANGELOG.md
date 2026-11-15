@@ -51,7 +51,12 @@
   coverage and score, and results are merged in path order. Reports, baselines,
   exit codes and the reported error (the first failing file in path order,
   including panics) are the same for every N. In-flight source text is capped
-  at 64 MiB, and a larger file is analyzed alone.
+  at 64 MiB, and a larger file is analyzed alone. Sources over 128 KiB are
+  analyzed on the calling thread and worker results are copied into its heap,
+  which keeps glibc's per-thread heaps small: on the VS Code repository
+  (hosted x86-64, 4 jobs) peak memory was 1.14x a sequential scan with glibc
+  and unchanged with the static musl build, at 1.64x and 1.37x the speed
+  (`docs/measurements/wp4-parallel-rss-2026-11-15.json`).
 - `ScanExtensions::jobs` for library callers. It defaults to 1, so `scan` and
   `scan_with` start no threads unless asked.
 - `Baseline::render_report_to` streams a report's baseline snapshot without

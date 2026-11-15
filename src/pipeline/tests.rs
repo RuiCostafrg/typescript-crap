@@ -401,3 +401,68 @@ fn large_selections_really_run_on_workers_and_small_ones_do_not_in_child() {
         );
     }
 }
+
+#[test]
+fn rehoming_keeps_every_field_of_a_worker_result() {
+    let mut outcome = super::FileOutcome {
+        functions: vec![crate::FunctionScore {
+            identity: "a".repeat(64),
+            path: "dir/ü.ts".to_owned(),
+            name: "C::m".to_owned(),
+            line: 3,
+            column: 5,
+            column_utf16: 4,
+            end_line: 9,
+            complexity: 7,
+            coverage: 0.25,
+            crap: 30.5,
+            failed: true,
+        }],
+        missing_file: true,
+        functions_missing: 2,
+        syntax_error: Some(crate::UnparsedFile {
+            path: "x.ts".to_owned(),
+            line: 1,
+            column: 2,
+            column_utf16: 2,
+            message: "invalid".to_owned(),
+        }),
+    };
+    super::rehome(&mut outcome);
+    let function = &outcome.functions[0];
+    assert_eq!(
+        (
+            function.identity.as_str(),
+            function.path.as_str(),
+            function.name.as_str()
+        ),
+        ("a".repeat(64).as_str(), "dir/ü.ts", "C::m")
+    );
+    assert_eq!(
+        (
+            function.line,
+            function.column,
+            function.column_utf16,
+            function.end_line,
+            function.complexity,
+            function.failed
+        ),
+        (3, 5, 4, 9, 7, true)
+    );
+    assert!(
+        (function.coverage - 0.25).abs() < f64::EPSILON
+            && (function.crap - 30.5).abs() < f64::EPSILON
+    );
+    assert!(outcome.missing_file);
+    assert_eq!(outcome.functions_missing, 2);
+    let error = outcome.syntax_error.unwrap();
+    assert_eq!(
+        (
+            error.path.as_str(),
+            error.message.as_str(),
+            error.line,
+            error.column
+        ),
+        ("x.ts", "invalid", 1, 2)
+    );
+}

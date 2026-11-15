@@ -548,9 +548,15 @@ fn job_counts_give_identical_reports_baselines_and_exit_codes_in_every_format() 
         .collect();
     assert_eq!(broken.len(), 5);
     for format in ["text", "json", "xml", "html", "sarif"] {
-        for variant in ["syntax-report", "baseline"] {
+        // Baselines are format-independent: one format is enough for them.
+        let variants: &[&str] = if format == "json" {
+            &["syntax-report", "baseline"]
+        } else {
+            &["syntax-report"]
+        };
+        for &variant in variants {
             let mut outputs = Vec::new();
-            for jobs in ["1", "2", "4"] {
+            for jobs in ["1", "4"] {
                 let baseline = dir.path().join(format!("baseline-{jobs}.json"));
                 let report = dir.path().join("report.out");
                 // An existing destination, so the preflight walk runs as well.

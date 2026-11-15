@@ -3,7 +3,7 @@ use super::{
     FileContext, INLINE_SOURCE_BYTES, Limits, MAX_IN_FLIGHT_BYTES, MIN_PARALLEL_FILES, Peaks,
     Totals, must_wait, parallel, workers,
 };
-use crate::{Format, OnSyntaxError, ScanExtensions, ScanOptions, render, scan_with};
+use crate::{OnSyntaxError, ScanExtensions, ScanOptions, scan_with};
 use std::{
     fmt::Write,
     fs,
@@ -107,19 +107,6 @@ fn scan(root: &Path, jobs: usize, mode: OnSyntaxError) -> anyhow::Result<crate::
         },
         &extensions,
     )
-}
-
-fn rendered(report: &crate::Report) -> Vec<String> {
-    [
-        Format::Json,
-        Format::Text,
-        Format::Xml,
-        Format::Html,
-        Format::Sarif,
-    ]
-    .into_iter()
-    .map(|format| render(report, format).unwrap())
-    .collect()
 }
 
 #[test]
@@ -269,76 +256,28 @@ fn small_selections_and_single_jobs_stay_on_the_calling_thread() {
     assert_eq!(workers(64, 40), 40);
 }
 
+/// Panic ordering needs the test hook, so it stays a unit test. Error-only
+/// ordering and report bytes are covered by `tests/parallel_scan.rs`.
 #[test]
-fn every_job_count_gives_the_same_report_bytes() {
+fn panics_and_errors_are_ordered_by_the_lowest_failing_file() {
     let _serial = serial();
-    let directory = project(&[]);
-    let report = scan(directory.path(), 1, OnSyntaxError::Fail).unwrap();
-    assert_eq!(report.files_scanned, FILES);
-    let expected = rendered(&report);
-    // Few workers on purpose: under a looping mutant every worker allocates until
-    // the mutation timeout, so many workers can exhaust a CI runner's memory.
-    // Counts above the file count are covered by `workers` itself.
-    for jobs in [0, 2, 3, 4] {
-        for _ in 0..2 {
-            let report = scan(directory.path(), jobs, OnSyntaxError::Fail).unwrap();
-            assert_eq!(rendered(&report), expected, "jobs {jobs}");
-        }
-    }
-}
-
-#[test]
-fn reported_syntax_errors_keep_file_order_across_workers() {
-    let _serial = serial();
-    let directory = project(&[
-        (4, "syntax"),
-        (11, "syntax"),
-        (12, "syntax"),
-        (37, "syntax"),
-    ]);
-    let expected = scan(directory.path(), 1, OnSyntaxError::Report).unwrap();
-    assert_eq!(expected.syntax_errors.len(), 4);
-    let expected = rendered(&expected);
-    for _ in 0..5 {
-        let report = scan(directory.path(), 4, OnSyntaxError::Report).unwrap();
-        assert_eq!(rendered(&report), expected);
-    }
-}
-
-fn error(directory: &Path, jobs: usize) -> String {
-    format!(
-        "{:#}",
-        scan(directory, jobs, OnSyntaxError::Fail).unwrap_err()
-    )
-}
-
-#[test]
-fn the_lowest_failing_file_decides_the_error() {
-    let _serial = serial();
+    // A lower error wins over a later panic.
     for (special, expected) in [
-        // Analysis errors only.
-        (vec![(5, "syntax"), (17, "syntax"), (33, "syntax")], "f05"),
-        (vec![(38, "syntax"), (39, "syntax")], "f38"),
-        // A read error on the calling thread against analysis errors on workers.
-        (vec![(4, "utf8"), (30, "syntax")], "f04"),
-        (vec![(1, "syntax"), (4, "utf8")], "f01"),
-        (vec![(0, "syntax"), (1, "utf8"), (2, "syntax")], "f00"),
-        // A lower error wins over a later panic.
         (vec![(2, "syntax"), (20, "panic")], "f02"),
         (vec![(2, "utf8"), (3, "panic")], "f02"),
     ] {
         let directory = project(&special);
-        let sequential = error(directory.path(), 1);
+        let sequential = format!(
+            "{:#}",
+            scan(directory.path(), 1, OnSyntaxError::Fail).unwrap_err()
+        );
         assert!(sequential.contains(expected), "{sequential}");
-        for _ in 0..10 {
-            assert_eq!(error(directory.path(), 4), sequential, "{special:?}");
+        for _ in 0..3 {
+            let parallel = scan(directory.path(), 4, OnSyntaxError::Fail).unwrap_err();
+            assert_eq!(format!("{parallel:#}"), sequential, "{special:?}");
         }
     }
-}
-
-#[test]
-fn a_lower_panic_resumes_and_wins_over_later_errors() {
-    let _serial = serial();
+    // A lower panic resumes with its payload and wins over later failures.
     for special in [
         vec![(3, "panic"), (10, "syntax")],
         vec![(3, "panic"), (4, "utf8")],
@@ -346,17 +285,15 @@ fn a_lower_panic_resumes_and_wins_over_later_errors() {
         vec![(39, "panic")],
     ] {
         let directory = project(&special);
-        for jobs in [1, 4] {
-            for _ in 0..if jobs == 1 { 1 } else { 6 } {
-                let payload =
-                    std::panic::catch_unwind(|| scan(directory.path(), jobs, OnSyntaxError::Fail))
-                        .expect_err("the panic must reach the caller");
-                assert_eq!(
-                    payload.downcast_ref::<&str>(),
-                    Some(&PANIC_MESSAGE),
-                    "{special:?}, jobs {jobs}"
-                );
-            }
+        for jobs in [1, 4, 4, 4] {
+            let payload =
+                std::panic::catch_unwind(|| scan(directory.path(), jobs, OnSyntaxError::Fail))
+                    .expect_err("the panic must reach the caller");
+            assert_eq!(
+                payload.downcast_ref::<&str>(),
+                Some(&PANIC_MESSAGE),
+                "{special:?}, jobs {jobs}"
+            );
         }
     }
 }

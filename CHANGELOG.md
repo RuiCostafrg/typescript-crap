@@ -34,6 +34,14 @@
   and `--pr` path keep the full per-file check, and macOS and Windows keep
   resolving walked files. Selection, symbolic-link rejection and report bytes
   are unchanged.
+- Before replacing an existing report or baseline, the check that no
+  TypeScript file under the project root aliases the destination identifies
+  regular files with one `lstat` instead of opening each one (Unix). Symbolic
+  links keep the full check, ignored and hidden files are still checked, and
+  the check still runs again before each rename.
+- **Behaviour change:** an unreadable TypeScript file under the project root no
+  longer aborts publication of `--output` or `--write-baseline` on Unix. Its
+  device and inode prove it is not a destination without opening it.
 
 ### Added
 

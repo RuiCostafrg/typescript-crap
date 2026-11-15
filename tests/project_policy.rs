@@ -519,8 +519,9 @@ fn excluded_directories_reject_an_explicit_null() {
 /// selecting every file explicitly (which always resolves each path in full).
 fn walked_and_explicit_selection_agree_on_unicode_and_mixed_case_names() {
     let files = [
+        // Names that differ only in case would collide on macOS and Windows.
         "Src/CamelCase/MiXeD.ts",
-        "src/lower/deep/er/est.ts",
+        "lower/deep/er/est.ts",
         "Ünï cödé/naïve.ts",
         "e\u{301}cole/de\u{301}ja\u{300}.tsx",
         "日本語/ファイル.mts",

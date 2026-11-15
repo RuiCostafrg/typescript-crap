@@ -51,6 +51,8 @@ struct Peaks {
     in_flight_bytes: usize,
     /// Files analyzed on the calling thread.
     inline: usize,
+    /// Most source bytes in flight when a file over the byte limit started.
+    beside_oversized: usize,
 }
 /// Matches the usual main-thread stack rather than the smaller spawned default.
 const WORKER_STACK_BYTES: usize = 8 << 20;
@@ -308,7 +310,7 @@ impl Merge<'_> {
 fn parallel(
     paths: &[PathBuf],
     jobs: usize,
-    limits: Limits,
+    mut limits: Limits,
     load: &mut dyn FnMut(&PathBuf) -> Result<(String, String)>,
     context: &FileContext<'_>,
     totals: &mut Totals,
@@ -332,10 +334,7 @@ fn parallel(
         }
         drop(sender);
         // Size the window by the workers that actually started.
-        let limits = Limits {
-            window: limits.window.min(spawned.saturating_mul(WINDOW_PER_WORKER)),
-            ..limits
-        };
+        limits.window = limits.window.min(spawned.saturating_mul(WINDOW_PER_WORKER));
         if spawned == 0 {
             drop(work);
             return sequential(paths, load, context, totals).map(|()| Peaks::default());
@@ -375,6 +374,9 @@ fn parallel(
                 }
                 if merge.failed {
                     break;
+                }
+                if size > limits.bytes {
+                    peaks.beside_oversized = peaks.beside_oversized.max(merge.in_flight_bytes);
                 }
                 let analyzer = analyzer.get_or_insert_with(analysis::Analyzer::default);
                 let outcome = catch_unwind(AssertUnwindSafe(|| {

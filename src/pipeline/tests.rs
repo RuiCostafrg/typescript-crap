@@ -1,13 +1,15 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 use super::{
     FileContext, INLINE_SOURCE_BYTES, Limits, MAX_IN_FLIGHT_BYTES, MIN_PARALLEL_FILES, Peaks,
-    Totals, must_wait, parallel, workers,
+    Totals, WINDOW_PER_WORKER, WORKER_STACK_BYTES, must_wait, parallel, workers,
 };
 use crate::{OnSyntaxError, ScanExtensions, ScanOptions, scan_with};
 use std::{
     fmt::Write,
     fs,
     path::{Path, PathBuf},
+    process::{Command, Stdio},
+    time::{Duration, Instant},
 };
 
 const PANIC_MARKER: &str = "panic-hook.ts";
@@ -29,14 +31,35 @@ pub(super) fn hook(relative: &str) {
     }
 }
 
-/// Parallel-scan tests take turns, so at most one test's workers run at a time.
-static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-fn serial() -> std::sync::MutexGuard<'static, ()> {
-    // A test that panicked while holding the lock leaves nothing to clean up.
-    SERIAL
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+/// Run a parallel-scan test in a child process with a deadline, as the
+/// analysis tests do. A mutant that deadlocks the pipeline or loops in the
+/// analyzer then fails quickly, and killing the child also stops its workers.
+fn isolated(test_name: &str, test: fn()) {
+    const CHILD: &str = "TS_CRAP_PIPELINE_TEST_CHILD";
+    if std::env::var(CHILD).is_ok_and(|name| name == test_name) {
+        test();
+        return;
+    }
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", test_name, "--nocapture"])
+        .env(CHILD, test_name)
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert!(status.success(), "{test_name} failed in its child process");
+            break;
+        }
+        if Instant::now() >= deadline {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("{test_name} exceeded its deadline; possible deadlock or cycle");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
 }
 
 const FILES: usize = 40;
@@ -180,7 +203,13 @@ fn expected_names(count: usize) -> Vec<String> {
 
 #[test]
 fn parallel_runs_never_exceed_the_window_or_the_byte_limit() {
-    let _serial = serial();
+    isolated(
+        "pipeline::tests::parallel_runs_never_exceed_the_window_or_the_byte_limit",
+        parallel_runs_never_exceed_the_window_or_the_byte_limit_in_child,
+    );
+}
+
+fn parallel_runs_never_exceed_the_window_or_the_byte_limit_in_child() {
     let limits = Limits {
         window: 3,
         bytes: 1_000,
@@ -211,7 +240,13 @@ fn parallel_runs_never_exceed_the_window_or_the_byte_limit() {
 
 #[test]
 fn large_files_run_on_the_calling_thread_in_file_order() {
-    let _serial = serial();
+    isolated(
+        "pipeline::tests::large_files_run_on_the_calling_thread_in_file_order",
+        large_files_run_on_the_calling_thread_in_file_order_in_child,
+    );
+}
+
+fn large_files_run_on_the_calling_thread_in_file_order_in_child() {
     let limits = Limits {
         window: 4,
         bytes: 1_000,
@@ -221,13 +256,17 @@ fn large_files_run_on_the_calling_thread_in_file_order() {
     for index in [0, 7, 8, 20, 39] {
         sizes[index] = 600;
     }
+    // Exactly at the threshold is not "larger": it stays on a worker.
+    sizes[15] = 500;
     // Over the byte limit too: it runs alone, on the calling thread.
     sizes[30] = 5_000;
-    for _ in 0..5 {
+    for _ in 0..10 {
         let (seen, totals) = peaks(&sizes, 3, limits);
         assert_eq!(seen.inline, 6, "{seen:?}");
-        // Inline sources never count as handed out to workers.
-        assert!(seen.in_flight_bytes <= 400, "{seen:?}");
+        assert_eq!(seen.beside_oversized, 0, "{seen:?}");
+        // Inline sources never count as handed out to workers: at most three
+        // 100-byte files and the 500-byte one are ever in flight.
+        assert!(seen.in_flight_bytes <= 800, "{seen:?}");
         assert_eq!(names(&totals), expected_names(40));
     }
     // The lowest failing file wins whether it ran inline or on a worker.
@@ -249,6 +288,8 @@ fn large_files_run_on_the_calling_thread_in_file_order() {
 fn small_selections_and_single_jobs_stay_on_the_calling_thread() {
     assert_eq!(MIN_PARALLEL_FILES, 32);
     assert_eq!(INLINE_SOURCE_BYTES, 128 << 10);
+    assert_eq!(WINDOW_PER_WORKER, 2);
+    assert_eq!(WORKER_STACK_BYTES, 8 << 20);
     assert_eq!(workers(4, MIN_PARALLEL_FILES - 1), 1);
     assert_eq!(workers(4, MIN_PARALLEL_FILES), 4);
     assert_eq!(workers(0, 100), 1);
@@ -260,7 +301,13 @@ fn small_selections_and_single_jobs_stay_on_the_calling_thread() {
 /// ordering and report bytes are covered by `tests/parallel_scan.rs`.
 #[test]
 fn panics_and_errors_are_ordered_by_the_lowest_failing_file() {
-    let _serial = serial();
+    isolated(
+        "pipeline::tests::panics_and_errors_are_ordered_by_the_lowest_failing_file",
+        panics_and_errors_are_ordered_by_the_lowest_failing_file_in_child,
+    );
+}
+
+fn panics_and_errors_are_ordered_by_the_lowest_failing_file_in_child() {
     // A lower error wins over a later panic.
     for (special, expected) in [
         (vec![(2, "syntax"), (20, "panic")], "f02"),
@@ -300,7 +347,13 @@ fn panics_and_errors_are_ordered_by_the_lowest_failing_file() {
 
 #[test]
 fn large_selections_really_run_on_workers_and_small_ones_do_not() {
-    let _serial = serial();
+    isolated(
+        "pipeline::tests::large_selections_really_run_on_workers_and_small_ones_do_not",
+        large_selections_really_run_on_workers_and_small_ones_do_not_in_child,
+    );
+}
+
+fn large_selections_really_run_on_workers_and_small_ones_do_not_in_child() {
     let directory = tempfile::tempdir().unwrap();
     let probe = directory.path().join(PROBE_MARKER);
     fs::create_dir(&probe).unwrap();

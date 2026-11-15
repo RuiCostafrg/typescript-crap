@@ -190,7 +190,10 @@ pub(crate) fn run(
         let limits = Limits {
             window: jobs.saturating_mul(WINDOW_PER_WORKER),
             bytes: MAX_IN_FLIGHT_BYTES,
-            inline: INLINE_SOURCE_BYTES,
+            inline: std::env::var("TS_CRAP_EXP_INLINE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(INLINE_SOURCE_BYTES),
         };
         parallel(paths, jobs, limits, load, context, totals).map(drop)
     } else {
@@ -267,6 +270,27 @@ fn must_wait(limits: Limits, handed_out: usize, in_flight_bytes: usize, size: us
         || (in_flight_bytes > 0 && in_flight_bytes.saturating_add(size) > limits.bytes)
 }
 
+/// Copy a worker's result into the calling thread's heap, so the worker's heap
+/// holds only per-file data and can shrink after each file.
+fn rehome(outcome: &mut FileOutcome) {
+    let functions = std::mem::take(&mut outcome.functions);
+    let mut copied = Vec::with_capacity(functions.len());
+    for function in &functions {
+        copied.push(FunctionScore {
+            identity: function.identity.as_str().to_owned(),
+            path: function.path.as_str().to_owned(),
+            name: function.name.as_str().to_owned(),
+            ..*function
+        });
+    }
+    drop(functions);
+    outcome.functions = copied;
+    if let Some(error) = &mut outcome.syntax_error {
+        error.path = error.path.as_str().to_owned();
+        error.message = error.message.as_str().to_owned();
+    }
+}
+
 /// Results received from workers, merged into `totals` in file order.
 struct Merge<'t> {
     totals: &'t mut Totals,
@@ -285,7 +309,13 @@ impl Merge<'_> {
             .map_err(|_| anyhow!("analysis workers stopped unexpectedly"))?;
         self.received += 1;
         self.in_flight_bytes = self.in_flight_bytes.saturating_sub(done.bytes);
-        self.accept(done.index, done.outcome);
+        let mut outcome = done.outcome;
+        if std::env::var("TS_CRAP_EXP_REHOME").as_deref() == Ok("1") {
+            if let Ok(Ok(file)) = &mut outcome {
+                rehome(file);
+            }
+        }
+        self.accept(done.index, outcome);
         Ok(())
     }
 

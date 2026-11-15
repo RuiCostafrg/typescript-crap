@@ -1,0 +1,3 @@
+#!/bin/sh
+export TS_CRAP_EXP_REHOME=1 TS_CRAP_EXP_INLINE=65536
+exec "$(dirname "$0")/../../target/x86_64-unknown-linux-gnu/dist/ts-crap"  "$@"

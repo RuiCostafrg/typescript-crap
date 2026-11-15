@@ -1,0 +1,2 @@
+#!/bin/sh
+exec "$(dirname "$0")/../../target/x86_64-unknown-linux-musl/dist/ts-crap" --jobs 1 "$@"

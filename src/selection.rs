@@ -91,6 +91,8 @@ fn walked(
     let mut accepted = Vec::new();
     for directory in directories.take_while(|directory| *directory != root) {
         // Deepest first: a verified directory was reached through verified parents.
+        // The walker never yields a path through a link, so this check is defence
+        // in depth for the walk; it matters for any other caller.
         if verified.contains(directory) {
             break;
         }

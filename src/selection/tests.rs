@@ -154,3 +154,48 @@ fn a_verified_directory_is_trusted_for_the_rest_of_the_scan_and_resolution_still
     assert!(error.contains("source is outside project root"), "{error}");
     assert!(Path::new(&escape).symlink_metadata().unwrap().is_symlink());
 }
+
+#[test]
+fn only_linux_returns_walked_paths_unresolved() {
+    assert_eq!(WALK_IS_CANONICAL, cfg!(target_os = "linux"));
+}
+
+#[test]
+fn several_requested_directories_share_one_cache_and_select_each_file_once() {
+    let (_directory, root) = tree(&["src/a/b/x.ts", "src/a/y.ts", "src/z.ts", "top.ts"]);
+    let all = |requested: &[&str]| {
+        let requested: Vec<PathBuf> = requested.iter().map(PathBuf::from).collect();
+        super::files(&root, &requested, None, None, &[])
+            .unwrap()
+            .paths
+    };
+    let expected: Vec<PathBuf> = ["src/a/b/x.ts", "src/a/y.ts", "src/z.ts", "top.ts"]
+        .iter()
+        .map(|file| root.join(file))
+        .collect();
+    for requested in [
+        vec!["."],
+        vec![".", "."],
+        vec!["src", "src/a", "."],
+        vec!["src/a/b", "src", "top.ts"],
+    ] {
+        assert_eq!(all(&requested), expected, "{requested:?}");
+    }
+    assert_eq!(all(&["src/a", "src/a/b"]), expected[..2]);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_below_a_directory_cached_by_an_earlier_operand_is_still_rejected() {
+    use std::os::unix::fs::symlink;
+    let (_directory, root) = tree(&["src/a/x.ts", "real/y.ts"]);
+    symlink(root.join("real"), root.join("src/a/link")).unwrap();
+    // The walk skips the link; naming a path through it fails even after `src`
+    // and `src/a` were verified by the first operand.
+    let requested = [PathBuf::from("src"), PathBuf::from("src/a/link/y.ts")];
+    let error = format!(
+        "{:#}",
+        super::files(&root, &requested, None, None, &[]).unwrap_err()
+    );
+    assert!(error.contains("symbolic link source"), "{error}");
+}

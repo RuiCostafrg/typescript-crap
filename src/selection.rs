@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use ignore::WalkBuilder;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -54,6 +54,60 @@ fn checked(path: &Path, root: &Path) -> Result<PathBuf> {
                 ancestor.display()
             );
         }
+    }
+    let absolute = path
+        .canonicalize()
+        .with_context(|| format!("missing source {}", path.display()))?;
+    if !absolute.starts_with(root) {
+        bail!("source is outside project root: {}", path.display());
+    }
+    Ok(absolute)
+}
+
+/// Whether a walked path is already what `canonicalize` would return. The
+/// argument below holds on every platform, but only Linux has been checked for
+/// identical report bytes: macOS compares names without regard to case or
+/// normalization, and Windows has verbatim roots, 8.3 names and reparse points
+/// that `canonicalize` can resolve elsewhere. Those platforms keep resolving.
+const WALK_IS_CANONICAL: bool = cfg!(target_os = "linux");
+
+/// `checked` for a regular file yielded by the directory walk.
+///
+/// The walk starts at a directory `checked` already resolved, never follows
+/// links and yields real directory entries, so the only components left to
+/// prove are the directories between the root and the file. Each is verified
+/// once per scan and remembered in `verified`. With `canonical` set the path
+/// is returned as walked; see `WALK_IS_CANONICAL`.
+fn walked(
+    path: &Path,
+    root: &Path,
+    verified: &mut HashSet<PathBuf>,
+    canonical: bool,
+) -> Result<PathBuf> {
+    if !path.starts_with(root) {
+        bail!("source is outside project root: {}", path.display());
+    }
+    let directories = path.parent().map(Path::ancestors).into_iter().flatten();
+    let mut accepted = Vec::new();
+    for directory in directories.take_while(|directory| *directory != root) {
+        // Deepest first: a verified directory was reached through verified parents.
+        // The walker never yields a path through a link, so this check is defence
+        // in depth for the walk; it matters for any other caller.
+        if verified.contains(directory) {
+            break;
+        }
+        if directory.symlink_metadata()?.file_type().is_symlink() {
+            bail!(
+                "symbolic link source is not supported: {}",
+                directory.display()
+            );
+        }
+        accepted.push(directory);
+    }
+    // Remember a directory only once everything above it passed as well.
+    verified.extend(accepted.into_iter().map(Path::to_path_buf));
+    if canonical {
+        return Ok(path.to_path_buf());
     }
     let absolute = path
         .canonicalize()
@@ -194,6 +248,7 @@ pub fn files(
         diff.map(|base| diff_files(root, base, names)).transpose()?
     };
     let mut all = BTreeSet::new();
+    let mut verified = HashSet::new();
     let default = vec![root.to_path_buf()];
     for input in if requested.is_empty() {
         &default
@@ -225,22 +280,37 @@ pub fn files(
                 );
                 continue;
             }
+            // The walk prunes excluded directories, so the directories above an
+            // entry were accepted already: the requested directory here, once,
+            // and each one below it when the walk yielded it.
+            let outside = excluded(&path, root, names, true);
             let mut builder = WalkBuilder::new(&path);
             builder
                 .require_git(false)
                 .follow_links(false)
                 .filter_entry({
-                    let root = root.to_path_buf();
                     let names = names.clone();
                     move |entry| {
                         let directory = entry.file_type().is_some_and(|kind| kind.is_dir());
-                        !excluded(entry.path(), &root, &names, directory)
+                        let named = directory
+                            && entry
+                                .file_name()
+                                .to_str()
+                                .is_some_and(|name| names.contains(name));
+                        // The walker never filters the requested directory itself
+                        // (depth 0); `outside` covers it and the path above it.
+                        !outside && !named
                     }
                 });
             for entry in builder.build() {
                 let entry = entry.context("cannot walk source directory")?;
                 if entry.file_type().is_some_and(|t| t.is_file()) && supported(entry.path()) {
-                    all.insert(checked(entry.path(), root)?);
+                    all.insert(walked(
+                        entry.path(),
+                        root,
+                        &mut verified,
+                        WALK_IS_CANONICAL,
+                    )?);
                 }
             }
         } else {
@@ -259,3 +329,6 @@ pub fn files(
         committed,
     })
 }
+
+#[cfg(test)]
+mod tests;

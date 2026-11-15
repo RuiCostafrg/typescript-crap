@@ -27,6 +27,13 @@
   a `--baseline` scan from 466 MB to 432 MB. Stdout reports are staged in an
   anonymous temporary file (in memory if none can be created) and still appear
   only after every file is published.
+- Directory scans check each directory for symbolic links once per scan instead
+  of once per file. On Linux, walked files are no longer resolved one by one:
+  the walk starts at the resolved project directory and never follows links,
+  so each path is already canonical. Explicitly named paths and every `--diff`
+  and `--pr` path keep the full per-file check, and macOS and Windows keep
+  resolving walked files. Selection, symbolic-link rejection and report bytes
+  are unchanged.
 
 ### Added
 

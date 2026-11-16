@@ -84,7 +84,8 @@
   `scan_with` start no threads unless asked.
 - `Baseline::render_report_to` streams a report's baseline snapshot without
   copying it first; it writes the same bytes as `Baseline::capture` followed by
-  `render_to`.
+  `render_to`. It is part of the stable 2.x Rust API, so together with
+  `ScanExtensions::jobs` the next release is a minor one.
 
 ## 2.4.0 — 2026-11-10
 

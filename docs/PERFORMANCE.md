@@ -470,6 +470,20 @@ report SHA-256 differs. No budget is applied. The job summary shows the
 medians; the `corpus-benchmark` artifact keeps every observation, binary
 hashes and runner details. Recorded runs live in `docs/measurements/`.
 
+The optional `baseline_ref` input (for example `v2.4.0`) builds an older ref
+with the same toolchain, `dist` profile, targets and `--locked` flag and
+measures it in the same run. Its tracked files are exported with `git archive`
+into a separate directory (untracked files are never copied) and built in a
+separate `CARGO_TARGET_DIR`; the extra builds appear as `baseline-glibc` and
+`baseline-musl`, keeping the `glibc` and `musl` names for the current commit,
+and take part in the existing alternating rounds. Hosted runners differ by CPU
+model: the same code took 14.4 s on one runner and 25 s on another, so only
+builds measured on one runner can be compared. The record gains the baseline
+ref and its resolved commit SHA, and the summary gains a table of medians and
+current-to-baseline ratios. Each current build's report SHA-256 must equal its
+baseline's; older versions can legitimately change output, so pass
+`allow_report_change` to record the difference instead of failing.
+
 Locally: `python3 scripts/bench-corpus.py --corpus PATH --scanner LABEL=BINARY
 [--scanner LABEL=BINARY] --runs 3 --output results.json` (Linux, GNU time).
 

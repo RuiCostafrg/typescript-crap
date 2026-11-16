@@ -1,7 +1,9 @@
 name: corpus-benchmark
 # Opt-in evidence, not a gate: full scans of a pinned VS Code commit with the
 # shipped x86-64 glibc and static musl builds. Results go to the job summary
-# and an artifact; commit noteworthy runs under docs/measurements/.
+# and an artifact; commit noteworthy runs under docs/measurements/. An optional
+# baseline ref is built and measured in the same run, so a comparison never
+# mixes CPU models from different hosted runners.
 on:
   workflow_dispatch:
     inputs:
@@ -9,6 +11,16 @@ on:
         description: Measured runs per build and destination mode
         default: "3"
         required: false
+      baseline_ref:
+        description: Optional older git ref (for example v2.4.0) to measure on the same runner
+        default: ""
+        required: false
+        type: string
+      allow_report_change:
+        description: Record, but do not fail on, a baseline report that differs from the current one
+        default: false
+        required: false
+        type: boolean
   # Validate edits to the benchmark itself.
   pull_request:
     paths:
@@ -27,6 +39,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Full history and tags so an optional baseline ref always resolves.
+          fetch-depth: 0
           persist-credentials: false
       - name: Check out the pinned corpus
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,15 +65,54 @@ jobs:
           linkage="$(file -b target/x86_64-unknown-linux-musl/dist/ts-crap)"
           echo "musl build: $linkage"
           grep -Eq 'statically linked|static-pie linked' <<<"$linkage"
+      - name: Export the baseline sources
+        if: github.event_name == 'workflow_dispatch' && inputs.baseline_ref != ''
+        env:
+          BASELINE_REF: ${{ inputs.baseline_ref }}
+        run: |
+          if [[ "$BASELINE_REF" == -* ]] || ! [[ "$BASELINE_REF" =~ ^[A-Za-z0-9._/-]{1,100}$ ]]; then
+            echo "baseline_ref must be 1-100 characters of letters, digits, '.', '_', '/' or '-' and must not start with '-'" >&2
+            exit 1
+          fi
+          baseline_sha="$(git rev-parse --verify --end-of-options "${BASELINE_REF}^{commit}")"
+          mkdir -p baseline
+          # Tracked files only: git archive never copies untracked or ignored files.
+          git archive --format=tar "$baseline_sha" | tar -x --directory baseline
+          echo "BASELINE_SHA=$baseline_sha" >> "$GITHUB_ENV"
+          echo "baseline: $BASELINE_REF at $baseline_sha"
+      - name: Build the baseline for both Linux targets
+        if: github.event_name == 'workflow_dispatch' && inputs.baseline_ref != ''
+        working-directory: baseline
+        env:
+          # A separate target directory keeps the two revisions' artifacts apart.
+          CARGO_TARGET_DIR: ${{ github.workspace }}/baseline/target
+        run: |
+          cargo build --locked --profile dist --target x86_64-unknown-linux-gnu --bin ts-crap
+          cargo build --locked --profile dist --target x86_64-unknown-linux-musl --bin ts-crap
       - name: Benchmark
         env:
           RUNS: ${{ inputs.runs || '3' }}
+          BASELINE_REF: ${{ inputs.baseline_ref }}
+          ALLOW_REPORT_CHANGE: ${{ inputs.allow_report_change }}
         run: |
           [[ "$RUNS" =~ ^[1-9][0-9]?$ ]] || { echo "runs must be 1-99" >&2; exit 1; }
+          scanners=(
+            --scanner glibc=target/x86_64-unknown-linux-gnu/dist/ts-crap
+            --scanner musl=target/x86_64-unknown-linux-musl/dist/ts-crap
+          )
+          if [[ -n "$BASELINE_REF" ]]; then
+            scanners+=(
+              --scanner baseline-glibc=baseline/target/x86_64-unknown-linux-gnu/dist/ts-crap
+              --scanner baseline-musl=baseline/target/x86_64-unknown-linux-musl/dist/ts-crap
+              --baseline-ref "$BASELINE_REF"
+              --baseline-commit "$BASELINE_SHA"
+            )
+          fi
+          if [[ "$ALLOW_REPORT_CHANGE" == "true" ]]; then
+            scanners+=(--allow-report-change)
+          fi
           python3 scripts/bench-corpus.py --corpus corpus/vscode --corpus-name microsoft/vscode \
-            --scanner glibc=target/x86_64-unknown-linux-gnu/dist/ts-crap \
-            --scanner musl=target/x86_64-unknown-linux-musl/dist/ts-crap \
-            --runs "$RUNS" --output target/corpus-benchmark/results.json \
+            "${scanners[@]}" --runs "$RUNS" --output target/corpus-benchmark/results.json \
             --summary "$GITHUB_STEP_SUMMARY"
       - name: Retain benchmark evidence
         if: always()

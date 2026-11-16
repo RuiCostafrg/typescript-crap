@@ -1,8 +1,73 @@
 # Performance plan: faster scans, lower CPU and memory, faster installs
 
-Written **2026-11-12** against `9907f22` (v2.4.0). Status: **investigation
-complete, nothing implemented**. Raw numbers are in
+Written **2026-11-12** against `9907f22` (v2.4.0). Raw numbers are in
 [the measurements file](measurements/vscode-profile-2026-11-12.json).
+
+## Status (2026-11-16)
+
+WP0–WP5 and the install track are merged. Every change kept reports byte for
+byte identical, checked by the golden fixtures, the CI guard's report
+comparison and full VS Code scans.
+
+| Package | Pull request | Result |
+| --- | --- | --- |
+| WP0 golden identities | #77 | Identity, name, position, complexity and owned lines pinned for TS and TSX |
+| WP0 guard and corpus benchmark | #78 | Guard compares report digests; 11 workloads; opt-in hosted VS Code benchmark |
+| WP1 selection | #82 | Each walked directory checked for links once per scan |
+| WP2 output preflight | #83 | One `lstat` per walked TypeScript file |
+| WP3 analyzer CPU | #80 | Kind-id tables, buffered hashing, owned lines in a vector, ancestor stack |
+| WP4 bounded parallel analysis | #84 | `--jobs`; default `min(CPUs, 4)`; peak RSS 1.14× single-thread on glibc, 1.00× on musl |
+| WP5 report and baseline memory | #79 | `--write-baseline` peak RSS 480 → 178 MB on VS Code |
+| D0–D2, D5 install track | #76, #88 | Trusted root fetched during the download (0.55–0.67 s per Action install); archives 6.5–10% smaller |
+| D3 attested digest (hardening) | #93 | The Action binds each asset to its own attested subject digest and no longer downloads the unsigned `.sha256` sidecar |
+| WP6 Node coverage helpers | #89 | Open. Fewer allocations; source maps decoded once per generated file |
+
+Hosted full VS Code scans (15,246 files, 431,594 functions, default job count;
+[raw data](measurements/vscode-hosted-after-wp5-2026-11-16.json)):
+
+| Build | Before WP3/WP4 (2026-11-14) | `main` now | With mimalloc (experiment) |
+| --- | ---: | ---: | ---: |
+| glibc wall time | 34.9 s | 25.1 s | — |
+| static musl wall time | 47.5 s | 38.5 s | 29.1 s |
+| static musl peak RSS | 194 MiB | 194 MiB | 216 MiB |
+
+- The "before" column ran on a different runner; hosted runner CPU models
+  alone move these times by more than 40%. The like-for-like comparison is
+  below.
+
+Same runner, v2.4.0 and current code built and measured in alternating rounds
+([run 43846265255](https://github.com/RuiCostafrg/typescript-crap/actions/runs/43846265255)).
+All four builds produced the identical report:
+
+| Build | v2.4.0 | Now | Change |
+| --- | ---: | ---: | --- |
+| glibc wall time | 39.9 s | 20.4 s | 1.96× faster |
+| glibc user CPU | 38.7 s | 44.6 s | +15% |
+| glibc peak RSS | 228 MiB | 259 MiB | +14% |
+| static musl wall time | 54.1 s | 37.9 s | 1.43× faster |
+| static musl user + system CPU | 53.2 s | 86.8 s | +63% |
+| static musl peak RSS | 194 MiB | 194 MiB | unchanged |
+
+- Most of the musl CPU increase is allocator contention under threads: system
+  time rose from 1.7 s to 10.9 s. The mimalloc experiment below removes it.
+- Threads trade CPU time for wall time: on one runner, 4 workers used about 36%
+  more user CPU than `--jobs 1` and finished about 40% sooner. `--jobs 1` stays
+  the lowest-CPU option.
+- **WP6 allocator:** mimalloc on musl only cut musl wall time by 25% and system
+  time from 12 s to 0.5 s, for 12% more peak RSS. It adds a C dependency
+  (`libmimalloc-sys`) to the musl build, so adopting it is an owner decision.
+- **D3 shipped as hardening, not for speed:** the sidecar cost only 30–50 ms
+  hosted. Every release the Action accepts (2.2.1–2.4.0) names each asset in
+  its attestation, so no accepted release lost support.
+- **Not done, by decision:** D4 (a restored TUF cache would become the trust
+  anchor for 0.2–0.5 s).
+- **Public API:** WP5's `Baseline::render_report_to` and WP4's
+  `ScanExtensions::jobs` are stable 2.x API (pinned by an external-crate test
+  in #90), so the next release is 2.5.0.
+- **Still open in WP6:** a single merged AST walk (do it only if collection is
+  still a large share on a hosted profile) and pipelined `git cat-file` for
+  large diffs.
+- **3.0 candidate:** 32-byte identities and shared path strings, issue #86.
 
 This plan supersedes the sentence in [PERFORMANCE.md](PERFORMANCE.md) that
 "parallelism and caching remain deferred because these measurements do not

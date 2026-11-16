@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Faster coverage conversion and import on large or minified sources; output is unchanged.
 - Function analysis evaluates node kinds through per-grammar tables of symbol
   ids, hashes each function's tokens as one buffered stream, keeps owned lines
   in a sorted vector and tracks ancestors during the tree walk instead of

@@ -32,6 +32,27 @@ function removeFirst(heap) {
   heap[index] = last;
 }
 
+// String.prototype.trim() strips exactly these WhiteSpace and LineTerminator code points.
+function trimmedWhitespace(code) {
+  return (
+    code === 0x09 ||
+    code === 0x0a ||
+    code === 0x0b ||
+    code === 0x0c ||
+    code === 0x0d ||
+    code === 0x20 ||
+    code === 0xa0 ||
+    code === 0x1680 ||
+    (code >= 0x2000 && code <= 0x200a) ||
+    code === 0x2028 ||
+    code === 0x2029 ||
+    code === 0x202f ||
+    code === 0x205f ||
+    code === 0x3000 ||
+    code === 0xfeff
+  );
+}
+
 /** Pure V8 UTF-16 range conversion; no process or filesystem access. */
 export function lineHits(script, source) {
   // Sweep range boundaries. The smallest enclosing range determines each segment;
@@ -78,7 +99,11 @@ export function lineHits(script, source) {
     while (line + 1 < starts.length && starts[line + 1] <= start) line++;
     for (let cursor = start; cursor < offsets[i + 1];) {
       const end = Math.min(offsets[i + 1], starts[line + 1] ?? source.length);
-      if (source.slice(cursor, end).trim()) {
+      // Whitespace-only segments do not own a line; scan instead of copying the
+      // substring, so one long line costs O(line length) over all its segments.
+      let index = cursor;
+      while (index < end && trimmedWhitespace(source.charCodeAt(index))) index++;
+      if (index < end) {
         const key = String(line + 1);
         hits[key] = Math.min(hits[key] ?? Infinity, inner.count);
       }
@@ -92,7 +117,8 @@ export function lineHits(script, source) {
 /** Merge independent process/script evidence without mutating either input. */
 export function mergeLineHits(previous, incoming) {
   const result = { ...previous };
-  for (const [line, count] of Object.entries(incoming)) {
+  for (const line of Object.keys(incoming)) {
+    const count = incoming[line];
     const existing = result[line] ?? 0;
     if (
       !/^[1-9][0-9]*$/.test(line) ||

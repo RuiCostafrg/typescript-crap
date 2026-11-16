@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Faster coverage conversion and import on large or minified sources; output is unchanged.
 - Function analysis evaluates node kinds through per-grammar tables of symbol
   ids, hashes each function's tokens as one buffered stream, keeps owned lines
   in a sorted vector and tracks ancestors during the tree walk instead of
@@ -51,6 +52,15 @@
 - **Behaviour change:** an unreadable TypeScript file under the project root no
   longer aborts publication of `--output` or `--write-baseline` on Unix. Its
   device and inode prove it is not a destination without opening it.
+
+- The CI performance guard compares report bytes: on pull requests the
+  candidate must reproduce the base's report for every scanner workload unless
+  the pull request is labelled `output-change`, and repeated runs must agree.
+  New workloads cover a mixed corpus with multi-MiB files, an existing
+  `--output` destination, a deep directory tree and a `--baseline` scan.
+- An opt-in `corpus-benchmark` workflow measures full scans of a pinned
+  VS Code commit with the x86-64 glibc and static musl builds
+  (`scripts/bench-corpus.py`).
 
 ### Added
 

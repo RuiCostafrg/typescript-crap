@@ -68,17 +68,25 @@ jobs:
         shell: bash
         env:
           BASELINE_REF: ${{ github.event.pull_request.base.sha || github.event.before || 'v2.0.1' }}
+          # Pull requests must reproduce the base's reports byte for byte unless
+          # labelled output-change; other events and the fallback only record it.
+          OUTPUT_CHANGE: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'output-change') }}
         run: |
           if [[ -z "${BASELINE_REF:-}" || "$BASELINE_REF" =~ ^0+$ ]] \
              || ! git rev-parse --verify --end-of-options "${BASELINE_REF}^{commit}" >/dev/null 2>&1; then
             BASELINE_REF=v2.0.1
+            OUTPUT_CHANGE=true
+          fi
+          output_policy=()
+          if [[ "${OUTPUT_CHANGE:-}" == true ]]; then
+            output_policy=(--allow-output-change)
           fi
           if [[ ! -x /usr/bin/time ]]; then
             sudo apt-get update
             sudo apt-get install --no-install-recommends -y time
           fi
           python3 -B -m unittest discover -s tests -p test_performance.py
-          python3 scripts/check-performance.py --baseline "$BASELINE_REF"
+          python3 scripts/check-performance.py --baseline "$BASELINE_REF" "${output_policy[@]}"
       - name: Retain performance regression evidence
         if: always() && matrix.rust == '1.90'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

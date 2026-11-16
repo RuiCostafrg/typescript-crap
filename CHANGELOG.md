@@ -17,7 +17,9 @@
   extracted or run before verification, are unchanged.
 - Release binaries no longer carry a symbol table (`strip = "symbols"` in the
   `dist` profile). The Linux x86-64 archive shrinks by 7.5% (1.42 MB to 1.31 MB),
-  the Linux ARM64 archive by 10.3% and the macOS ARM64 archive by 7.3%. Panic
+  the Linux ARM64 archive by 10.3% and the macOS ARM64 archive by 7.3%; the
+  glibc Linux and macOS x86-64 archives shrink by 6.5–10%. The Windows archive is
+  unchanged, since MSVC already keeps symbols out of the executable. Panic
   messages keep their file and line, but backtraces no longer show function
   names. Builds from source with `--release` are unchanged.
 - The README compares install times and what each install path verifies, with

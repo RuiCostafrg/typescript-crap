@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Installs a published ts-crap release for the GitHub Action (see action.yml).
 # Downloaded release files are data: nothing downloaded runs or is extracted
-# before its build provenance and SHA-256 checksum verify, and no remote script
-# is executed.
+# before its build provenance verifies and its SHA-256 matches the digest that
+# the verified attestation records for it by name. No remote script is executed.
 set -euo pipefail
 
 # The release source is fixed. It is deliberately not an input, so a workflow
@@ -94,18 +94,22 @@ sha256() {
   fi
 }
 
-# Accept only "<64 hex> [*]<expected name>" so a checksum file cannot vouch for
-# a different file than the one being installed.
-verify_checksum() {
-  local file=$1 line expected name actual
-  [[ -f "$file.sha256" ]] || fail "missing checksum file for $(basename "$file")"
-  line=$(tr -d '\r' < "$file.sha256" | sed '/^$/d')
-  [[ "$line" =~ ^([0-9a-fA-F]{64})\ \ ?\*?(.+)$ ]] || fail "malformed checksum file for $(basename "$file")"
-  expected=$(printf '%s' "${BASH_REMATCH[1]}" | tr 'A-F' 'a-f')
-  name=${BASH_REMATCH[2]}
-  [[ "$name" == "$(basename "$file")" ]] || fail "checksum file names '$name', not $(basename "$file")"
+# One release attestation lists every release asset as a named subject. gh
+# only checks that some subject has the file's digest, so also require every
+# subject named like this asset to carry exactly its SHA-256: another attested
+# asset (say, a different platform's archive) cannot stand in for it. This
+# replaces the unsigned .sha256 sidecar, which is still published for manual use.
+verify_attested_digest() {
+  local file=$1 record=$2 name actual digest found=
+  name=$(basename "$file")
   actual=$(sha256 "$file")
-  [[ "$actual" == "$expected" ]] || fail "SHA-256 mismatch for $(basename "$file")"
+  while IFS= read -r digest || [[ -n "$digest" ]]; do
+    digest=${digest%$'\r'}
+    [[ -z "$digest" ]] && continue
+    [[ "$digest" == "$actual" ]] || fail "SHA-256 of $name does not match the digest its attestation records"
+    found=1
+  done < "$record"
+  [[ -n "$found" ]] || fail "the verified attestation records no digest for $name"
 }
 
 command -v gh >/dev/null 2>&1 \
@@ -113,10 +117,10 @@ command -v gh >/dev/null 2>&1 \
 work=$(mktemp -d "${RUNNER_TEMP:?RUNNER_TEMP is not set}/ts-crap-action.XXXXXX")
 download="$work/download"
 mkdir "$download" "$work/tool"
-patterns=(--pattern "$archive" --pattern "$archive.sha256")
+patterns=(--pattern "$archive")
 assets=("$archive")
 if [[ "$helpers" == true ]]; then
-  patterns+=(--pattern ts-crap-coverage-helpers.zip --pattern ts-crap-coverage-helpers.zip.sha256)
+  patterns+=(--pattern ts-crap-coverage-helpers.zip)
   assets+=(ts-crap-coverage-helpers.zip)
 fi
 
@@ -158,9 +162,13 @@ cat "$work/trusted-root.err" >&2
 
 pids=()
 for asset in "${assets[@]}"; do
+  # Asset names come from the fixed list above (no quotes or backslashes), so
+  # they are safe inside the jq string literal.
   gh attestation verify "$download/$asset" --repo "$REPOSITORY" \
     --cert-identity "$SIGNER_URL@refs/tags/v$version" --source-ref "refs/tags/v$version" \
-    --deny-self-hosted-runners --custom-trusted-root "$trusted_root" >/dev/null &
+    --deny-self-hosted-runners --custom-trusted-root "$trusted_root" --format json \
+    --jq ".[].verificationResult.statement.subject[] | select(.name == \"$asset\") | .digest.sha256" \
+    > "$work/$asset.attested" &
   pids+=("$!")
 done
 # Wait for every verification before failing, so none outlives this script.
@@ -170,7 +178,7 @@ for index in "${!pids[@]}"; do
 done
 [[ -z "$unverified" ]] || fail "build provenance verification failed for$unverified"
 for asset in "${assets[@]}"; do
-  verify_checksum "$download/$asset"
+  verify_attested_digest "$download/$asset" "$work/$asset.attested"
 done
 
 if [[ "$archive" == *.zip ]]; then

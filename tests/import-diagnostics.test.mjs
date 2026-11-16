@@ -327,6 +327,60 @@ test("generated TypeScript outside the snapshot still remaps through its sidecar
   });
 });
 
+test("repeated LCOV test names reuse one generated file's decoded source map", async (t) => {
+  const map = {
+    version: 3,
+    sources: ["../src/a.ts"],
+    sourcesContent: [source["src/a.ts"]],
+    mappings: ";AACA",
+  };
+  const root = await project(t, {
+    ...source,
+    "build/gen.ts": "x;\nexport const f = () => 1;\n//# sourceMappingURL=gen.ts.map\n",
+    "build/gen.ts.map": JSON.stringify(map),
+  });
+  const raw = ["first", "second", "third"]
+    .map((name) => `TN:${name}\nSF:build/gen.ts\nDA:2,1\nend_of_record\n`)
+    .join("");
+  const result = collect(root, { format: "lcov", raw });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(await fs.readFile(result.output, "utf8")).files["src/a.ts"].lines, {
+    2: 3,
+  });
+});
+
+test("source-map column ties and unordered rows keep the findLast result", async (t) => {
+  const root = await project(t, source);
+  const records = (mappings, column, line = 1) =>
+    JSON.stringify({
+      x: {
+        path: "gen.js",
+        inputSourceMap: {
+          version: 3,
+          sources: ["src/a.ts"],
+          sourcesContent: [source["src/a.ts"]],
+          mappings,
+        },
+        statementMap: { 0: { start: { line, column } } },
+        s: { 0: 1 },
+      },
+    });
+  const lines = async (result) =>
+    JSON.parse(await fs.readFile(result.output, "utf8")).files["src/a.ts"].lines;
+  // Two segments share column 0; the last one at or before the column wins.
+  const tie = collect(root, { raw: records("AAAA,AACA", 0) });
+  assert.equal(tie.status, 0, tie.stderr);
+  assert.deepEqual(await lines(tie), { 2: 1 });
+  // Additive deltas can produce unordered columns (4, 6, 5); findLast picks line 3.
+  const unordered = collect(root, { raw: records("IAAA,EACA,DACA", 5) });
+  assert.equal(unordered.status, 0, unordered.stderr);
+  assert.deepEqual(await lines(unordered), { 3: 1 });
+  // A column before every segment still maps nothing.
+  const before = collect(root, { raw: records("CAAA", 0) });
+  assert.equal(before.status, 2);
+  assert.match(before.stderr, /1 coverage locations could not be source-mapped/);
+});
+
 test("missing sources and missing sidecar maps get their own diagnostics", async (t) => {
   const root = await project(t, {
     ...source,

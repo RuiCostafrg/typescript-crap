@@ -5,6 +5,10 @@
 ### Changed
 
 - Faster coverage conversion and import on large or minified sources; output is unchanged.
+- The corpus benchmark can build an older git ref with the same toolchain,
+  profile, targets and `--locked` flag and measure it interleaved with the
+  current commit, so before/after ratios come from one runner instead of two
+  different CPU models.
 - Function analysis evaluates node kinds through per-grammar tables of symbol
   ids, hashes each function's tokens as one buffered stream, keeps owned lines
   in a sorted vector and tracks ancestors during the tree walk instead of

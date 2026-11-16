@@ -201,7 +201,7 @@ hosted runners in November 2026, with v2.4.0 assets and empty caches
 | --- | ---: | ---: | ---: | --- |
 | npm (`npm install --save-exact`) | 0.5 s | 1.2 s | 1.0 s | Registry integrity hashes, recorded in the lockfile. Build provenance only if you also run `npm audit signatures` |
 | Shell installer, pinned version | 0.4 s | 0.7 s | — | The archive's SHA-256 against the installer's embedded checksum, when `sha256sum` is available. Build provenance only if you [verify the installer first](#macos-and-linux) |
-| GitHub Action | 3.9 s | 4.3 s | 4.4 s | Build provenance against this repository's release workflow at the tag, then the SHA-256 and the reported version |
+| GitHub Action | 3.9 s | 4.3 s | 4.4 s | Build provenance against this repository's release workflow at the tag, then that the attestation records the archive's SHA-256 under its exact name, then the reported version |
 
 npm is the fastest path. The Action figures are for releases after v2.4.0, which
 fetch the trusted root while the archive downloads; the v2.4.0 Action takes about

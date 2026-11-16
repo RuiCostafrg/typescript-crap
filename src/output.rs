@@ -9,11 +9,61 @@ use std::{
 // Include declarations and case variants too: output is never a TS destination.
 fn typescript(path: &Path) -> bool {
     path.file_name().is_some_and(|name| {
-        let name = name.to_string_lossy().to_ascii_lowercase();
-        [".ts", ".tsx", ".mts", ".cts"]
-            .iter()
-            .any(|extension| name.ends_with(extension))
+        let name = name.as_encoded_bytes();
+        [".ts", ".tsx", ".mts", ".cts"].iter().any(|extension| {
+            name.len()
+                .checked_sub(extension.len())
+                .and_then(|start| name.get(start..))
+                .is_some_and(|suffix| suffix.eq_ignore_ascii_case(extension.as_bytes()))
+        })
     })
+}
+
+/// Existing destinations, identified for the unfiltered source walk.
+///
+/// The handles stay open for the whole check, so no destination inode can be
+/// reused while it runs. On Unix each destination also keeps the device and
+/// inode from the same `lstat` that proved it a regular file. Walked regular
+/// files are compared by `lstat` as well: one method on both sides, because a
+/// path `lstat` and a handle `fstat` can disagree on overlayfs.
+#[derive(Default)]
+struct Destinations {
+    handles: Vec<Handle>,
+    #[cfg(unix)]
+    inodes: Vec<(u64, u64)>,
+}
+
+impl Destinations {
+    fn push(&mut self, handle: Handle, metadata: &std::fs::Metadata) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            self.inodes.push((metadata.dev(), metadata.ino()));
+        }
+        #[cfg(not(unix))]
+        let _ = metadata;
+        self.handles.push(handle);
+    }
+
+    /// Whether a TypeScript-named project entry is one of the destinations.
+    fn aliased_by(&self, path: &Path) -> Result<bool> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if let Ok(metadata) = path.symlink_metadata() {
+                // A regular file is identified without opening it, so an
+                // unreadable source can no longer abort publication.
+                if metadata.is_file() {
+                    return Ok(self.inodes.contains(&(metadata.dev(), metadata.ino())));
+                }
+                if !metadata.file_type().is_symlink() {
+                    return Ok(false);
+                }
+            }
+        }
+        // Links, and entries `lstat` could not describe, keep the full check.
+        Ok(path.is_file() && self.handles.contains(&Handle::from_path(path)?))
+    }
 }
 
 // Resolve existing ancestors too, so two absent destinations through different
@@ -72,46 +122,51 @@ impl<'a> DestinationPlan<'a> {
             })
             .collect::<Result<Vec<_>>>()?;
         let mut locations = BTreeSet::new();
-        let mut destinations = Vec::new();
+        let mut destinations = Destinations::default();
         for &path in &self.destinations {
             if typescript(path) {
                 bail!("report output cannot overwrite a TypeScript source destination");
             }
-            let handle = match path.symlink_metadata() {
+            let regular = |metadata: &std::fs::Metadata| -> Result<()> {
+                // Never follow output symlinks, including dangling ones.
+                if metadata.file_type().is_symlink() || !metadata.is_file() {
+                    bail!("report output must be a regular file, not a symbolic link or directory");
+                }
+                Ok(())
+            };
+            let existing = match path.symlink_metadata() {
                 Ok(metadata) => {
-                    // Never follow output symlinks, including dangling ones.
-                    if metadata.file_type().is_symlink() || !metadata.is_file() {
-                        bail!(
-                            "report output must be a regular file, not a symbolic link or directory"
-                        );
-                    }
-                    Some(Handle::from_path(path)?)
+                    regular(&metadata)?;
+                    let handle = Handle::from_path(path)?;
+                    // Identify the destination by an `lstat` taken while its handle
+                    // is open, so the recorded inode is never older than the handle.
+                    let metadata = path.symlink_metadata()?;
+                    regular(&metadata)?;
+                    Some((handle, metadata))
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
                 Err(error) => return Err(error.into()),
             };
             let location = location(path)?;
+            let handle = existing.as_ref().map(|(handle, _)| handle);
             if !locations.insert(location.clone())
-                || handle
-                    .as_ref()
-                    .is_some_and(|handle| destinations.contains(handle))
+                || handle.is_some_and(|handle| destinations.handles.contains(handle))
             {
                 bail!("baseline and report destinations must differ");
             }
             if protected.iter().any(|(input_path, input_handle)| {
                 *input_path == location
                     || handle
-                        .as_ref()
                         .zip(input_handle.as_ref())
                         .is_some_and(|(a, b)| a == b)
             }) {
                 bail!("report output cannot overwrite coverage input, config, or baseline");
             }
-            if let Some(handle) = handle {
-                destinations.push(handle);
+            if let Some((handle, metadata)) = existing {
+                destinations.push(handle, &metadata);
             }
         }
-        if destinations.is_empty() {
+        if destinations.handles.is_empty() {
             return Ok(());
         }
         // Selection and ignore rules must not hide unselected source aliases.
@@ -126,10 +181,7 @@ impl<'a> DestinationPlan<'a> {
             .follow_links(false);
         for entry in builder.build() {
             let entry = entry.context("cannot check report output against project sources")?;
-            if typescript(entry.path())
-                && entry.path().is_file()
-                && destinations.contains(&Handle::from_path(entry.path())?)
-            {
+            if typescript(entry.path()) && destinations.aliased_by(entry.path())? {
                 bail!("report output cannot overwrite a source file");
             }
         }
@@ -154,7 +206,8 @@ impl<'a> DestinationPlan<'a> {
                     .unwrap_or(Path::new("."));
                 let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
                 {
-                    let mut writer = std::io::BufWriter::new(temporary.as_file_mut());
+                    let mut writer =
+                        std::io::BufWriter::with_capacity(1 << 20, temporary.as_file_mut());
                     render(index, &mut writer)?;
                     writer.flush()?;
                 }

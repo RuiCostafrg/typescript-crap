@@ -27,6 +27,21 @@
   a `--baseline` scan from 466 MB to 432 MB. Stdout reports are staged in an
   anonymous temporary file (in memory if none can be created) and still appear
   only after every file is published.
+- Directory scans check each directory for symbolic links once per scan instead
+  of once per file. On Linux, walked files are no longer resolved one by one:
+  the walk starts at the resolved project directory and never follows links,
+  so each path is already canonical. Explicitly named paths and every `--diff`
+  and `--pr` path keep the full per-file check, and macOS and Windows keep
+  resolving walked files. Selection, symbolic-link rejection and report bytes
+  are unchanged.
+- Before replacing an existing report or baseline, the check that no
+  TypeScript file under the project root aliases the destination identifies
+  regular files with one `lstat` instead of opening each one (Unix). Symbolic
+  links keep the full check, ignored and hidden files are still checked, and
+  the check still runs again before each rename.
+- **Behaviour change:** an unreadable TypeScript file under the project root no
+  longer aborts publication of `--output` or `--write-baseline` on Unix. Its
+  device and inode prove it is not a destination without opening it.
 
 - The CI performance guard compares report bytes: on pull requests the
   candidate must reproduce the base's report for every scanner workload unless
@@ -39,6 +54,20 @@
 
 ### Added
 
+- `--jobs N` analyzes selections of 32 files or more on up to N worker threads.
+  The CLI defaults to the available cores, at most 4. Files are still read and
+  verified against Git in path order on one thread. Workers only parse, bind
+  coverage and score, and results are merged in path order. Reports, baselines,
+  exit codes and the reported error (the first failing file in path order,
+  including panics) are the same for every N. In-flight source text is capped
+  at 64 MiB, and a larger file is analyzed alone. Sources over 128 KiB are
+  analyzed on the calling thread and worker results are copied into its heap,
+  which keeps glibc's per-thread heaps small: on the VS Code repository
+  (hosted x86-64, 4 jobs) peak memory was 1.14x a sequential scan with glibc
+  and unchanged with the static musl build, at 1.64x and 1.37x the speed
+  (`docs/measurements/wp4-parallel-rss-2026-11-15.json`).
+- `ScanExtensions::jobs` for library callers. It defaults to 1, so `scan` and
+  `scan_with` start no threads unless asked.
 - `Baseline::render_report_to` streams a report's baseline snapshot without
   copying it first; it writes the same bytes as `Baseline::capture` followed by
   `render_to`.

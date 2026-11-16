@@ -679,3 +679,32 @@ fn baseline_gate_passes_exact_threshold_for_new_and_previously_covered_functions
         assert!(!current.functions[0].failed);
     }
 }
+
+/// `Baseline::render_report_to` is public 2.x API: it must stay reachable from
+/// outside the crate and write exactly what `capture` + `render` writes.
+#[test]
+fn render_report_to_is_the_streaming_form_of_capture_and_render() {
+    let dir = project(BAD);
+    fs::create_dir(dir.path().join("sub")).unwrap();
+    fs::write(
+        dir.path().join("sub/b.ts"),
+        "export const g = (x: number) => x > 0 ? x : -x;\nclass C { m() { return 1; } }\n",
+    )
+    .unwrap();
+    let options = opts(&dir);
+    let report = scan(&options).unwrap();
+    assert!(report.functions.len() >= 3);
+    let mut streamed = Vec::new();
+    Baseline::render_report_to(&report, &mut streamed).unwrap();
+    assert_eq!(
+        streamed,
+        Baseline::capture(&report).render().unwrap().into_bytes()
+    );
+    let mut captured = Vec::new();
+    Baseline::capture(&report).render_to(&mut captured).unwrap();
+    assert_eq!(streamed, captured);
+    let baseline = Baseline::load(&streamed).unwrap();
+    let mut rescanned = scan(&options).unwrap();
+    baseline.apply(&mut rescanned, &[]).unwrap();
+    assert!(!rescanned.failed);
+}

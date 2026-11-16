@@ -102,8 +102,8 @@ jobs:
           )
           if [[ -n "$BASELINE_REF" ]]; then
             scanners+=(
-              --scanner baseline-glibc=baseline/target/x86_64-unknown-linux-gnu/dist/ts-crap
-              --scanner baseline-musl=baseline/target/x86_64-unknown-linux-musl/dist/ts-crap
+              --baseline-scanner baseline-glibc=baseline/target/x86_64-unknown-linux-gnu/dist/ts-crap
+              --baseline-scanner baseline-musl=baseline/target/x86_64-unknown-linux-musl/dist/ts-crap
               --baseline-ref "$BASELINE_REF"
               --baseline-commit "$BASELINE_SHA"
             )

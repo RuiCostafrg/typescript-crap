@@ -2,6 +2,7 @@
 import argparse
 import importlib.util
 import json
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -220,8 +221,14 @@ class CorpusBenchmarkTests(unittest.TestCase):
         self.assertNotIn('run: |\n          ${{ inputs.baseline_ref }}', workflow)
         self.assertIn('git archive --format=tar', workflow)
         self.assertIn('CARGO_TARGET_DIR: ${{ github.workspace }}/baseline/target', workflow)
-        self.assertIn('--scanner baseline-glibc=', workflow)
-        self.assertIn('--scanner baseline-musl=', workflow)
+        # Apply the script's own label rule to every build the workflow passes:
+        # current builds never carry the baseline prefix, baseline builds always do.
+        scanners = re.findall(r'(--(?:baseline-)?scanner) ([^=\s]+)=', workflow)
+        self.assertEqual({flag for flag, _ in scanners}, {'--scanner', '--baseline-scanner'})
+        for flag, label in scanners:
+            self.assertEqual(flag == '--baseline-scanner', label.startswith('baseline-'), label)
+        self.assertIn('--baseline-scanner baseline-glibc=', workflow)
+        self.assertIn('--baseline-scanner baseline-musl=', workflow)
 
     def test_baseline_ref_validation(self):
         """Only plain ref characters are accepted, and never an option-looking ref."""

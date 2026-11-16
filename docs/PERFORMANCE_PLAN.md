@@ -30,9 +30,25 @@ Hosted full VS Code scans (15,246 files, 431,594 functions, default job count;
 | static musl wall time | 47.5 s | 38.5 s | 29.1 s |
 | static musl peak RSS | 194 MiB | 194 MiB | 216 MiB |
 
-- The "before" column ran on a different runner, so treat the change as
-  indicative. Hosted runner CPU models alone move these times by more than 40%.
-  A same-runner comparison against v2.4.0 is the next measurement.
+- The "before" column ran on a different runner; hosted runner CPU models
+  alone move these times by more than 40%. The like-for-like comparison is
+  below.
+
+Same runner, v2.4.0 and current code built and measured in alternating rounds
+([run 43846265255](https://github.com/RuiCostafrg/typescript-crap/actions/runs/43846265255)).
+All four builds produced the identical report:
+
+| Build | v2.4.0 | Now | Change |
+| --- | ---: | ---: | --- |
+| glibc wall time | 39.9 s | 20.4 s | 1.96× faster |
+| glibc user CPU | 38.7 s | 44.6 s | +15% |
+| glibc peak RSS | 228 MiB | 259 MiB | +14% |
+| static musl wall time | 54.1 s | 37.9 s | 1.43× faster |
+| static musl user + system CPU | 53.2 s | 86.8 s | +63% |
+| static musl peak RSS | 194 MiB | 194 MiB | unchanged |
+
+- Most of the musl CPU increase is allocator contention under threads: system
+  time rose from 1.7 s to 10.9 s. The mimalloc experiment below removes it.
 - Threads trade CPU time for wall time: on one runner, 4 workers used about 36%
   more user CPU than `--jobs 1` and finished about 40% sooner. `--jobs 1` stays
   the lowest-CPU option.

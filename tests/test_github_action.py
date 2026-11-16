@@ -19,7 +19,7 @@ SCAN = ROOT / 'action/scan.sh'
 IDENTITY = 'https://github.com/RuiCostafrg/typescript-crap/.github/workflows/release.yml@refs/tags/v2.2.1'
 
 FAKE_GH = r'''#!/usr/bin/env python3
-import fnmatch, json, os, shutil, sys, time
+import fnmatch, hashlib, json, os, re, shutil, sys, time
 args = sys.argv[1:]
 with open(os.environ['GH_CALLS'], 'a') as calls:
     calls.write(json.dumps(args) + '\n')
@@ -57,6 +57,32 @@ if args[:2] == ['release', 'download']:
 elif args[:2] == ['attestation', 'verify']:
     if os.path.basename(args[2]) in os.environ.get('GH_UNATTESTED', '').split():
         sys.exit('no matching attestation')
+    with open(args[2], 'rb') as asset:
+        digest = hashlib.sha256(asset.read()).hexdigest()
+    tag = args[args.index('--source-ref') + 1].removeprefix('refs/tags/')
+    with open(os.path.join(os.environ['GH_RELEASES'], tag, 'attestations.json')) as f:
+        attestations = json.load(f)
+    # Like gh: attestations are found by the file's digest, under any name.
+    found = [a for a in attestations if any(s['digest']['sha256'] == digest for s in a)]
+    if not found:
+        sys.exit('no matching attestation')
+    if '--format' in args:
+        assert args[args.index('--format') + 1] == 'json'
+        query = re.fullmatch(r'\.\[\]\.verificationResult\.statement\.subject\[\] \| '
+                             r'select\(\.name == "([^"\\]+)"\) \| \.digest\.sha256',
+                             args[args.index('--jq') + 1])
+        assert query, args
+        end = '\r\n' if 'GH_ATTEST_CRLF' in os.environ else '\n'
+        if 'GH_ATTEST_RAW' in os.environ:
+            sys.stdout.write(os.environ['GH_ATTEST_RAW'])
+        else:
+            for attestation in found:
+                for subject in attestation:
+                    if subject['name'] == query[1]:
+                        print(subject['digest']['sha256'], end=end)
+        sys.stdout.flush()
+        if 'GH_VERIFY_FAIL_AFTER_PRINT' in os.environ:
+            sys.exit('verification failed after printing')
 elif args[:2] == ['attestation', 'trusted-root']:
     if marks:
         open(os.path.join(marks, 'root-started'), 'w').close()
@@ -142,7 +168,7 @@ class ActionScripts(unittest.TestCase):
         self.temporary.cleanup()
 
     def publish(self, version='2.2.1', target='x86_64-unknown-linux-musl', reported=None,
-                archive=None, checksum=None, helpers=True):
+                archive=None, checksum=None, helpers=True, attest=None):
         release = self.releases / f'v{version}'
         release.mkdir(parents=True, exist_ok=True)
         name = f'ts-crap-{target}.tar.xz'
@@ -158,7 +184,17 @@ class ActionScripts(unittest.TestCase):
             (release / 'ts-crap-coverage-helpers.zip').write_bytes(bundle)
             (release / 'ts-crap-coverage-helpers.zip.sha256').write_text(
                 f'{hashlib.sha256(bundle).hexdigest()}  ts-crap-coverage-helpers.zip\n')
+        self.attest(release, attest)
         return name
+
+    @staticmethod
+    def attest(release, attest=None):
+        # One release attestation names every asset with its SHA-256, like
+        # release.yml's. attest(subjects) may return replacement attestations.
+        subjects = [{'name': p.name, 'digest': {'sha256': hashlib.sha256(p.read_bytes()).hexdigest()}}
+                    for p in sorted(release.iterdir()) if p.name != 'attestations.json']
+        attestations = attest(subjects) if attest else [subjects]
+        (release / 'attestations.json').write_text(json.dumps(attestations))
 
     def run_script(self, script, **variables):
         environment = {
@@ -212,17 +248,20 @@ class ActionScripts(unittest.TestCase):
                 self.assertEqual((self.root / 'env').read_text(), '')
                 calls = self.gh_calls()
                 # The trusted root is fetched while the assets download, so
-                # either may be logged first.
+                # either may be logged first; no .sha256 sidecar is downloaded.
                 self.assertCountEqual(calls[:2], [
                     ['release', 'download', 'v2.2.1', '--repo', 'RuiCostafrg/typescript-crap',
-                     '--pattern', name, '--pattern', f'{name}.sha256',
-                     '--dir', str(executable.parents[2] / 'download'), '--clobber'],
+                     '--pattern', name, '--dir', str(executable.parents[2] / 'download'),
+                     '--clobber'],
                     ['attestation', 'trusted-root']])
                 self.assertEqual(calls[2:], [
                     ['attestation', 'verify', str(executable.parents[2] / 'download' / name),
                      '--repo', 'RuiCostafrg/typescript-crap', '--cert-identity', IDENTITY,
                      '--source-ref', 'refs/tags/v2.2.1', '--deny-self-hosted-runners',
-                     '--custom-trusted-root', str(executable.parents[2] / 'trusted-root.jsonl')]])
+                     '--custom-trusted-root', str(executable.parents[2] / 'trusted-root.jsonl'),
+                     '--format', 'json', '--jq', '.[].verificationResult.statement.subject[] | '
+                     f'select(.name == "{name}") | .digest.sha256']])
+                self.assertFalse(list(executable.parents[2].glob('download/*.sha256')))
 
     def gh_calls(self):
         return [json.loads(line) for line in (self.root / 'calls').read_text().splitlines()]
@@ -265,6 +304,7 @@ class ActionScripts(unittest.TestCase):
         (release / f'ts-crap-{target}.tar.xz.sha256').unlink()
         raw = (release / name).read_bytes()
         (release / f'{name}.sha256').write_text(f'{hashlib.sha256(raw).hexdigest()} *{name}\n')
+        self.attest(release)
         result = self.install(RUNNER_OS='Windows', TS_CRAP_ACTION_HELPERS='true')
         self.assertEqual(result.returncode, 0, result.stderr)
         outputs = self.outputs()
@@ -290,9 +330,24 @@ class ActionScripts(unittest.TestCase):
         self.assertEqual((self.root / 'env').read_text(), f'TS_CRAP_HELPERS={helpers}\n')
         calls = self.gh_calls()
         self.assertEqual(calls.count(['attestation', 'trusted-root']), 1)
+        downloads = [call for call in calls if call[:2] == ['release', 'download']]
+        self.assertEqual(len(downloads), 1)
+        self.assertFalse(any('sha256' in argument for argument in downloads[0]))
         attested = [call[2] for call in calls if call[:2] == ['attestation', 'verify']]
         self.assertEqual(sorted(Path(path).name for path in attested),
                          ['ts-crap-coverage-helpers.zip', 'ts-crap-x86_64-unknown-linux-musl.tar.xz'])
+        # Each asset is checked against the digest attested under its own name.
+        for call in calls:
+            if call[:2] != ['attestation', 'verify']:
+                continue
+            asset = Path(call[2]).name
+            self.assertEqual(call[call.index('--format') + 1], 'json')
+            self.assertEqual(call[call.index('--jq') + 1],
+                             '.[].verificationResult.statement.subject[] | '
+                             f'select(.name == "{asset}") | .digest.sha256')
+            for flag in ['--repo', '--cert-identity', '--source-ref', '--deny-self-hosted-runners',
+                         '--custom-trusted-root']:
+                self.assertIn(flag, call)
 
     def test_retries_transient_download_failures(self):
         failures = self.root / 'failures'
@@ -430,19 +485,110 @@ class ActionScripts(unittest.TestCase):
                 self.assert_rejected(self.install(TS_CRAP_ACTION_HELPERS='true', GH_UNATTESTED=asset),
                                      f'build provenance verification failed for {asset}')
 
-    def test_rejects_checksum_mismatch_and_misbound_checksum(self):
+    def test_ignores_the_unsigned_checksum_sidecar(self):
+        # The attested digest replaces the sidecar; a broken sidecar is not read.
+        self.publish(checksum='not a checksum\n')
+        result = self.install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(list(self.runner_temp.glob('ts-crap-action.*/download/*.sha256')))
+
+    def test_rejects_a_tampered_archive(self):
+        # Changed bytes match no attestation, so gh itself rejects them.
+        name = self.publish()
+        release = self.releases / 'v2.2.1'
+        (release / name).write_bytes((release / name).read_bytes() + b'tampered')
+        self.assert_rejected(self.install(), f'build provenance verification failed for {name}')
+        self.assert_nothing_ran()
+
+    def test_rejects_another_attested_asset_in_place_of_the_archive(self):
+        # The aarch64 archive is attested too, but not under the x86_64 name,
+        # so selecting by name yields no digest for the downloaded file.
+        other = self.publish(target='aarch64-unknown-linux-musl')
+        release = self.releases / 'v2.2.1'
         name = 'ts-crap-x86_64-unknown-linux-musl.tar.xz'
-        cases = [
-            ('0' * 64 + f' *{name}\n', 'SHA-256 mismatch'),
-            (hashlib.sha256(b'x').hexdigest() + '  other.tar.xz\n', "checksum file names 'other.tar.xz'"),
-            ('not a checksum\n', 'malformed checksum'),
-            ('', 'malformed checksum'),
-        ]
-        for checksum, message in cases:
-            with self.subTest(message=message):
-                self.publish(checksum=checksum)
-                self.assert_rejected(self.install(), message)
+        (release / name).write_bytes((release / other).read_bytes())
+        attestations = json.loads((release / 'attestations.json').read_text())
+        attestations[0] = [s for s in attestations[0] if s['name'] != name]
+        (release / 'attestations.json').write_text(json.dumps(attestations))
+        result = self.install()
+        self.assert_rejected(result, f'the verified attestation records no digest for {name}')
+        self.assert_nothing_ran()
+
+    def test_rejects_an_attestation_that_records_another_digest_for_the_asset(self):
+        name = 'ts-crap-x86_64-unknown-linux-musl.tar.xz'
+        wrong = {'name': name, 'digest': {'sha256': 'f' * 64}}
+
+        def renamed(subjects):
+            # The file's digest is attested under another name, and the asset's
+            # own name carries a different digest.
+            return [[{**s, 'name': 'other.tar.xz'} if s['name'] == name else s for s in subjects] + [wrong]]
+
+        self.publish(attest=renamed)
+        result = self.install()
+        self.assert_rejected(
+            result, f'SHA-256 of {name} does not match the digest its attestation records')
+        self.assert_nothing_ran()
+
+    def test_rejects_when_one_of_several_named_digests_differs(self):
+        name = 'ts-crap-x86_64-unknown-linux-musl.tar.xz'
+        wrong = {'name': name, 'digest': {'sha256': 'f' * 64}}
+
+        def second_attestation(subjects):
+            # One verified attestation records the right digest, another one
+            # records a wrong digest for the same name: all must agree.
+            own = [s for s in subjects if s['name'] == name]
+            return [subjects, own + [wrong]]
+
+        self.publish(attest=second_attestation)
+        result = self.install()
+        self.assert_rejected(
+            result, f'SHA-256 of {name} does not match the digest its attestation records')
+        self.assert_nothing_ran()
+
+    def test_rejects_helpers_attested_under_the_archives_digest(self):
+        archive = 'ts-crap-x86_64-unknown-linux-musl.tar.xz'
+        helpers = 'ts-crap-coverage-helpers.zip'
+
+        def crossed(subjects):
+            # The helpers' own name carries the archive's digest, while their
+            # real digest is attested under an unrelated name, so gh's own
+            # digest lookup still finds an attestation for the file.
+            archive_digest = next(s['digest'] for s in subjects if s['name'] == archive)
+            helpers_digest = next(s['digest'] for s in subjects if s['name'] == helpers)
+            swapped = [{**s, 'digest': archive_digest} if s['name'] == helpers else s
+                       for s in subjects]
+            return [swapped + [{'name': 'renamed-helpers.zip', 'digest': helpers_digest}]]
+
+        self.publish(attest=crossed)
+        result = self.install(TS_CRAP_ACTION_HELPERS='true')
+        self.assert_rejected(
+            result, f'SHA-256 of {helpers} does not match the digest its attestation records')
+        self.assertEqual((self.root / 'env').read_text(), '')
+        self.assert_nothing_ran()
+
+    def test_a_failed_verification_is_fatal_even_after_printing_the_right_digest(self):
+        # The record is only read once every gh verification has exited 0.
+        name = self.publish()
+        self.assert_rejected(self.install(GH_VERIFY_FAIL_AFTER_PRINT='1'),
+                             f'build provenance verification failed for {name}')
+        self.assert_nothing_ran()
+
+    def test_rejects_blank_attested_output(self):
+        name = 'ts-crap-x86_64-unknown-linux-musl.tar.xz'
+        none = f'the verified attestation records no digest for {name}'
+        mismatch = f'SHA-256 of {name} does not match the digest its attestation records'
+        # Blank lines are skipped, so they never count as a recorded digest; a
+        # whitespace-only line is not blank and cannot equal a digest.
+        for raw, message in [('', none), ('\n', none), ('\r\n\r\n', none), ('   \n', mismatch)]:
+            with self.subTest(raw=raw):
+                self.publish()
+                self.assert_rejected(self.install(GH_ATTEST_RAW=raw), message)
                 self.assert_nothing_ran()
+
+    def test_tolerates_crlf_in_the_attested_digests(self):
+        self.publish()
+        result = self.install(GH_ATTEST_CRLF='1', TS_CRAP_ACTION_HELPERS='true')
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_rejects_missing_assets_and_releases(self):
         self.assert_rejected(self.install('2.9.9'), 'could not download v2.9.9')

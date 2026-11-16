@@ -19,6 +19,13 @@
   download, instead of afterwards. On GitHub-hosted runners this saves a median
   0.55–0.67 seconds per install. What is verified, and the rule that nothing is
   extracted or run before verification, are unchanged.
+- The GitHub Action binds each downloaded asset to its own name in the verified
+  build-provenance attestation: every subject named like the asset must carry
+  the asset's SHA-256. `gh attestation verify` alone accepts any attested
+  subject with a matching digest, so another attested release asset could have
+  stood in for the requested one. The unsigned `.sha256` sidecar is no longer
+  downloaded (it is still published for manual checks). All releases the Action
+  accepts (2.2.1 and later) name every asset in their attestations.
 - Release binaries no longer carry a symbol table (`strip = "symbols"` in the
   `dist` profile). The Linux x86-64 archive shrinks by 7.5% (1.42 MB to 1.31 MB),
   the Linux ARM64 archive by 10.3% and the macOS ARM64 archive by 7.3%; the

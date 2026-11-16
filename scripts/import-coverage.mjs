@@ -120,6 +120,20 @@ function resolveSource(base, name) {
   if (/^[a-zA-Z][a-zA-Z+.-]*:\/\//.test(name)) throw new Error(`Unmappable source URL: ${name}`);
   return path.resolve(base, name);
 }
+// The last segment at or before a generated column, as findLast would return it.
+function segmentAtOrBefore(segments, column) {
+  let low = 0,
+    high = segments.length - 1,
+    found;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    if (segments[middle].column <= column) {
+      found = segments[middle];
+      low = middle + 1;
+    } else high = middle - 1;
+  }
+  return found;
+}
 async function sourceMap(filename, inline) {
   if (inline) return { map: inline, base: path.dirname(filename) };
   const text = await fs.readFile(filename, "utf8");
@@ -142,7 +156,7 @@ async function sourceMap(filename, inline) {
   const mapPath = resolveSource(path.dirname(filename), decodeURIComponent(url));
   return { map: parseUniqueJson(await fs.readFile(mapPath, "utf8")), base: path.dirname(mapPath) };
 }
-async function convert(root, files, records) {
+async function convert(root, files, records, sourceMaps) {
   let unmapped = 0;
   const tests = new Map();
   for (const record of records) {
@@ -154,42 +168,57 @@ async function convert(root, files, records) {
     if (files.has(filename) && !record.map) {
       mapper = (line) => [{ file: files.get(filename), line }];
     } else {
-      const { map, base } = await sourceMap(filename, record.map).catch((error) => {
-        // Generated TypeScript (for example under build/) still remaps through its
-        // map. Without one, a TypeScript record is simply outside the snapshot.
-        // Only a missing generated file itself; a missing sidecar map keeps its own error.
-        const sourceMissing =
-          error.code === "ENOENT" && path.resolve(error.path ?? "") === filename;
-        // Declaration files are TypeScript too, just never collected.
-        const typescript = supported(filename) || /\.d\.[cm]?ts$/.test(filename);
-        if (!record.map && typescript && (sourceMissing || error.missingSourceMap)) {
-          throw new Error(
-            `Unmappable source outside collected TypeScript snapshot: ${record.path}; ${snapshotHint(root, filename)}`,
-          );
-        }
-        throw error;
-      });
-      const rows = mappings(map);
-      const sources = map.sources.map((name, index) => {
-        const absolute = resolveSource(resolveSource(base, map.sourceRoot || "."), name);
-        const file = files.get(absolute);
-        if (!file) {
-          throw new Error(
-            `Unmappable source outside collected TypeScript snapshot: ${name}; ${snapshotHint(root, absolute)}`,
-          );
-        }
-        if (
-          typeof map.sourcesContent?.[index] !== "string" ||
-          digest(Buffer.from(map.sourcesContent[index])) !== file.sha256
-        ) {
-          throw new Error(`Missing or stale source-map content: ${name}`);
-        }
-        return file;
-      });
+      // A report repeats one generated file per test name (LCOV sections); parse,
+      // decode and validate its source map once for all of that file's records.
+      let decoded = record.map ? undefined : sourceMaps.get(filename);
+      if (!decoded) {
+        const { map, base } = await sourceMap(filename, record.map).catch((error) => {
+          // Generated TypeScript (for example under build/) still remaps through its
+          // map. Without one, a TypeScript record is simply outside the snapshot.
+          // Only a missing generated file itself; a missing sidecar map keeps its own error.
+          const sourceMissing =
+            error.code === "ENOENT" && path.resolve(error.path ?? "") === filename;
+          // Declaration files are TypeScript too, just never collected.
+          const typescript = supported(filename) || /\.d\.[cm]?ts$/.test(filename);
+          if (!record.map && typescript && (sourceMissing || error.missingSourceMap)) {
+            throw new Error(
+              `Unmappable source outside collected TypeScript snapshot: ${record.path}; ${snapshotHint(root, filename)}`,
+            );
+          }
+          throw error;
+        });
+        const rows = mappings(map);
+        const sources = map.sources.map((name, index) => {
+          const absolute = resolveSource(resolveSource(base, map.sourceRoot || "."), name);
+          const file = files.get(absolute);
+          if (!file) {
+            throw new Error(
+              `Unmappable source outside collected TypeScript snapshot: ${name}; ${snapshotHint(root, absolute)}`,
+            );
+          }
+          if (
+            typeof map.sourcesContent?.[index] !== "string" ||
+            digest(Buffer.from(map.sourcesContent[index])) !== file.sha256
+          ) {
+            throw new Error(`Missing or stale source-map content: ${name}`);
+          }
+          return file;
+        });
+        // Column deltas are additive and unvalidated, so binary-search only rows
+        // that arrived ordered and keep findLast's result for any other.
+        const ordered = rows.map((row) =>
+          row.every((item, index) => index === 0 || row[index - 1].column <= item.column),
+        );
+        decoded = { rows, sources, ordered };
+        if (!record.map) sourceMaps.set(filename, decoded);
+      }
+      const { rows, sources, ordered } = decoded;
       mapper = (line, column) => {
         const segments = rows[line - 1] || [];
         if (column !== undefined) {
-          const segment = segments.findLast((item) => item.column <= column);
+          const segment = ordered[line - 1]
+            ? segmentAtOrBefore(segments, column)
+            : segments.findLast((item) => item.column <= column);
           return segment?.source === undefined
             ? []
             : [{ file: sources[segment.source], line: segment.line }];
@@ -602,6 +631,7 @@ async function main() {
     }
     const format = options["--format"];
     const reports = await reportInputs(inputs, format, locations);
+    const sourceMaps = new Map();
     for (const report of reports) {
       const input = report.filename;
       try {
@@ -613,7 +643,7 @@ async function main() {
           );
         }
         // Reduce overlaps independently in each report before adding its line counts.
-        await convert(root, files, records);
+        await convert(root, files, records, sourceMaps);
       } catch (error) {
         // Preserve existing single-file diagnostics; name the failing batch member.
         if (inputs.length === 1 && input === locations[0]) throw error;

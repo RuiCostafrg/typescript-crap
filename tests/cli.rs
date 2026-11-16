@@ -498,6 +498,107 @@ fn walks_skip_links_at_depth_and_explicit_paths_through_them_still_fail() {
 }
 
 #[test]
+fn job_counts_give_identical_reports_baselines_and_exit_codes_in_every_format() {
+    use sha2::{Digest, Sha256};
+    let mut files = Vec::new();
+    for index in 0..48 {
+        let extension = if index % 2 == 0 { "ts" } else { "tsx" };
+        let name = if index % 6 == 0 {
+            format!("d{index:02}/deeper/f{index:02}.{extension}")
+        } else {
+            format!("f{index:02}.{extension}")
+        };
+        let body = if index % 9 == 4 {
+            "export function broken( {".to_owned()
+        } else {
+            format!(
+                "export function f{index}(a: boolean, b: boolean) {{\n  if (a && b) return 1;\n  return {index};\n}}\n"
+            )
+        };
+        files.push((name, body));
+    }
+    let borrowed: Vec<_> = files
+        .iter()
+        .map(|(n, b)| (n.as_str(), b.as_str()))
+        .collect();
+    let dir = project(&borrowed);
+    // Coverage for some files, so evidence binding runs on the workers.
+    let mut covered = serde_json::Map::new();
+    for (name, body) in files
+        .iter()
+        .step_by(3)
+        .filter(|(_, body)| body.lines().count() > 1)
+    {
+        covered.insert(
+            name.clone(),
+            serde_json::json!({"sha256": hex::encode(Sha256::digest(body.as_bytes())), "lines": {"2": 1, "3": 0}}),
+        );
+    }
+    let coverage = dir.path().join("coverage.json");
+    fs::write(
+        &coverage,
+        serde_json::json!({"version": 1, "files": covered}).to_string(),
+    )
+    .unwrap();
+    let coverage = coverage.to_str().unwrap();
+    let broken: Vec<&str> = files
+        .iter()
+        .filter(|(_, body)| body.lines().count() == 1)
+        .map(|(name, _)| name.as_str())
+        .collect();
+    assert_eq!(broken.len(), 5);
+    for format in ["text", "json", "xml", "html", "sarif"] {
+        // Baselines are format-independent: one format is enough for them.
+        let variants: &[&str] = if format == "json" {
+            &["syntax-report", "baseline"]
+        } else {
+            &["syntax-report"]
+        };
+        for &variant in variants {
+            let mut outputs = Vec::new();
+            for jobs in ["1", "4"] {
+                let baseline = dir.path().join(format!("baseline-{jobs}.json"));
+                let report = dir.path().join("report.out");
+                // An existing destination, so the preflight walk runs as well.
+                fs::write(&report, "previous").unwrap();
+                let mut args = vec![
+                    "--jobs",
+                    jobs,
+                    "--format",
+                    format,
+                    "--coverage",
+                    coverage,
+                    "--output",
+                    report.to_str().unwrap(),
+                ];
+                if variant == "baseline" {
+                    args.extend(["--write-baseline", baseline.to_str().unwrap()]);
+                    for name in &broken {
+                        args.extend(["--exclude", name]);
+                    }
+                } else {
+                    args.extend(["--on-syntax-error", "report"]);
+                }
+                let out = at(dir.path(), &args);
+                assert_eq!(out.status.code(), Some(1), "{out:?}");
+                assert!(out.stdout.is_empty());
+                let snapshot = fs::read(&baseline).unwrap_or_default();
+                assert_eq!(snapshot.is_empty(), variant != "baseline");
+                outputs.push((fs::read(&report).unwrap(), snapshot));
+                let _ = fs::remove_file(baseline);
+            }
+            assert!(
+                outputs.windows(2).all(|pair| pair[0] == pair[1]),
+                "{format} {variant}"
+            );
+        }
+    }
+    let out = at(dir.path(), &["--jobs", "0"]);
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    assert!(out.stdout.is_empty());
+}
+
+#[test]
 fn empty_and_type_only_projects_succeed_with_explicit_zero_counts() {
     let dir = project(&[("types.ts", "export interface Thing { name: string }")]);
     let out = at(dir.path(), &["--format", "json"]);

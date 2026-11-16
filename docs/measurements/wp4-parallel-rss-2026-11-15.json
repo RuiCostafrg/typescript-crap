@@ -1,0 +1,1285 @@
+{
+ "description": "WP4 parallel analysis: peak RSS and wall time of full VS Code scans at --jobs 1 and the default job count (4 on a 4-CPU hosted runner), for the shipped glibc and static musl x86-64 builds. Produced by scripts/bench-corpus.py from #78 on a throwaway pull request (#85, not merged).",
+ "acceptance": "Peak RSS at the default job count at most 1.25x the --jobs 1 run, on glibc and musl.",
+ "outcome": {
+  "first_run": "Before large files ran on the calling thread: glibc 1.59x (233.6 -> 371.9 MB), musl 1.00x.",
+  "inline_128k": "Sources over 128 KiB on the calling thread: glibc 1.36x (228.2 -> 309.9 MB).",
+  "adopted": "128 KiB inline plus rehoming worker results into the calling thread's heap: glibc 1.137x (228.2 -> 259.5 MB, worst run 1.139x) at 1.64x the speed; musl 0.997x at 1.37x the speed.",
+  "rejected": "64 KiB inline + rehome: 1.100x at 1.52x the speed; 32 KiB: 1.075x at 1.39x.",
+  "reports": "Every run of every variant produced the same report SHA-256."
+ },
+ "variant_labels": {
+  "glibc-i128": "WP4 as of 8a23107 (128 KiB inline, no rehoming)",
+  "glibc-i128-rehome": "the adopted configuration (rehoming was selected by an experiment-only environment toggle in the throwaway branch; the product code has no toggle)",
+  "glibc-i64-rehome": "inline threshold 64 KiB with rehoming",
+  "glibc-i32-rehome": "inline threshold 32 KiB with rehoming",
+  "musl-i128-rehome": "the adopted configuration on musl"
+ },
+ "runs": {
+  "first": {
+   "version": 1,
+   "command": [
+    "ts-crap",
+    "--root",
+    "<corpus>",
+    "--on-syntax-error",
+    "report",
+    "--format",
+    "json",
+    "--output",
+    "<report.json>"
+   ],
+   "corpus": {
+    "name": "microsoft/vscode",
+    "commit": "f42f0a1102cedb0047aed92bcdf1f4ba422d02b8"
+   },
+   "candidate_commit": "ffcb73c4a84561988e424584500fce404ffcc7ad",
+   "runs": 3,
+   "report": {
+    "bytes": 184383769,
+    "functions": 431594,
+    "files_scanned": 15246,
+    "syntax_errors": 50,
+    "failed": true
+   },
+   "report_consistent": true,
+   "report_sha256s": [
+    "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+   ],
+   "machine": {
+    "platform": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "cpus": 4,
+    "runner": "GitHub Actions 1000024374",
+    "image": "ubuntu26",
+    "image_version": "20261111.196.1",
+    "time_tool": [
+     "time (GNU Time) UNKNOWN"
+    ]
+   },
+   "results": {
+    "glibc-j1": {
+     "binary_sha256": "da7d52d6ef509e3d3b2a9dbf07356000a80eadfff206b5e63eb6262ded9010d4",
+     "version": "ts-crap 2.4.0",
+     "linkage": "POSIX shell script, ASCII text executable",
+     "summary": {
+      "absent": {
+       "runs": 3,
+       "wall_s": {
+        "median": 30.95652199099999,
+        "min": 30.869210316999954,
+        "max": 31.19032907999997
+       },
+       "user_s": {
+        "median": 29.94,
+        "min": 29.81,
+        "max": 30.03
+       },
+       "system_s": {
+        "median": 0.36,
+        "min": 0.34,
+        "max": 0.38
+       },
+       "peak_rss_kib": {
+        "median": 233568,
+        "min": 233508,
+        "max": 233640
+       }
+      },
+      "existing": {
+       "runs": 3,
+       "wall_s": {
+        "median": 31.242347440000003,
+        "min": 31.022924479999915,
+        "max": 31.412559407000003
+       },
+       "user_s": {
+        "median": 30.03,
+        "min": 29.8,
+        "max": 30.06
+       },
+       "system_s": {
+        "median": 0.56,
+        "min": 0.53,
+        "max": 0.57
+       },
+       "peak_rss_kib": {
+        "median": 233592,
+        "min": 233552,
+        "max": 233684
+       }
+      }
+     },
+     "observations": {
+      "absent": [
+       {
+        "user_s": 30.03,
+        "system_s": 0.34,
+        "peak_rss_kib": 233640,
+        "exit_status": 1,
+        "wall_s": 31.19032907999997,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 29.94,
+        "system_s": 0.36,
+        "peak_rss_kib": 233568,
+        "exit_status": 1,
+        "wall_s": 30.95652199099999,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 29.81,
+        "system_s": 0.38,
+        "peak_rss_kib": 233508,
+        "exit_status": 1,
+        "wall_s": 30.869210316999954,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ],
+      "existing": [
+       {
+        "user_s": 30.03,
+        "system_s": 0.56,
+        "peak_rss_kib": 233684,
+        "exit_status": 1,
+        "wall_s": 31.242347440000003,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 30.06,
+        "system_s": 0.53,
+        "peak_rss_kib": 233552,
+        "exit_status": 1,
+        "wall_s": 31.412559407000003,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 29.8,
+        "system_s": 0.57,
+        "peak_rss_kib": 233592,
+        "exit_status": 1,
+        "wall_s": 31.022924479999915,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ]
+     }
+    },
+    "glibc-default": {
+     "binary_sha256": "3a2737f77d3dd1e2439943d1c712998a1c5a8a2a8d086b8216dc3afc9b9937d6",
+     "version": "ts-crap 2.4.0",
+     "linkage": "POSIX shell script, ASCII text executable",
+     "summary": {
+      "absent": {
+       "runs": 3,
+       "wall_s": {
+        "median": 17.734089713999992,
+        "min": 17.545027825000034,
+        "max": 18.258816543000023
+       },
+       "user_s": {
+        "median": 40.76,
+        "min": 40.61,
+        "max": 41.72
+       },
+       "system_s": {
+        "median": 0.69,
+        "min": 0.68,
+        "max": 0.7
+       },
+       "peak_rss_kib": {
+        "median": 371944,
+        "min": 371172,
+        "max": 400320
+       }
+      },
+      "existing": {
+       "runs": 3,
+       "wall_s": {
+        "median": 17.979103714000075,
+        "min": 17.944419298999946,
+        "max": 18.063914195000052
+       },
+       "user_s": {
+        "median": 40.83,
+        "min": 40.82,
+        "max": 41.01
+       },
+       "system_s": {
+        "median": 0.86,
+        "min": 0.86,
+        "max": 0.89
+       },
+       "peak_rss_kib": {
+        "median": 400152,
+        "min": 391244,
+        "max": 411148
+       }
+      }
+     },
+     "observations": {
+      "absent": [
+       {
+        "user_s": 41.72,
+        "system_s": 0.7,
+        "peak_rss_kib": 371944,
+        "exit_status": 1,
+        "wall_s": 18.258816543000023,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 40.61,
+        "system_s": 0.69,
+        "peak_rss_kib": 371172,
+        "exit_status": 1,
+        "wall_s": 17.734089713999992,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 40.76,
+        "system_s": 0.68,
+        "peak_rss_kib": 400320,
+        "exit_status": 1,
+        "wall_s": 17.545027825000034,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ],
+      "existing": [
+       {
+        "user_s": 40.82,
+        "system_s": 0.86,
+        "peak_rss_kib": 391244,
+        "exit_status": 1,
+        "wall_s": 18.063914195000052,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 41.01,
+        "system_s": 0.89,
+        "peak_rss_kib": 400152,
+        "exit_status": 1,
+        "wall_s": 17.979103714000075,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 40.83,
+        "system_s": 0.86,
+        "peak_rss_kib": 411148,
+        "exit_status": 1,
+        "wall_s": 17.944419298999946,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ]
+     }
+    },
+    "musl-j1": {
+     "binary_sha256": "769e91e964da3d9f673444f3e4d838b6dfe1181558091fa9f3b346a8c4301f06",
+     "version": "ts-crap 2.4.0",
+     "linkage": "POSIX shell script, ASCII text executable",
+     "summary": {
+      "absent": {
+       "runs": 3,
+       "wall_s": {
+        "median": 39.342085698000005,
+        "min": 39.272363159000065,
+        "max": 40.544246225999984
+       },
+       "user_s": {
+        "median": 35.36,
+        "min": 35.35,
+        "max": 36.43
+       },
+       "system_s": {
+        "median": 3.23,
+        "min": 3.05,
+        "max": 3.28
+       },
+       "peak_rss_kib": {
+        "median": 199004,
+        "min": 198876,
+        "max": 199004
+       }
+      },
+      "existing": {
+       "runs": 3,
+       "wall_s": {
+        "median": 39.651809231000016,
+        "min": 39.13417591099994,
+        "max": 39.73867636299997
+       },
+       "user_s": {
+        "median": 35.46,
+        "min": 35.24,
+        "max": 35.54
+       },
+       "system_s": {
+        "median": 3.39,
+        "min": 3.19,
+        "max": 3.41
+       },
+       "peak_rss_kib": {
+        "median": 199076,
+        "min": 199072,
+        "max": 199076
+       }
+      }
+     },
+     "observations": {
+      "absent": [
+       {
+        "user_s": 36.43,
+        "system_s": 3.23,
+        "peak_rss_kib": 199004,
+        "exit_status": 1,
+        "wall_s": 40.544246225999984,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 35.35,
+        "system_s": 3.28,
+        "peak_rss_kib": 198876,
+        "exit_status": 1,
+        "wall_s": 39.342085698000005,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 35.36,
+        "system_s": 3.05,
+        "peak_rss_kib": 199004,
+        "exit_status": 1,
+        "wall_s": 39.272363159000065,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ],
+      "existing": [
+       {
+        "user_s": 35.54,
+        "system_s": 3.41,
+        "peak_rss_kib": 199072,
+        "exit_status": 1,
+        "wall_s": 39.651809231000016,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 35.46,
+        "system_s": 3.39,
+        "peak_rss_kib": 199076,
+        "exit_status": 1,
+        "wall_s": 39.73867636299997,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 35.24,
+        "system_s": 3.19,
+        "peak_rss_kib": 199076,
+        "exit_status": 1,
+        "wall_s": 39.13417591099994,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ]
+     }
+    },
+    "musl-default": {
+     "binary_sha256": "b9eebba7345b822a4adaf41ee6213686bf3e0c31395c4384e3068ebc3b7c7b21",
+     "version": "ts-crap 2.4.0",
+     "linkage": "POSIX shell script, ASCII text executable",
+     "summary": {
+      "absent": {
+       "runs": 3,
+       "wall_s": {
+        "median": 29.119886541000028,
+        "min": 26.94223268799999,
+        "max": 30.44747405199996
+       },
+       "user_s": {
+        "median": 59.65,
+        "min": 57.53,
+        "max": 60.48
+       },
+       "system_s": {
+        "median": 10.57,
+        "min": 8.1,
+        "max": 12.01
+       },
+       "peak_rss_kib": {
+        "median": 199256,
+        "min": 199192,
+        "max": 199500
+       }
+      },
+      "existing": {
+       "runs": 3,
+       "wall_s": {
+        "median": 30.124165382,
+        "min": 28.61642787200003,
+        "max": 32.34677963299998
+       },
+       "user_s": {
+        "median": 59.68,
+        "min": 58.28,
+        "max": 62.68
+       },
+       "system_s": {
+        "median": 12.17,
+        "min": 9.95,
+        "max": 13.5
+       },
+       "peak_rss_kib": {
+        "median": 199476,
+        "min": 199200,
+        "max": 199532
+       }
+      }
+     },
+     "observations": {
+      "absent": [
+       {
+        "user_s": 59.65,
+        "system_s": 10.57,
+        "peak_rss_kib": 199256,
+        "exit_status": 1,
+        "wall_s": 29.119886541000028,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 57.53,
+        "system_s": 8.1,
+        "peak_rss_kib": 199500,
+        "exit_status": 1,
+        "wall_s": 26.94223268799999,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 60.48,
+        "system_s": 12.01,
+        "peak_rss_kib": 199192,
+        "exit_status": 1,
+        "wall_s": 30.44747405199996,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ],
+      "existing": [
+       {
+        "user_s": 62.68,
+        "system_s": 13.5,
+        "peak_rss_kib": 199532,
+        "exit_status": 1,
+        "wall_s": 32.34677963299998,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 59.68,
+        "system_s": 12.17,
+        "peak_rss_kib": 199476,
+        "exit_status": 1,
+        "wall_s": 30.124165382,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 58.28,
+        "system_s": 9.95,
+        "peak_rss_kib": 199200,
+        "exit_status": 1,
+        "wall_s": 28.61642787200003,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ]
+     }
+    }
+   }
+  },
+  "variants": {
+   "version": 1,
+   "command": [
+    "ts-crap",
+    "--root",
+    "<corpus>",
+    "--on-syntax-error",
+    "report",
+    "--format",
+    "json",
+    "--output",
+    "<report.json>"
+   ],
+   "corpus": {
+    "name": "microsoft/vscode",
+    "commit": "f42f0a1102cedb0047aed92bcdf1f4ba422d02b8"
+   },
+   "candidate_commit": "eaba844b68b02c895f461e7399f98f90fbd04b84",
+   "runs": 3,
+   "report": {
+    "bytes": 184383769,
+    "functions": 431594,
+    "files_scanned": 15246,
+    "syntax_errors": 50,
+    "failed": true
+   },
+   "report_consistent": true,
+   "report_sha256s": [
+    "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+   ],
+   "machine": {
+    "platform": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+    "cpu": "AMD EPYC 9V45 96-Core Processor",
+    "cpus": 4,
+    "runner": "GitHub Actions 1000024770",
+    "image": "ubuntu26",
+    "image_version": "20261111.196.1",
+    "time_tool": [
+     "time (GNU Time) UNKNOWN"
+    ]
+   },
+   "results": {
+    "glibc-j1": {
+     "binary_sha256": "da7d52d6ef509e3d3b2a9dbf07356000a80eadfff206b5e63eb6262ded9010d4",
+     "version": "ts-crap 2.4.0",
+     "linkage": "POSIX shell script, ASCII text executable",
+     "summary": {
+      "absent": {
+       "runs": 3,
+       "wall_s": {
+        "median": 23.70955459100003,
+        "min": 23.62121949499999,
+        "max": 23.951900774000023
+       },
+       "user_s": {
+        "median": 22.56,
+        "min": 22.47,
+        "max": 22.82
+       },
+       "system_s": {
+        "median": 0.33,
+        "min": 0.33,
+        "max": 0.34
+       },
+       "peak_rss_kib": {
+        "median": 233628,
+        "min": 233600,
+        "max": 233628
+       }
+      },
+      "existing": {
+       "runs": 3,
+       "wall_s": {
+        "median": 24.251541694000025,
+        "min": 24.073048109000183,
+        "max": 24.293633418000013
+       },
+       "user_s": {
+        "median": 22.96,
+        "min": 22.95,
+        "max": 22.99
+       },
+       "system_s": {
+        "median": 0.48,
+        "min": 0.48,
+        "max": 0.48
+       },
+       "peak_rss_kib": {
+        "median": 233572,
+        "min": 233464,
+        "max": 233688
+       }
+      }
+     },
+     "observations": {
+      "absent": [
+       {
+        "user_s": 22.82,
+        "system_s": 0.33,
+        "peak_rss_kib": 233628,
+        "exit_status": 1,
+        "wall_s": 23.951900774000023,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 22.56,
+        "system_s": 0.33,
+        "peak_rss_kib": 233600,
+        "exit_status": 1,
+        "wall_s": 23.70955459100003,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 22.47,
+        "system_s": 0.34,
+        "peak_rss_kib": 233628,
+        "exit_status": 1,
+        "wall_s": 23.62121949499999,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ],
+      "existing": [
+       {
+        "user_s": 22.99,
+        "system_s": 0.48,
+        "peak_rss_kib": 233464,
+        "exit_status": 1,
+        "wall_s": 24.293633418000013,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 22.95,
+        "system_s": 0.48,
+        "peak_rss_kib": 233572,
+        "exit_status": 1,
+        "wall_s": 24.073048109000183,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 22.96,
+        "system_s": 0.48,
+        "peak_rss_kib": 233688,
+        "exit_status": 1,
+        "wall_s": 24.251541694000025,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ]
+     }
+    },
+    "glibc-i128": {
+     "binary_sha256": "42ab30021a45a8b4df6885c3a75cc6f6b9ce7e12437c05a93f46b764d38e013a",
+     "version": "ts-crap 2.4.0",
+     "linkage": "POSIX shell script, ASCII text executable",
+     "summary": {
+      "absent": {
+       "runs": 3,
+       "wall_s": {
+        "median": 14.450502418999974,
+        "min": 14.292321217999927,
+        "max": 14.895994707
+       },
+       "user_s": {
+        "median": 30.21,
+        "min": 30.06,
+        "max": 30.92
+       },
+       "system_s": {
+        "median": 0.49,
+        "min": 0.48,
+        "max": 0.51
+       },
+       "peak_rss_kib": {
+        "median": 317364,
+        "min": 317116,
+        "max": 317420
+       }
+      },
+      "existing": {
+       "runs": 3,
+       "wall_s": {
+        "median": 15.119245443999944,
+        "min": 14.98053715900005,
+        "max": 15.141331085000047
+       },
+       "user_s": {
+        "median": 31.38,
+        "min": 30.72,
+        "max": 31.49
+       },
+       "system_s": {
+        "median": 0.66,
+        "min": 0.64,
+        "max": 0.66
+       },
+       "peak_rss_kib": {
+        "median": 317980,
+        "min": 317508,
+        "max": 318832
+       }
+      }
+     },
+     "observations": {
+      "absent": [
+       {
+        "user_s": 30.06,
+        "system_s": 0.49,
+        "peak_rss_kib": 317420,
+        "exit_status": 1,
+        "wall_s": 14.450502418999974,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 30.21,
+        "system_s": 0.48,
+        "peak_rss_kib": 317116,
+        "exit_status": 1,
+        "wall_s": 14.292321217999927,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 30.92,
+        "system_s": 0.51,
+        "peak_rss_kib": 317364,
+        "exit_status": 1,
+        "wall_s": 14.895994707,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ],
+      "existing": [
+       {
+        "user_s": 31.38,
+        "system_s": 0.66,
+        "peak_rss_kib": 317508,
+        "exit_status": 1,
+        "wall_s": 15.141331085000047,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 30.72,
+        "system_s": 0.66,
+        "peak_rss_kib": 317980,
+        "exit_status": 1,
+        "wall_s": 14.98053715900005,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 31.49,
+        "system_s": 0.64,
+        "peak_rss_kib": 318832,
+        "exit_status": 1,
+        "wall_s": 15.119245443999944,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ]
+     }
+    },
+    "glibc-i128-rehome": {
+     "binary_sha256": "200ea7f84da596f5bfec7b5d4a9d7976cf7ec5d8c8636c6a5d403e14b20a8d67",
+     "version": "ts-crap 2.4.0",
+     "linkage": "POSIX shell script, ASCII text executable",
+     "summary": {
+      "absent": {
+       "runs": 3,
+       "wall_s": {
+        "median": 14.438057097000012,
+        "min": 14.385909974999947,
+        "max": 15.067105324999943
+       },
+       "user_s": {
+        "median": 30.71,
+        "min": 30.35,
+        "max": 31.58
+       },
+       "system_s": {
+        "median": 0.47,
+        "min": 0.47,
+        "max": 0.48
+       },
+       "peak_rss_kib": {
+        "median": 265716,
+        "min": 265088,
+        "max": 266072
+       }
+      },
+      "existing": {
+       "runs": 3,
+       "wall_s": {
+        "median": 14.99184944500007,
+        "min": 14.945802562999916,
+        "max": 15.117917115999944
+       },
+       "user_s": {
+        "median": 31.45,
+        "min": 30.97,
+        "max": 31.55
+       },
+       "system_s": {
+        "median": 0.64,
+        "min": 0.63,
+        "max": 0.64
+       },
+       "peak_rss_kib": {
+        "median": 265312,
+        "min": 265180,
+        "max": 265440
+       }
+      }
+     },
+     "observations": {
+      "absent": [
+       {
+        "user_s": 30.35,
+        "system_s": 0.48,
+        "peak_rss_kib": 265716,
+        "exit_status": 1,
+        "wall_s": 14.438057097000012,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 30.71,
+        "system_s": 0.47,
+        "peak_rss_kib": 266072,
+        "exit_status": 1,
+        "wall_s": 14.385909974999947,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 31.58,
+        "system_s": 0.47,
+        "peak_rss_kib": 265088,
+        "exit_status": 1,
+        "wall_s": 15.067105324999943,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ],
+      "existing": [
+       {
+        "user_s": 31.55,
+        "system_s": 0.64,
+        "peak_rss_kib": 265440,
+        "exit_status": 1,
+        "wall_s": 15.117917115999944,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 31.45,
+        "system_s": 0.64,
+        "peak_rss_kib": 265312,
+        "exit_status": 1,
+        "wall_s": 14.99184944500007,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 30.97,
+        "system_s": 0.63,
+        "peak_rss_kib": 265180,
+        "exit_status": 1,
+        "wall_s": 14.945802562999916,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ]
+     }
+    },
+    "glibc-i64-rehome": {
+     "binary_sha256": "f742a94ac34a1b1f3232421e916b7be317a4ba37265dd3b8732acfa8799dda35",
+     "version": "ts-crap 2.4.0",
+     "linkage": "POSIX shell script, ASCII text executable",
+     "summary": {
+      "absent": {
+       "runs": 3,
+       "wall_s": {
+        "median": 15.643550127000026,
+        "min": 15.419396043999996,
+        "max": 15.730536381999968
+       },
+       "user_s": {
+        "median": 29.84,
+        "min": 29.81,
+        "max": 30.06
+       },
+       "system_s": {
+        "median": 0.45,
+        "min": 0.41,
+        "max": 0.46
+       },
+       "peak_rss_kib": {
+        "median": 256888,
+        "min": 256560,
+        "max": 256904
+       }
+      },
+      "existing": {
+       "runs": 3,
+       "wall_s": {
+        "median": 15.691910649999954,
+        "min": 15.619502196000099,
+        "max": 15.730368149000014
+       },
+       "user_s": {
+        "median": 30.01,
+        "min": 29.83,
+        "max": 30.13
+       },
+       "system_s": {
+        "median": 0.6,
+        "min": 0.56,
+        "max": 0.61
+       },
+       "peak_rss_kib": {
+        "median": 256640,
+        "min": 256592,
+        "max": 257180
+       }
+      }
+     },
+     "observations": {
+      "absent": [
+       {
+        "user_s": 30.06,
+        "system_s": 0.41,
+        "peak_rss_kib": 256904,
+        "exit_status": 1,
+        "wall_s": 15.730536381999968,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 29.81,
+        "system_s": 0.46,
+        "peak_rss_kib": 256888,
+        "exit_status": 1,
+        "wall_s": 15.419396043999996,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 29.84,
+        "system_s": 0.45,
+        "peak_rss_kib": 256560,
+        "exit_status": 1,
+        "wall_s": 15.643550127000026,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ],
+      "existing": [
+       {
+        "user_s": 30.01,
+        "system_s": 0.56,
+        "peak_rss_kib": 257180,
+        "exit_status": 1,
+        "wall_s": 15.619502196000099,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 29.83,
+        "system_s": 0.6,
+        "peak_rss_kib": 256592,
+        "exit_status": 1,
+        "wall_s": 15.691910649999954,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 30.13,
+        "system_s": 0.61,
+        "peak_rss_kib": 256640,
+        "exit_status": 1,
+        "wall_s": 15.730368149000014,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ]
+     }
+    },
+    "glibc-i32-rehome": {
+     "binary_sha256": "f7f91aac0bad68285cd3894d4d5d656fc58779345103c305046ebb493e208436",
+     "version": "ts-crap 2.4.0",
+     "linkage": "POSIX shell script, ASCII text executable",
+     "summary": {
+      "absent": {
+       "runs": 3,
+       "wall_s": {
+        "median": 17.113292611999952,
+        "min": 16.80220958900003,
+        "max": 17.72297896400005
+       },
+       "user_s": {
+        "median": 28.4,
+        "min": 27.98,
+        "max": 29.03
+       },
+       "system_s": {
+        "median": 0.41,
+        "min": 0.41,
+        "max": 0.46
+       },
+       "peak_rss_kib": {
+        "median": 251232,
+        "min": 251112,
+        "max": 251356
+       }
+      },
+      "existing": {
+       "runs": 3,
+       "wall_s": {
+        "median": 17.480218656000034,
+        "min": 17.31726421899998,
+        "max": 18.128264403999992
+       },
+       "user_s": {
+        "median": 28.5,
+        "min": 28.43,
+        "max": 29.38
+       },
+       "system_s": {
+        "median": 0.59,
+        "min": 0.59,
+        "max": 0.6
+       },
+       "peak_rss_kib": {
+        "median": 251320,
+        "min": 251188,
+        "max": 251336
+       }
+      }
+     },
+     "observations": {
+      "absent": [
+       {
+        "user_s": 27.98,
+        "system_s": 0.41,
+        "peak_rss_kib": 251232,
+        "exit_status": 1,
+        "wall_s": 16.80220958900003,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 28.4,
+        "system_s": 0.41,
+        "peak_rss_kib": 251356,
+        "exit_status": 1,
+        "wall_s": 17.113292611999952,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 29.03,
+        "system_s": 0.46,
+        "peak_rss_kib": 251112,
+        "exit_status": 1,
+        "wall_s": 17.72297896400005,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ],
+      "existing": [
+       {
+        "user_s": 28.5,
+        "system_s": 0.59,
+        "peak_rss_kib": 251188,
+        "exit_status": 1,
+        "wall_s": 17.480218656000034,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 28.43,
+        "system_s": 0.59,
+        "peak_rss_kib": 251336,
+        "exit_status": 1,
+        "wall_s": 17.31726421899998,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 29.38,
+        "system_s": 0.6,
+        "peak_rss_kib": 251320,
+        "exit_status": 1,
+        "wall_s": 18.128264403999992,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ]
+     }
+    },
+    "musl-j1": {
+     "binary_sha256": "769e91e964da3d9f673444f3e4d838b6dfe1181558091fa9f3b346a8c4301f06",
+     "version": "ts-crap 2.4.0",
+     "linkage": "POSIX shell script, ASCII text executable",
+     "summary": {
+      "absent": {
+       "runs": 3,
+       "wall_s": {
+        "median": 32.55004632999999,
+        "min": 32.38756729599993,
+        "max": 32.798028930000044
+       },
+       "user_s": {
+        "median": 29.23,
+        "min": 28.76,
+        "max": 29.4
+       },
+       "system_s": {
+        "median": 2.71,
+        "min": 2.63,
+        "max": 2.77
+       },
+       "peak_rss_kib": {
+        "median": 199004,
+        "min": 199004,
+        "max": 199008
+       }
+      },
+      "existing": {
+       "runs": 3,
+       "wall_s": {
+        "median": 32.64990631699993,
+        "min": 32.25770221799996,
+        "max": 33.00449642400008
+       },
+       "user_s": {
+        "median": 28.93,
+        "min": 28.71,
+        "max": 29.17
+       },
+       "system_s": {
+        "median": 2.97,
+        "min": 2.86,
+        "max": 3.03
+       },
+       "peak_rss_kib": {
+        "median": 199076,
+        "min": 199036,
+        "max": 199120
+       }
+      }
+     },
+     "observations": {
+      "absent": [
+       {
+        "user_s": 29.23,
+        "system_s": 2.63,
+        "peak_rss_kib": 199004,
+        "exit_status": 1,
+        "wall_s": 32.55004632999999,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 29.4,
+        "system_s": 2.71,
+        "peak_rss_kib": 199008,
+        "exit_status": 1,
+        "wall_s": 32.798028930000044,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 28.76,
+        "system_s": 2.77,
+        "peak_rss_kib": 199004,
+        "exit_status": 1,
+        "wall_s": 32.38756729599993,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ],
+      "existing": [
+       {
+        "user_s": 28.71,
+        "system_s": 2.86,
+        "peak_rss_kib": 199076,
+        "exit_status": 1,
+        "wall_s": 32.25770221799996,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 29.17,
+        "system_s": 2.97,
+        "peak_rss_kib": 199036,
+        "exit_status": 1,
+        "wall_s": 33.00449642400008,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 28.93,
+        "system_s": 3.03,
+        "peak_rss_kib": 199120,
+        "exit_status": 1,
+        "wall_s": 32.64990631699993,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ]
+     }
+    },
+    "musl-i128-rehome": {
+     "binary_sha256": "8f6ed2b8d5d622586aa8ff25515eb7562cb4ad28d429302c568a479260213451",
+     "version": "ts-crap 2.4.0",
+     "linkage": "POSIX shell script, ASCII text executable",
+     "summary": {
+      "absent": {
+       "runs": 3,
+       "wall_s": {
+        "median": 23.837794696000003,
+        "min": 23.47347941199996,
+        "max": 24.363084528
+       },
+       "user_s": {
+        "median": 45.42,
+        "min": 43.55,
+        "max": 45.65
+       },
+       "system_s": {
+        "median": 7.67,
+        "min": 7.07,
+        "max": 7.71
+       },
+       "peak_rss_kib": {
+        "median": 198336,
+        "min": 198280,
+        "max": 198372
+       }
+      },
+      "existing": {
+       "runs": 3,
+       "wall_s": {
+        "median": 24.53865066100002,
+        "min": 24.27060134999988,
+        "max": 25.057745931
+       },
+       "user_s": {
+        "median": 45.33,
+        "min": 44.75,
+        "max": 45.55
+       },
+       "system_s": {
+        "median": 7.97,
+        "min": 7.97,
+        "max": 8.99
+       },
+       "peak_rss_kib": {
+        "median": 198576,
+        "min": 198516,
+        "max": 198696
+       }
+      }
+     },
+     "observations": {
+      "absent": [
+       {
+        "user_s": 45.42,
+        "system_s": 7.07,
+        "peak_rss_kib": 198336,
+        "exit_status": 1,
+        "wall_s": 23.837794696000003,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 45.65,
+        "system_s": 7.67,
+        "peak_rss_kib": 198280,
+        "exit_status": 1,
+        "wall_s": 24.363084528,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 43.55,
+        "system_s": 7.71,
+        "peak_rss_kib": 198372,
+        "exit_status": 1,
+        "wall_s": 23.47347941199996,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ],
+      "existing": [
+       {
+        "user_s": 45.33,
+        "system_s": 7.97,
+        "peak_rss_kib": 198576,
+        "exit_status": 1,
+        "wall_s": 24.53865066100002,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 45.55,
+        "system_s": 8.99,
+        "peak_rss_kib": 198696,
+        "exit_status": 1,
+        "wall_s": 25.057745931,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       },
+       {
+        "user_s": 44.75,
+        "system_s": 7.97,
+        "peak_rss_kib": 198516,
+        "exit_status": 1,
+        "wall_s": 24.27060134999988,
+        "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+       }
+      ]
+     }
+    }
+   }
+  }
+ }
+}

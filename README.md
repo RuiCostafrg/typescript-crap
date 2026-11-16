@@ -349,6 +349,11 @@ from a nonempty passing scan. Thresholds must be finite and nonnegative.
   branches, creates a PR, or uploads reports.
 - `--diff` and `--pr` are mutually exclusive. A shallow checkout missing a base
   commit is an error; fetch sufficient history (e.g. `fetch-depth: 0` in CI).
+- Selections of 32 files or more are parsed and scored on up to `--jobs N`
+  worker threads (default: the available cores, at most 4). Files are still read
+  and verified against Git in order on one thread. Reports, baselines, exit
+  codes and the reported error (always the first failing file in path order) do
+  not depend on `N`. `--jobs 1` analyzes on one thread.
 
 ### Report output safety
 

@@ -46,6 +46,15 @@
   longer aborts publication of `--output` or `--write-baseline` on Unix. Its
   device and inode prove it is not a destination without opening it.
 
+- The CI performance guard compares report bytes: on pull requests the
+  candidate must reproduce the base's report for every scanner workload unless
+  the pull request is labelled `output-change`, and repeated runs must agree.
+  New workloads cover a mixed corpus with multi-MiB files, an existing
+  `--output` destination, a deep directory tree and a `--baseline` scan.
+- An opt-in `corpus-benchmark` workflow measures full scans of a pinned
+  VS Code commit with the x86-64 glibc and static musl builds
+  (`scripts/bench-corpus.py`).
+
 ### Added
 
 - `--jobs N` analyzes selections of 32 files or more on up to N worker threads.

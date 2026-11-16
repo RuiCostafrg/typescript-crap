@@ -370,7 +370,7 @@ with separate Cargo target directories, `--locked --release -j 1`, and the same
 Rust/Node tools. All builds finish before measurement. Untracked user files are
 never copied into the baseline. No previous runner's timings are used as a gate.
 
-Seven fixed, validated workloads protect important optimization boundaries:
+Eleven fixed, validated workloads protect important optimization boundaries:
 
 | Workload | Fixture | What it exercises |
 | --- | --- | --- |
@@ -381,9 +381,21 @@ Seven fixed, validated workloads protect important optimization boundaries:
 | Git batch | 3,840 functions in 48 committed files, CRLF worktree snapshots | One batch verifier, pinned identities and newline equivalence |
 | Large Git blob | A 32 MiB comment and one function | Bounded blob verification memory without a second full blob copy |
 | Coverage conversion | 16,000 overlapping V8 ranges | Active-range heap scaling and conservative line evidence |
+| Mixed corpus | 397 small TS/TSX files and three 2–4 MiB files (about 9 MiB, 7,504 functions) | Per-file overhead next to large trees; peak RSS from the largest file |
+| Existing output | 3,000 functions in 1,500 files, written with `--output` to an existing file | The output preflight walk, which opens every source, before publication |
+| Deep tree | 3,840 functions in 384 files, eight directory chains 24 levels deep | Selection cost per directory level |
+| Baseline | 3,000 failing functions, all matched by a `--baseline` snapshot | Baseline loading and matching; the gate passes |
 
 Every scanner result must retain the known function count and exact fixture
-scores/coverage. SARIF must retain all 4,000 expected findings; the Node benchmark
+scores/coverage. Every scanner workload must also produce the same report bytes
+in every run, and on pull requests the candidate's report SHA-256 must equal the
+baseline's: a performance change must not change output. A pull request that
+changes reports on purpose carries the `output-change` label. A re-run keeps
+the labels of the original event, so push a commit (or close and reopen the
+pull request) after adding it. With the label, and on pushes, manual runs and
+the `v2.0.1` fallback, a difference (including SARIF fingerprints) is printed as
+a notice and recorded as `output_changed` in `results.json`, and does not fail.
+Runs that disagree with each other fail in every case. SARIF must retain all 4,000 expected findings; the Node benchmark
 asserts its known line-hit result. Errors, malformed results, missing samples and
 process timeouts fail instead of being treated as speedups.
 Unicode fixture locations must match independently encoded source prefixes,
@@ -428,7 +440,7 @@ an earlier success is not reused after successful initial invalidation.
 ```sh
 # Linux needs GNU time; local Android/proot can use its GNU /usr/bin/time too.
 python3 scripts/check-performance.py --baseline v2.0.1
-# Focused development run; CI always uses all seven workloads and five pairs.
+# Focused development run; CI always uses all eleven workloads and five pairs.
 python3 scripts/check-performance.py --baseline HEAD --case unicode-tsx --pairs 3
 python3 -B -m unittest discover -s tests -p test_performance.py
 ```
@@ -441,3 +453,39 @@ Those tests assert behavior without wall-clock limits and run in debug, release,
 coverage and mutation CI. The Python guard tests reject known slowdowns and
 memory growth, tolerate isolated outliers, reject corrupt observations, verify
 per-process RSS isolation, and check command failures and timeout cleanup.
+
+## Real-corpus benchmark
+
+The CI guard uses synthetic fixtures. For numbers on a real project, the
+opt-in `corpus-benchmark` workflow (run it from the Actions tab) checks out
+`microsoft/vscode` at `f42f0a1102cedb0047aed92bcdf1f4ba422d02b8`, builds the
+shipped `dist` profile for `x86_64-unknown-linux-gnu` and static
+`x86_64-unknown-linux-musl`, and runs
+`ts-crap --root <corpus> --on-syntax-error report --format json --output <file>`
+with each build. Each build is measured with the destination absent and with
+it present (which adds the output preflight walk), after one warmup per mode,
+alternating builds between rounds. It reports median, minimum and maximum
+wall time, user and system CPU and GNU time peak RSS, and fails if any run's
+report SHA-256 differs. No budget is applied. The job summary shows the
+medians; the `corpus-benchmark` artifact keeps every observation, binary
+hashes and runner details. Recorded runs live in `docs/measurements/`.
+
+Locally: `python3 scripts/bench-corpus.py --corpus PATH --scanner LABEL=BINARY
+[--scanner LABEL=BINARY] --runs 3 --output results.json` (Linux, GNU time).
+
+First hosted run, 2026-11-14 (`ubuntu-26.04`, 4 vCPU Intel Xeon 6975P-C,
+v2.4.0 scanner code, three runs per row after a warmup). The full record is in
+[vscode-hosted-x86_64-2026-11-14.json](measurements/vscode-hosted-x86_64-2026-11-14.json).
+The scan selected 15,246 files and reported 431,594 functions and 50 unparsed
+files (184 MB report, identical SHA-256 for every run and both builds):
+
+| Build | Destination | Wall (s) | User CPU (s) | System (s) | Peak RSS (MiB) |
+| --- | --- | ---: | ---: | ---: | ---: |
+| glibc | absent | 34.9 | 34.5 | 0.4 | 228 |
+| glibc | existing | 34.7 | 34.2 | 0.5 | 228 |
+| static musl | absent | 47.5 | 46.2 | 1.3 | 194 |
+| static musl | existing | 47.6 | 46.2 | 1.5 | 194 |
+
+On this runner the scan is CPU-bound (wall time is within 0.5 s of user CPU)
+and an existing destination adds no measurable time. The static musl build,
+which the Linux installer prefers, takes about 36% longer than glibc.

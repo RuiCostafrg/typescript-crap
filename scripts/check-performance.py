@@ -18,7 +18,15 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES = ('covered-scan', 'unicode-tsx', 'nested', 'sarif', 'git-batch', 'git-blob', 'coverage-ranges')
+CASES = ('covered-scan', 'unicode-tsx', 'nested', 'sarif', 'git-batch', 'git-blob', 'coverage-ranges',
+         'mixed-corpus', 'existing-output', 'deep-tree', 'baseline-gate')
+PLACEHOLDER = '{}\n'  # Existing --output destination content before each run.
+# Mixed corpus: a few multi-MiB sources among hundreds of small ones.
+LARGE_SOURCES = (2, 3, 4)  # MiB per large file
+LARGE_FUNCTIONS = 32
+SMALL_SOURCES = 397
+# Deep tree: chains of nested directories with sources at every level.
+CHAINS, DEPTH, FILES_PER_LEVEL, FUNCTIONS_PER_FILE = 8, 24, 2, 10
 
 
 def positive(value):
@@ -74,11 +82,89 @@ def unicode_locations(source, path):
             for match in re.finditer(r'const (f\d+)=', source)}
 
 
+def function_source(index, body_lines=0):
+    """One complexity-2 function; optional filler statements make large bodies."""
+    if not body_lines:
+        return f'function f{index}(flag:boolean){{\nif(flag)return 1;\nreturn 0;\n}}\n'
+    return (f'function f{index}(flag:boolean){{\nif(flag)return 1;\nlet total=0;\n'
+            + 'total+=1;\n' * body_lines + 'return total;\n}\n')
+
+
+def mixed_corpus(root):
+    """Write hundreds of small sources and a few multi-MiB ones; return the count."""
+    count = 0
+    for file in range(SMALL_SOURCES):
+        functions = file % 37 + 1
+        (root / f'small-{file:03}.{"tsx" if file % 3 == 0 else "ts"}').write_text(
+            ''.join(function_source(count + i) for i in range(functions)), encoding='utf-8')
+        count += functions
+    for file, mebibytes in enumerate(LARGE_SOURCES):
+        body_lines = mebibytes * 1024 * 1024 // (LARGE_FUNCTIONS * len('total+=1;\n'))
+        (root / f'large-{file}.ts').write_text(
+            ''.join(function_source(count + i, body_lines) for i in range(LARGE_FUNCTIONS)),
+            encoding='utf-8')
+        count += LARGE_FUNCTIONS
+    return count
+
+
+def deep_tree(root):
+    """Write sources at every level of several deep directory chains."""
+    count = 0
+    for chain in range(CHAINS):
+        directory = root
+        for level in range(DEPTH):
+            directory = directory / f'chain{chain}-level{level:02}'
+            directory.mkdir()
+            for file in range(FILES_PER_LEVEL):
+                (directory / f'source-{file}.ts').write_text(
+                    ''.join(function_source(count + i) for i in range(FUNCTIONS_PER_FILE)),
+                    encoding='utf-8')
+                count += FUNCTIONS_PER_FILE
+    return count
+
+
+def sources(root):
+    """Every fixture source below root, outside Git metadata, in a stable order."""
+    return sorted(path for path in root.rglob('*.ts*')
+                  if path.is_file() and '.git' not in path.relative_to(root).parts)
+
+
 def fixture(name, root):
     """Create fixed workloads with known function counts, scores and coverage."""
     root.mkdir()
     coverage, extra, count, complexity, fraction, locations = {}, [], 0, 2, 0.0, {}
-    if name == 'git-blob':
+    threshold, output = None, None
+    if name == 'mixed-corpus':
+        count = mixed_corpus(root)
+    elif name == 'deep-tree':
+        count = deep_tree(root)
+    elif name == 'existing-output':
+        # Many small files in a few directories: the preflight opens every one.
+        for file in range(1500):
+            directory = root / f'group-{file // 50:02}'
+            directory.mkdir(exist_ok=True)
+            (directory / f'source-{file:04}.ts').write_text(
+                function_source(count) + function_source(count + 1), encoding='utf-8')
+            count += 2
+        # An existing destination makes the CLI walk the whole root first; it
+        # stays outside the scanned root and is reset before every run.
+        output = root.parent / f'{name}-report.json'
+        extra += ['--output', str(output)]
+    elif name == 'baseline-gate':
+        snapshot = []
+        for file in range(120):
+            path = root / f'source-{file:03}.ts'
+            path.write_text(''.join(function_source(count + i) for i in range(25)), encoding='utf-8')
+            snapshot += [{'path': path.name, 'name': f'f{count + i}', 'identity': f'{count + i:064x}',
+                          'crap': 6.0} for i in range(25)]
+            count += 25
+        # Every function fails the absolute threshold but matches one entry by
+        # path and name with an equal score, so the gate passes.
+        threshold = '0'
+        path = root.parent / f'{name}-snapshot.json'
+        path.write_text(json.dumps({'version': 1, 'threshold': 0.0, 'functions': snapshot}))
+        extra += ['--baseline', str(path)]
+    elif name == 'git-blob':
         (root / 'large.ts').write_text('/*' + 'x' * (32 * 1024 * 1024) + '*/\nfunction only(){return 1;}\n')
         count, complexity = 1, 1
     elif name == 'nested':
@@ -123,7 +209,8 @@ def fixture(name, root):
                 path.write_bytes(path.read_bytes().replace(b'\n', b'\r\n'))
         extra += ['--diff', 'HEAD^']
     return {'name': name, 'root': root, 'count': count, 'complexity': complexity,
-            'coverage': fraction, 'args': extra, 'locations': locations}
+            'coverage': fraction, 'args': extra, 'locations': locations,
+            'threshold': threshold, 'output': output}
 
 
 def validate(case, output, expected_fingerprints=None):
@@ -203,14 +290,25 @@ def execute(case, scanner, module, directory, label, expected_fingerprints=None)
     if case['name'] == 'coverage-ranges':
         command = ['node', str(ROOT / 'scripts/bench-coverage-lines.mjs'), str(case['count']), str(module)]
     else:
-        command = [str(scanner), '--root', str(case['root']), '--threshold', '0' if case['name'] == 'sarif' else '1000000000',
+        threshold = case.get('threshold') or ('0' if case['name'] == 'sarif' else '1000000000')
+        command = [str(scanner), '--root', str(case['root']), '--threshold', threshold,
                    '--format', 'sarif' if case['name'] == 'sarif' else 'json', *case['args']]
+    # A report written with --output replaces the destination; stdout stays empty.
+    report = case.get('output') or output
     try:
+        if case.get('output'):
+            # Reset the existing destination so a run that writes nothing cannot
+            # pass with an earlier run's report.
+            report.write_text(PLACEHOLDER)
         result = measure(command, output, metrics, expected_status=1 if case['name'] == 'sarif' else 0)
-        fingerprints = validate(case, json.loads(output.read_text()), expected_fingerprints)
+        if case.get('output') and output.stat().st_size:
+            raise ValueError('report written to stdout instead of the output destination')
+        if case.get('output') and report.read_text() == PLACEHOLDER:
+            raise ValueError('scanner did not replace the existing output destination')
+        fingerprints = validate(case, json.loads(report.read_text()), expected_fingerprints)
     except Exception as error:
         raise RuntimeError(f'{label}: {error}') from error
-    result['output_sha256'] = hashlib.sha256(output.read_bytes()).hexdigest()
+    result['output_sha256'] = hashlib.sha256(report.read_bytes()).hexdigest()
     if case['name'] == 'sarif':
         result['fingerprints_sha256'] = fingerprints
     output.unlink()  # Avoid retaining large repeated reports in the artifact.
@@ -218,15 +316,33 @@ def execute(case, scanner, module, directory, label, expected_fingerprints=None)
     return result
 
 
+def compare_outputs(name, observations, allow_change):
+    """Require identical scanner reports on each side and, unless allowed, across sides."""
+    digests = {side: {row['output_sha256'] for row in rows} for side, rows in observations.items()}
+    for side, values in digests.items():
+        if len(values) != 1:
+            raise ValueError(f'{name}: {side} reports differ between runs')
+    changed = digests['baseline'] != digests['candidate']
+    if changed and not allow_change:
+        raise ValueError(f'{name}: candidate report differs from the baseline report '
+                         '(label the pull request output-change if this is intended)')
+    if changed:
+        print(f'::notice title=Report changed::{name}: candidate report differs from the baseline '
+              '(allowed by --allow-output-change)', flush=True)
+    return changed
+
+
 def compare_case(case, binaries, modules, workspace, args):
     """Collect alternating complete pairs and assess both performance metrics."""
     observations = {'baseline': [], 'candidate': []}
+    warmups = {}
     name = case['name']
     expected_fingerprints = None
     for side in observations:
-        warmup = execute(case, binaries[side], modules[side], workspace,
-                         f'{name}-warmup-{side}', expected_fingerprints)
-        if name == 'sarif' and side == 'baseline':
+        warmup = warmups[side] = execute(case, binaries[side], modules[side], workspace,
+                                         f'{name}-warmup-{side}', expected_fingerprints)
+        # An allowed output change may also change function identities.
+        if name == 'sarif' and side == 'baseline' and not args.allow_output_change:
             expected_fingerprints = warmup['fingerprints_sha256']
     for pair in range(args.pairs):
         order = ('baseline', 'candidate') if pair % 2 == 0 else ('candidate', 'baseline')
@@ -240,9 +356,14 @@ def compare_case(case, binaries, modules, workspace, args):
             *[[r[metric] for r in observations[side]] for side in ('baseline', 'candidate')],
             ratio, slack)
     print(name + ': ' + json.dumps(assessments), flush=True)
-    return {'name': name, 'size': case['count'],
-            'source_bytes': sum(p.stat().st_size for p in case['root'].glob('*.ts*')),
-            'observations': observations, 'assessment': assessments}
+    result = {'name': name, 'size': case['count'],
+              'source_bytes': sum(p.stat().st_size for p in sources(case['root'])),
+              'observations': observations, 'assessment': assessments}
+    if name != 'coverage-ranges':  # The Node benchmark output contains timings.
+        # Warmup reports must agree too; only their timings are excluded.
+        reports = {side: [warmups[side], *rows] for side, rows in observations.items()}
+        result['output_changed'] = compare_outputs(name, reports, args.allow_output_change)
+    return result
 
 
 def publish_results(destination, results):
@@ -273,6 +394,8 @@ def main():
     parser.add_argument('--time-slack-ms', type=positive, default=50)
     parser.add_argument('--rss-ratio', type=positive, default=1.3)
     parser.add_argument('--rss-slack-kib', type=positive, default=16384)
+    parser.add_argument('--allow-output-change', action='store_true',
+                        help='record, rather than fail, scanner reports that differ from the baseline')
     args = parser.parse_args()
     destination = args.output.resolve()
     destination.mkdir(parents=True, exist_ok=True)
@@ -303,8 +426,11 @@ def main():
             results['binary_sha256'] = {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in binaries.items()}
             modules = {'baseline': baseline / 'scripts/coverage-lines.mjs', 'candidate': ROOT / 'scripts/coverage-lines.mjs'}
             results['module_sha256'] = {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in modules.items()}
+            # Fixtures live apart from the exported baseline sources.
+            cases = workspace / 'cases'
+            cases.mkdir()
             for name in args.case or CASES:
-                case = fixture(name, workspace / name)
+                case = fixture(name, cases / name)
                 results['cases'].append(compare_case(case, binaries, modules, workspace, args))
         results['passed'] = not any(a['regressed'] for c in results['cases'] for a in c['assessment'].values())
     except BaseException as error:

@@ -57,7 +57,7 @@ when a stream changes state.
 | Distribution A (npm) | npm package with per-platform binaries and bundled helpers | Distribution A: npm package | `distribution/npm-` | Shipped: `typescript-crap@2.3.2` (npm `latest`, provenance, staged publishing approved with 2FA); published-release npm checks pass with npm, pnpm, Yarn and Bun (#48–#50, #53, #56, #57) |
 | Performance: core | `PERFORMANCE_PLAN.md` WP0 (golden identities, guard, hosted benchmark), then WP3 (analyzer CPU) | Perf core: safety net + analyzer CPU (WP0, WP3) | `perf/` | Done: #77, #80, #78 (merged 2026-11-16) |
 | Performance: filesystem + parallel | WP1 (selection), WP2 (output preflight), then WP4 (bounded parallel analysis) once WP3 has merged | Perf filesystem + parallel scan (WP1, WP2, WP4) | `perf/` | Done: #82, #83, #84; mutation sharding #87 |
-| Performance: install + memory | D0–D3 (GitHub Action and archive), D4 investigation, then WP5 (report and baseline memory) | Perf install track + memory (D0-D3, WP5) | `perf/` | Done: #76, #79, #88. D3 skipped and D4 dropped by decision (see `PERFORMANCE_PLAN.md` status) |
+| Performance: install + memory | D0–D3 (GitHub Action and archive), D4 investigation, then WP5 (report and baseline memory) | Perf install track + memory (D0-D3, WP5) | `perf/` | Done: #76, #79, #88, #90, #93 (D3 as hardening). D4 dropped by decision (see `PERFORMANCE_PLAN.md` status) |
 | Performance: WP6 follow-ups | Node coverage helpers (#89), corpus benchmark `baseline_ref`, mimalloc decision for musl | this coordinating thread, with OpenCode subagents | `perf/`, `ci/` | In progress 2026-11-16 |
 | Docs PRs | This file and the two plans; owner decisions | this coordinating thread | `docs/` | #40 merged; #45 decisions |
 

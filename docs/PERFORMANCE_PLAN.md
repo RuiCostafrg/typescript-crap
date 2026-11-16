@@ -19,6 +19,7 @@ comparison and full VS Code scans.
 | WP4 bounded parallel analysis | #84 | `--jobs`; default `min(CPUs, 4)`; peak RSS 1.14× single-thread on glibc, 1.00× on musl |
 | WP5 report and baseline memory | #79 | `--write-baseline` peak RSS 480 → 178 MB on VS Code |
 | D0–D2, D5 install track | #76, #88 | Trusted root fetched during the download (0.55–0.67 s per Action install); archives 6.5–10% smaller |
+| D3 attested digest (hardening) | #93 | The Action binds each asset to its own attested subject digest and no longer downloads the unsigned `.sha256` sidecar |
 | WP6 Node coverage helpers | #89 | Open. Fewer allocations; source maps decoded once per generated file |
 
 Hosted full VS Code scans (15,246 files, 431,594 functions, default job count;
@@ -55,9 +56,14 @@ All four builds produced the identical report:
 - **WP6 allocator:** mimalloc on musl only cut musl wall time by 25% and system
   time from 12 s to 0.5 s, for 12% more peak RSS. It adds a C dependency
   (`libmimalloc-sys`) to the musl build, so adopting it is an owner decision.
-- **Not done, by decision:** D3 (the checksum sidecar costs only 30–50 ms
-  hosted; a hardening variant waits on branch `perf/d3-attested-digest`) and D4
-  (a restored TUF cache would become the trust anchor for 0.2–0.5 s).
+- **D3 shipped as hardening, not for speed:** the sidecar cost only 30–50 ms
+  hosted. Every release the Action accepts (2.2.1–2.4.0) names each asset in
+  its attestation, so no accepted release lost support.
+- **Not done, by decision:** D4 (a restored TUF cache would become the trust
+  anchor for 0.2–0.5 s).
+- **Public API:** WP5's `Baseline::render_report_to` and WP4's
+  `ScanExtensions::jobs` are stable 2.x API (pinned by an external-crate test
+  in #90), so the next release is 2.5.0.
 - **Still open in WP6:** a single merged AST walk (do it only if collection is
   still a large share on a hosted profile) and pipelined `git cat-file` for
   large diffs.

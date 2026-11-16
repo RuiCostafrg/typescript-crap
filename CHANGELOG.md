@@ -4,6 +4,11 @@
 
 ### Changed
 
+- The static musl build (every Linux install channel) uses mimalloc instead of
+  musl's allocator, which takes a global lock. On a full VS Code scan on a
+  hosted x86-64 runner this cut wall time by 25% (38.5 s to 29.1 s) and system
+  CPU from 12 s to 0.5 s, for about 12% more peak memory. Reports are byte for
+  byte unchanged. glibc, macOS and Windows builds keep the system allocator.
 - Faster coverage conversion and import on large or minified sources; output is unchanged.
 - The corpus benchmark can build an older git ref with the same toolchain,
   profile, targets and `--locked` flag and measure it interleaved with the

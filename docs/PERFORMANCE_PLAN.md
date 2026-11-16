@@ -55,7 +55,8 @@ All four builds produced the identical report:
   the lowest-CPU option.
 - **WP6 allocator:** mimalloc on musl only cut musl wall time by 25% and system
   time from 12 s to 0.5 s, for 12% more peak RSS. It adds a C dependency
-  (`libmimalloc-sys`) to the musl build, so adopting it is an owner decision.
+  (`libmimalloc-sys`) to the musl build. The owner adopted it on 2026-11-16
+  (musl builds only; glibc, macOS and Windows keep the system allocator).
 - **D3 shipped as hardening, not for speed:** the sidecar cost only 30–50 ms
   hosted. Every release the Action accepts (2.2.1–2.4.0) names each asset in
   its attestation, so no accepted release lost support.

@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 2.5.0 — 2026-11-16
+
+Faster scans with byte-identical reports: bounded parallel analysis
+(`--jobs`, default up to 4 threads), cheaper function analysis, fewer
+filesystem calls and lower peak memory on baseline and stdout scans. On a
+full VS Code scan on one hosted x86-64 runner, scans take about half the time
+of v2.4.0 on glibc. Release archives are smaller and the GitHub Action
+installs faster, and it now binds each asset to its own attested digest.
 
 ### Changed
 

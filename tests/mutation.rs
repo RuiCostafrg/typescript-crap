@@ -1011,3 +1011,141 @@ fn unselected_mutants_are_counted_without_affecting_selected_function_evidence()
     assert_eq!(evidence.files_with_mutants, 1);
     assert_eq!(evidence.files_without_mutants, 0);
 }
+
+#[test]
+fn a_function_failing_both_gates_is_a_plain_fail() {
+    let source = "export function complex(x: number) { if (x > 0) return true; if (x > 1) return false; if (x > 2) return false; return false; }\n";
+    let edit = edit(source, "true", 0, "boolean-literal", "false", "survived");
+    let (_project, root, input) =
+        synthetic_project(&[("complex.ts", source)], "complex.ts", source, &[edit]);
+    let report = scanned(&root, &input);
+    let f = &report.functions[0];
+    assert!(f.crap > report.threshold && f.failed, "{report:?}");
+    let evidence = report.mutation.as_ref().unwrap();
+    assert!(evidence.functions[0].failed);
+    assert_eq!(evidence.functions_failed_by_mutation_only, 0);
+    let text = render(&report, Format::Text).unwrap();
+    let row = format!(
+        "{}:{}:{}  {}  {}  {:.1}%  {:.3}  FAIL\n",
+        f.path,
+        f.line,
+        f.column,
+        f.name,
+        f.complexity,
+        f.coverage * 100.0,
+        f.crap
+    );
+    assert!(text.contains(&row), "{text}");
+    assert!(!text.contains("FAIL (mutation)"), "{text}");
+}
+
+#[test]
+fn mutation_tables_list_only_unkilled_functions_with_exact_inconclusive_counts() {
+    let source = "export function killedOnly() { return 21; }\n\
+                  export function mixed() { return 31 + 32 + 33 + 34 + 35; }\n\
+                  export function uncovered() { return 41; }\n";
+    let mutate =
+        |needle: &str, outcome: &str| edit(source, needle, 0, "numeric-literal", "0", outcome);
+    let edits = [
+        mutate("21", "killed"),
+        mutate("31", "killed"),
+        mutate("32", "killed"),
+        mutate("33", "survived"),
+        mutate("34", "timeout"),
+        mutate("35", "timeout"),
+        mutate("41", "no-coverage"),
+    ];
+    let (_project, root, input) = synthetic_project(&[("m.ts", source)], "m.ts", source, &edits);
+    let report = scanned(&root, &input);
+    let evidence = report.mutation.as_ref().unwrap();
+    let mixed = &evidence.functions[index_of(&report, "mixed")];
+    assert_eq!(
+        (
+            mixed.mutants,
+            mixed.killed,
+            mixed.survived,
+            mixed.no_coverage
+        ),
+        (5, 2, 1, 0)
+    );
+
+    let text = render(&report, Format::Text).unwrap();
+    assert!(text.contains("  mixed  2  1  0  2  "), "{text}");
+    assert!(text.contains("  uncovered  0  0  1  0  "), "{text}");
+    assert!(!text.contains("  killedOnly  1  0  0  0  "), "{text}");
+
+    let html = render(&report, Format::Html).unwrap();
+    let cells = |name: &str, counts: &str| format!("<code>{name}</code></td>{counts}");
+    assert!(
+        html.contains(&cells("mixed", "<td>2</td><td>1</td><td>0</td><td>2</td>")),
+        "{html}"
+    );
+    assert!(
+        html.contains(&cells(
+            "uncovered",
+            "<td>0</td><td>0</td><td>1</td><td>0</td>"
+        )),
+        "{html}"
+    );
+    assert!(
+        !html.contains(&cells(
+            "killedOnly",
+            "<td>1</td><td>0</td><td>0</td><td>0</td>"
+        )),
+        "{html}"
+    );
+
+    let xml = render(&report, Format::Xml).unwrap();
+    assert!(
+        xml.contains(
+            "mutants=\"5\" killed=\"2\" survived=\"1\" no-coverage=\"0\" inconclusive=\"2\""
+        ),
+        "{xml}"
+    );
+}
+
+#[test]
+fn unparsable_files_count_their_mutants_in_the_selection_totals() {
+    let broken = "export function broken( {\n";
+    let good = "const top = 1;\nexport function f() { return true; }\n";
+    let empty = "export function e() { return 0; }\n";
+    let survived =
+        |source: &str, needle: &str| edit(source, needle, 0, "operator", "x", "survived");
+    let (_project, root, input) = synthetic_project(
+        &[("bad.ts", broken), ("good.ts", good), ("empty.ts", empty)],
+        "bad.ts",
+        broken,
+        &[
+            survived(broken, "export"),
+            survived(broken, "broken"),
+            survived(broken, "function"),
+        ],
+    );
+    let mut document: Value = serde_json::from_str(&fs::read_to_string(&input).unwrap()).unwrap();
+    let extra = synthetic_report(
+        &root,
+        "good.ts",
+        good,
+        &[survived(good, "1"), survived(good, "true")],
+    );
+    for mutant in extra["mutants"].as_array().unwrap() {
+        document["mutants"]
+            .as_array_mut()
+            .unwrap()
+            .push(mutant.clone());
+    }
+    for key in ["total", "survived", "scoreDenominator"] {
+        document["summary"][key] = json!(5);
+    }
+    fs::write(&input, serde_json::to_vec(&document).unwrap()).unwrap();
+    let mut extensions = with_mutation_report(&input);
+    extensions.on_syntax_error = ts_crap::OnSyntaxError::Report;
+    let report = scan_with(&options(&root), &extensions).unwrap();
+    assert_eq!(report.syntax_errors.len(), 1);
+    let evidence = report.mutation.unwrap();
+    assert_eq!(evidence.mutants_in_functions, 1);
+    assert_eq!(evidence.mutants_outside_functions, 4);
+    assert_eq!(evidence.mutants_outside_selection, 0);
+    assert_eq!(evidence.files_with_mutants, 2);
+    assert_eq!(evidence.files_without_mutants, 1);
+}

@@ -4,10 +4,10 @@ Drafted 2026-11-13. This is a plan, not a record of shipped behaviour. The
 implementing thread should correct it wherever the code or Oximut's report
 contract contradicts it.
 
-**Status 2026-11-14: M1–M4 implemented and locally validated. The recommended
-behavior is recorded in [MUTATION_EVIDENCE.md](MUTATION_EVIDENCE.md).
-M5 is complete: documentation and local checks are recorded below, and
-[draft PR #81](https://github.com/RuiCostafrg/typescript-crap/pull/81) is open.**
+**Status 2026-11-17: M1–M5 implemented; the branch is merged up to main
+(v2.5.0, parallel pipeline). [Draft PR #81](https://github.com/RuiCostafrg/typescript-crap/pull/81)
+stays a draft: no merge, release or npm publish. Open items: the hosted
+mutation gate (see "Hosted mutation gate" below) and the owner decisions.**
 
 ## Goal
 
@@ -121,13 +121,17 @@ are recorded in
 
 1. Scoring rule: capped effective coverage versus a separate gate.
 
-   **Resolved: separate gate.** Any survived or no-coverage mutant fails the
-   function regardless of complexity or CRAP threshold;
-   `effective_coverage`/`effective_crap` stay informational.
+   **Implemented recommendation, awaiting the owner: separate gate.** Any
+   survived or no-coverage mutant fails the function regardless of complexity
+   or CRAP threshold; `effective_coverage`/`effective_crap` stay
+   informational. Trade-off to weigh: Oximut reports have no way to mark an
+   equivalent mutant, so one equivalent survivor fails its function with no
+   suppression. Capped effective coverage gating on `effective_crap` would
+   tolerate that for low-complexity functions but never flags a CC 1 function.
 2. Whether filtered-subset evidence may ever lower a score, or only be shown.
 
-   **Resolved: subset/unknown reports may fail functions but never prove
-   complete adequacy.** With the separate gate, nothing is "lowered":
+   **Implemented recommendation, awaiting the owner: subset/unknown reports
+   may fail functions but never prove complete adequacy.** With the separate gate, nothing is "lowered":
    `subset`/`unknown` is labelled partial evidence in every report.
 3. Whether to ask Oximut for source hashes before this ships as stable.
 
@@ -155,17 +159,20 @@ run: no browser executable is installed here; HTML output and gate markers are
 covered by the integration suite. Oximut test execution is blocked by PRoot's
 process-tree checks, so reconstructed fixture provenance is recorded explicitly.
 
-## Merge follow-up
+## Branch synchronization
 
-The owner subsequently authorized babysitting and an admin merge once CI is
-green. The branch was synchronized with main's analyzer and memory improvements;
-75 focused tests and strict Clippy passed after conflict resolution. Independent
-GLM review found a producer-position mismatch for lone CR and Unicode line
-separators. That blocker is fixed: input positions use Oximut's JavaScript line
-breaks and UTF-16 columns while ownership retains Tree-sitter coordinates.
-All 14 mutation integration tests and strict Clippy pass after the fix, including
-regressions for LF/CRLF/CR/U+2028/U+2029 and unselected-mutant accounting.
-Hosted checks on the final head must still pass before merging.
+The branch was synchronized with main twice. The first sync took main's
+analyzer and memory improvements; an independent GLM review then found a
+producer-position mismatch for lone CR and Unicode line separators, since fixed
+(input positions use Oximut's JavaScript line breaks and UTF-16 columns while
+ownership keeps Tree-sitter coordinates, with LF/CRLF/CR/U+2028/U+2029
+regressions). The second sync (2026-11-17) took v2.5.0, whose bounded parallel
+pipeline (`src/pipeline.rs`) replaced the scan loop; mutation evidence now
+travels per file through it, so parallel and sequential scans agree.
+
+No merge is authorized: the PR stays a draft until the owner decides.
+
+## Hosted mutation gate
 
 The first full mutation job on the reviewed head exceeded its one-hour workflow
 budget before publishing a score or artifacts. The 86 other checks passed.
@@ -175,3 +182,15 @@ leave time for the existing always-run score/artifact steps. Full production
 scope, the complete test suite, per-mutant/build timeouts and the 90% gate are
 unchanged. Partial runs still fail. Sharding was considered but deferred to
 avoid changing aggregation or required-check semantics within this feature.
+
+With 120 minutes the job finished: 94.71% (609 caught, 33 missed, 1 timeout),
+above the 90% floor, but the timeout failed the gate. The timeout was a real
+infinite loop: mutating `assign`'s index counter (`next += 1` to `next *= 1`).
+`assign` now advances with a forward-only iterator, so no mutation of it can
+hang. Main has since sharded the mutation job four ways (#87), which the
+2026-11-17 sync adopts in place of the timeout increase. Fourteen of the 33
+misses were new in this feature's code; tests were added to kill them. The
+score tolerance mutant in `Mutation::load` (`< 1e-9` to `<= 1e-9`) is
+equivalent: Oximut computes `100 * killed / denominator`, serde_json's default
+float parser may differ by one ULP, so an exact comparison would reject valid
+reports, and no representable score lies exactly 1e-9 away.

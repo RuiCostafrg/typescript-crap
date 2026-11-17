@@ -52,7 +52,12 @@ Ownership uses the analyzed function spans, so an unparsable selected file
 (retained under `--on-syntax-error report`) owns no functions: its mutants are
 still validated for freshness and counted, but never scored.
 
-## The mutation gate (decision)
+## The mutation gate (recommendation)
+
+This is the implemented recommendation; the owner has not yet chosen between
+it and the capped-coverage alternative below. One known cost: Oximut reports
+cannot mark a mutant as equivalent, so an equivalent survivor fails its
+function and nothing in this slice can suppress it.
 
 **A function fails a separate mutation gate when it owns at least one mutant
 with outcome `survived` or `no_coverage`.** The gate is independent of the CRAP

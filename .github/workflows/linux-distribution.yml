@@ -42,6 +42,14 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
         run: cargo build --locked --profile dist --target "$TARGET"
+      - name: Static scanner allocates through mimalloc
+        env:
+          TARGET: ${{ matrix.target }}
+        # The `override` feature alone links nothing; only the #[global_allocator]
+        # in src/main.rs pulls mimalloc in. Fail if musl's allocator is back.
+        run: |
+          MIMALLOC_VERBOSE=1 "target/$TARGET/dist/ts-crap" --version >/dev/null 2>"$RUNNER_TEMP/mimalloc.log"
+          grep '^mimalloc:' "$RUNNER_TEMP/mimalloc.log"
       - name: Assemble and reproduce packages
         env:
           TARGET: ${{ matrix.target }}

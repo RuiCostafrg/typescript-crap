@@ -6,6 +6,7 @@ mod config;
 mod coverage;
 mod mutation;
 pub use mutation::{EvidenceKind, FunctionMutation, MutationEvidence, MutatorScope};
+mod pipeline;
 mod report;
 pub use report::terminal as escape_terminal;
 mod selection;
@@ -53,6 +54,11 @@ pub struct ScanExtensions {
     /// Oximut JSON report (schema version 1) for these sources, relative to the
     /// caller's current directory. None, the default, leaves every result unchanged.
     pub mutation_report: Option<PathBuf>,
+    /// Worker threads that analyze selected files; 0 and 1 (the default) analyze
+    /// on the calling thread. Selections of fewer than 32 files always do. Files
+    /// are still read and verified on the calling thread in order, and the report
+    /// and any error are the same for every value.
+    pub jobs: usize,
 }
 
 /// A selected source that could not be parsed, at its first syntax error.
@@ -253,20 +259,13 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
         .as_deref()
         .map(|path| mutation::Mutation::load(path, &root))
         .transpose()?;
-    // Parallel to `functions` when mutation evidence is supplied.
-    let mut mutated = Vec::new();
-    let (mut mutants_in_selection, mut files_with_mutants) = (0, 0);
-    let mut functions = Vec::new();
-    let mut files_missing_coverage = 0;
-    let mut functions_missing_coverage = 0;
-    let mut syntax_errors = Vec::new();
-    let mut analyzer = analysis::Analyzer::default();
+    let mut totals = pipeline::Totals::default();
     let mut committed = if files.is_empty() || selection.committed.is_empty() {
         None
     } else {
         Some(selection::BlobReader::new(&root)?)
     };
-    for path in &files {
+    let mut load = |path: &PathBuf| -> Result<(String, String)> {
         let relative = validation::source_path(path.strip_prefix(&root)?)?;
         let source =
             std::fs::read_to_string(path).with_context(|| format!("cannot read {relative}"))?;
@@ -277,91 +276,27 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
                 .context("selected source has no committed identity")?;
             reader.verify(oid, path, &source)?;
         }
-        let methods = match analyzer.analyze(&relative, &source) {
-            Ok(methods) => methods,
-            Err(error) if extensions.on_syntax_error == OnSyntaxError::Report => {
-                let Some(issue) = error.downcast_ref::<analysis::SyntaxError>() else {
-                    return Err(error);
-                };
-                // Reporting syntax errors must not hide stale or invalid coverage.
-                let source_coverage = coverage
-                    .as_ref()
-                    .map(|coverage| coverage.for_source(&relative, &source))
-                    .transpose()?;
-                files_missing_coverage +=
-                    usize::from(source_coverage.as_ref().is_none_or(|c| !c.present()));
-                // Nor stale mutation evidence; an unparsed file owns no functions.
-                if let Some(mutation) = &mutation {
-                    let mutants = mutation.for_source(&relative, &source)?.len();
-                    mutants_in_selection += mutants;
-                    files_with_mutants += usize::from(mutants > 0);
-                }
-                syntax_errors.push(UnparsedFile {
-                    path: relative.clone(),
-                    line: issue.line,
-                    column: issue.column,
-                    column_utf16: issue.column_utf16,
-                    // Saved reports may be shared independently of repository access.
-                    message: format!(
-                        "invalid TypeScript syntax in {}:{}:{} (UTF-8 byte column)",
-                        issue.path, issue.line, issue.column
-                    ),
-                });
-                continue;
-            }
-            Err(error) => return Err(error),
-        };
-        // Validate coverage even for selected files with no implemented functions.
-        let source_coverage = coverage
-            .as_ref()
-            .map(|cov| cov.for_source(&relative, &source))
-            .transpose()?;
-        let missing_file = source_coverage.as_ref().is_none_or(|c| !c.present());
-        files_missing_coverage += usize::from(missing_file);
-        // Validate mutation evidence even for files with no implemented functions.
-        let source_mutants = mutation
-            .as_ref()
-            .map(|mutation| mutation.for_source(&relative, &source))
-            .transpose()?;
-        let mut owned = source_mutants.as_ref().map(|mutants| {
-            mutants_in_selection += mutants.len();
-            files_with_mutants += usize::from(mutants.len() > 0);
-            mutants.assign(&methods).into_iter()
-        });
-        for method in methods {
-            let evidence = source_coverage
-                .as_ref()
-                .map(|coverage| coverage.evidence(&method.lines))
-                .transpose()?
-                .unwrap_or_default();
-            functions_missing_coverage += usize::from(!evidence.complete);
-            let cov = evidence.fraction;
-            let crap = mutation::crap(method.complexity, cov);
-            let mut failed = crap > threshold;
-            if let Some(owned) = &mut owned {
-                let counts = owned.next().unwrap_or_default();
-                let evidence = FunctionMutation::new(&method, &relative, counts, cov);
-                failed |= evidence.failed;
-                mutated.push(evidence);
-            }
-            functions.push(FunctionScore {
-                identity: method.identity,
-                path: relative.clone(),
-                name: method.name,
-                line: method.line,
-                column: method.column,
-                column_utf16: method.column_utf16,
-                end_line: method.end_line,
-                complexity: method.complexity,
-                coverage: cov,
-                crap,
-                failed,
-            });
-        }
-    }
+        Ok((relative, source))
+    };
+    let context = pipeline::FileContext {
+        coverage: coverage.as_ref(),
+        threshold,
+        on_syntax_error: extensions.on_syntax_error,
+        mutation: mutation.as_ref(),
+    };
+    pipeline::run(&files, extensions.jobs, &mut load, &context, &mut totals)?;
     if let Some(reader) = &mut committed {
         reader.finish()?;
     }
+    let pipeline::Totals {
+        mut functions,
+        files_missing_coverage,
+        functions_missing_coverage,
+        syntax_errors,
+        mut mutated,
+        mutants_in_selection,
+        files_with_mutants,
+    } = totals;
     if mutation.is_some() {
         // Sort both lists with one permutation so they stay parallel.
         let mut pairs: Vec<_> = functions.into_iter().zip(mutated).collect();

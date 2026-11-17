@@ -610,3 +610,48 @@ fn diff_selection_respects_configured_excluded_directories() {
             .any(|f| f.path == "src/build/new.ts")
     );
 }
+
+#[test]
+/// HEAD-blob verification stays on the calling thread in file order, so worker
+/// count changes neither a diff report nor which uncommitted file is named.
+fn diff_scans_and_verification_errors_do_not_depend_on_jobs() {
+    let dir = repo();
+    let root = dir.path();
+    for index in 0..40 {
+        let extension = if index % 2 == 0 { "ts" } else { "tsx" };
+        fs::write(
+            root.join(format!("f{index:02}.{extension}")),
+            format!(
+                "export function f{index}(a: boolean, b: boolean) {{ if (a && b) return 1; return {index}; }}\n"
+            ),
+        )
+        .unwrap();
+    }
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "many files"]);
+    let sequential = run(root, &["--diff", "base", "--jobs", "1"]);
+    assert_eq!(sequential.status.code(), Some(1), "{sequential:?}");
+    let value: serde_json::Value = serde_json::from_slice(&sequential.stdout).unwrap();
+    assert_eq!(value["files_scanned"], 40);
+    for jobs in ["2", "4"] {
+        let parallel = run(root, &["--diff", "base", "--jobs", jobs]);
+        assert_eq!(parallel.status.code(), Some(1));
+        assert_eq!(parallel.stdout, sequential.stdout, "jobs {jobs}");
+    }
+    // Two uncommitted edits: the first one in file order is always reported.
+    fs::write(root.join("f07.tsx"), "export const edited = 1;\n").unwrap();
+    fs::write(root.join("f31.tsx"), "export const edited = 2;\n").unwrap();
+    let expected = run(root, &["--diff", "base", "--jobs", "1"]);
+    assert_eq!(expected.status.code(), Some(2));
+    let message = String::from_utf8_lossy(&expected.stderr).into_owned();
+    assert!(
+        message.contains("uncommitted") && message.contains("f07.tsx"),
+        "{message}"
+    );
+    for _ in 0..5 {
+        let parallel = run(root, &["--diff", "base", "--jobs", "4"]);
+        assert_eq!(parallel.status.code(), Some(2));
+        assert_eq!(String::from_utf8_lossy(&parallel.stderr), message);
+        assert!(parallel.stdout.is_empty());
+    }
+}

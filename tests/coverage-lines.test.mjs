@@ -59,6 +59,127 @@ test("independent processes add evidence without mutating inputs", () => {
   }
 });
 
+// Previous slicing implementation, kept verbatim as an independent reference oracle.
+function legacyPrecedes(a, b) {
+  const difference = a.end - a.start - (b.end - b.start);
+  return difference < 0 || (difference === 0 && a.count < b.count);
+}
+
+function legacyInsert(heap, range) {
+  let index = heap.length;
+  heap.push(range);
+  while (index > 0) {
+    const parent = Math.floor((index - 1) / 2);
+    if (!legacyPrecedes(range, heap[parent])) break;
+    heap[index] = heap[parent];
+    index = parent;
+  }
+  heap[index] = range;
+}
+
+function legacyRemoveFirst(heap) {
+  const last = heap.pop();
+  if (!heap.length) return;
+  let index = 0;
+  while (index * 2 + 1 < heap.length) {
+    let child = index * 2 + 1;
+    if (child + 1 < heap.length && legacyPrecedes(heap[child + 1], heap[child])) child++;
+    if (!legacyPrecedes(heap[child], last)) break;
+    heap[index] = heap[child];
+    index = child;
+  }
+  heap[index] = last;
+}
+
+function legacyLineHits(script, source) {
+  const events = new Map();
+  function event(offset) {
+    if (!events.has(offset)) events.set(offset, []);
+    return events.get(offset);
+  }
+  for (const fn of script.functions) {
+    for (const range of fn.ranges) {
+      const { startOffset: start, endOffset: end, count } = range;
+      if (
+        !Number.isSafeInteger(start) ||
+        !Number.isSafeInteger(end) ||
+        start < 0 ||
+        end < start ||
+        !Number.isSafeInteger(count) ||
+        count < 0
+      ) {
+        throw new Error(`Invalid V8 range for ${script.url}`);
+      }
+      const clippedEnd = Math.min(end, source.length);
+      if (start >= clippedEnd) continue;
+      const item = { start, end: clippedEnd, count };
+      event(start).push(item);
+      event(clippedEnd);
+    }
+  }
+  const starts = [0];
+  for (let i = 0; i < source.length; i++) if (source[i] === "\n") starts.push(i + 1);
+  const active = [];
+  const hits = {};
+  const offsets = [...events.keys()].sort((a, b) => a - b);
+  let line = 0;
+  for (let i = 0; i < offsets.length - 1; i++) {
+    const start = offsets[i];
+    for (const item of events.get(start)) legacyInsert(active, item);
+    while (active.length && active[0].end <= start) legacyRemoveFirst(active);
+    const inner = active[0];
+    if (!inner) continue;
+    while (line + 1 < starts.length && starts[line + 1] <= start) line++;
+    for (let cursor = start; cursor < offsets[i + 1];) {
+      const end = Math.min(offsets[i + 1], starts[line + 1] ?? source.length);
+      if (source.slice(cursor, end).trim()) {
+        const key = String(line + 1);
+        hits[key] = Math.min(hits[key] ?? Infinity, inner.count);
+      }
+      cursor = end;
+      if (cursor < offsets[i + 1]) line++;
+    }
+  }
+  return hits;
+}
+
+const legacyHits = (source, ...ranges) =>
+  legacyLineHits({ url: "file:///sample.mts", functions: [{ ranges }] }, source);
+
+test("minified one-line sources with Unicode whitespace keep the slicing result", () => {
+  const separators = ["\u00a0", "\u2028", "\uFEFF"];
+  const parts = [];
+  for (let index = 1; index <= 3000; index++)
+    parts.push(`v${index % 10}`, separators[index % separators.length]);
+  const source = `\uFEFF${parts.join("")}`;
+  const ranges = [range(0, source.length, 7)];
+  for (let index = 0; index < 300; index++) {
+    const start = Math.min(index * 41, source.length);
+    ranges.push(range(start, Math.min(start + 600, source.length), index % 4));
+  }
+  const expected = legacyHits(source, ...ranges);
+  assert.deepEqual(hits(source, ...ranges), expected);
+  assert.deepEqual(hits(source, ...ranges.toReversed()), expected);
+  assert.deepEqual(Object.keys(expected), ["1"]);
+  const blank = "\u00a0\u2028\uFEFF \t";
+  assert.deepEqual(
+    hits(blank, range(0, blank.length, 3)),
+    legacyHits(blank, range(0, blank.length, 3)),
+  );
+  assert.deepEqual(hits(blank, range(0, blank.length, 3)), {});
+});
+
+test("merging copies the accumulator once and leaves frozen inputs intact", () => {
+  const previous = Object.freeze({ 2: 1, 5: 0 });
+  const incoming = Object.freeze({ 2: 4, 7: 2 });
+  const result = mergeLineHits(previous, incoming);
+  assert.notEqual(result, previous);
+  assert.deepEqual(result, { 2: 5, 5: 0, 7: 2 });
+  assert.deepEqual(Object.keys(result), ["2", "5", "7"]);
+  assert.deepEqual(previous, { 2: 1, 5: 0 });
+  assert.deepEqual(incoming, { 2: 4, 7: 2 });
+});
+
 // Independent per-code-unit oracle: no sweep events or active-set state.
 function referenceHits(source, ranges) {
   const hits = {};

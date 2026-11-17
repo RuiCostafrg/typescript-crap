@@ -94,7 +94,7 @@ installs, pin a version instead. Each release's installer installs only that
 release and embeds the SHA-256 of every archive it can download:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/RuiCostafrg/typescript-crap/releases/download/v2.4.0/ts-crap-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/RuiCostafrg/typescript-crap/releases/download/v2.5.0/ts-crap-installer.sh | sh
 ```
 
 To check the installer before running it, download it, verify its
@@ -102,7 +102,7 @@ To check the installer before running it, download it, verify its
 only then run the verified file:
 
 ```sh
-version=2.4.0
+version=2.5.0
 installer_dir=$(mktemp -d) &&
 curl --proto '=https' --tlsv1.2 -LsSf -o "$installer_dir/ts-crap-installer.sh" \
   "https://github.com/RuiCostafrg/typescript-crap/releases/download/v$version/ts-crap-installer.sh" &&
@@ -163,7 +163,7 @@ adds `ts-crap` to `PATH`. It can also run the gate and upload SARIF:
 ```yaml
 - uses: RuiCostafrg/typescript-crap@<full commit SHA> # vX.Y.Z
   with:
-    version: 2.4.0
+    version: 2.5.0
 ```
 
 Pinning the full commit SHA, with the release as a comment, is the recommended
@@ -201,7 +201,7 @@ hosted runners in November 2026, with v2.4.0 assets and empty caches
 | --- | ---: | ---: | ---: | --- |
 | npm (`npm install --save-exact`) | 0.5 s | 1.2 s | 1.0 s | Registry integrity hashes, recorded in the lockfile. Build provenance only if you also run `npm audit signatures` |
 | Shell installer, pinned version | 0.4 s | 0.7 s | — | The archive's SHA-256 against the installer's embedded checksum, when `sha256sum` is available. Build provenance only if you [verify the installer first](#macos-and-linux) |
-| GitHub Action | 3.9 s | 4.3 s | 4.4 s | Build provenance against this repository's release workflow at the tag, then the SHA-256 and the reported version |
+| GitHub Action | 3.9 s | 4.3 s | 4.4 s | Build provenance against this repository's release workflow at the tag, then that the attestation records the archive's SHA-256 under its exact name, then the reported version |
 
 npm is the fastest path. The Action figures are for releases after v2.4.0, which
 fetch the trusted root while the archive downloads; the v2.4.0 Action takes about
@@ -350,6 +350,11 @@ from a nonempty passing scan. Thresholds must be finite and nonnegative.
   branches, creates a PR, or uploads reports.
 - `--diff` and `--pr` are mutually exclusive. A shallow checkout missing a base
   commit is an error; fetch sufficient history (e.g. `fetch-depth: 0` in CI).
+- Selections of 32 files or more are parsed and scored on up to `--jobs N`
+  worker threads (default: the available cores, at most 4). Files are still read
+  and verified against Git in order on one thread. Reports, baselines, exit
+  codes and the reported error (always the first failing file in path order) do
+  not depend on `N`. `--jobs 1` analyzes on one thread.
 
 ### Report output safety
 

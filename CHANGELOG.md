@@ -32,12 +32,27 @@ coverage. Oximut is read-only for ts-crap and is unchanged.
   attributes in XML, and the new SARIF rule `TSCRAP003` for surviving or
   uncovered mutants. Machine output is unaffected by presentation options.
 
-- `Baseline::render_report_to` streams a report's baseline snapshot without
-  copying it first; it writes the same bytes as `Baseline::capture` followed by
-  `render_to`.
+## 2.5.0 — 2026-11-16
+
+Faster scans with byte-identical reports: bounded parallel analysis
+(`--jobs`, default up to 4 threads), cheaper function analysis, fewer
+filesystem calls and lower peak memory on baseline and stdout scans. On a
+full VS Code scan on one hosted x86-64 runner, scans take about half the time
+of v2.4.0 on glibc. Release archives are smaller and the GitHub Action
+installs faster, and it now binds each asset to its own attested digest.
 
 ### Changed
 
+- The static musl build (every Linux install channel) uses mimalloc instead of
+  musl's allocator, which takes a global lock. On a full VS Code scan on a
+  hosted x86-64 runner this cut wall time by 25% (38.5 s to 29.1 s) and system
+  CPU from 12 s to 0.5 s, for about 12% more peak memory. Reports are byte for
+  byte unchanged. glibc, macOS and Windows builds keep the system allocator.
+- Faster coverage conversion and import on large or minified sources; output is unchanged.
+- The corpus benchmark can build an older git ref with the same toolchain,
+  profile, targets and `--locked` flag and measure it interleaved with the
+  current commit, so before/after ratios come from one runner instead of two
+  different CPU models.
 - Function analysis evaluates node kinds through per-grammar tables of symbol
   ids, hashes each function's tokens as one buffered stream, keeps owned lines
   in a sorted vector and tracks ancestors during the tree walk instead of
@@ -48,9 +63,18 @@ coverage. Oximut is read-only for ts-crap and is unchanged.
   download, instead of afterwards. On GitHub-hosted runners this saves a median
   0.55–0.67 seconds per install. What is verified, and the rule that nothing is
   extracted or run before verification, are unchanged.
+- The GitHub Action binds each downloaded asset to its own name in the verified
+  build-provenance attestation: every subject named like the asset must carry
+  the asset's SHA-256. `gh attestation verify` alone accepts any attested
+  subject with a matching digest, so another attested release asset could have
+  stood in for the requested one. The unsigned `.sha256` sidecar is no longer
+  downloaded (it is still published for manual checks). All releases the Action
+  accepts (2.2.1 and later) name every asset in their attestations.
 - Release binaries no longer carry a symbol table (`strip = "symbols"` in the
   `dist` profile). The Linux x86-64 archive shrinks by 7.5% (1.42 MB to 1.31 MB),
-  the Linux ARM64 archive by 10.3% and the macOS ARM64 archive by 7.3%. Panic
+  the Linux ARM64 archive by 10.3% and the macOS ARM64 archive by 7.3%; the
+  glibc Linux and macOS x86-64 archives shrink by 6.5–10%. The Windows archive is
+  unchanged, since MSVC already keeps symbols out of the executable. Panic
   messages keep their file and line, but backtraces no longer show function
   names. Builds from source with `--release` are unchanged.
 - The README compares install times and what each install path verifies, with
@@ -61,6 +85,52 @@ coverage. Oximut is read-only for ts-crap and is unchanged.
   a `--baseline` scan from 466 MB to 432 MB. Stdout reports are staged in an
   anonymous temporary file (in memory if none can be created) and still appear
   only after every file is published.
+- Directory scans check each directory for symbolic links once per scan instead
+  of once per file. On Linux, walked files are no longer resolved one by one:
+  the walk starts at the resolved project directory and never follows links,
+  so each path is already canonical. Explicitly named paths and every `--diff`
+  and `--pr` path keep the full per-file check, and macOS and Windows keep
+  resolving walked files. Selection, symbolic-link rejection and report bytes
+  are unchanged.
+- Before replacing an existing report or baseline, the check that no
+  TypeScript file under the project root aliases the destination identifies
+  regular files with one `lstat` instead of opening each one (Unix). Symbolic
+  links keep the full check, ignored and hidden files are still checked, and
+  the check still runs again before each rename.
+- **Behaviour change:** an unreadable TypeScript file under the project root no
+  longer aborts publication of `--output` or `--write-baseline` on Unix. Its
+  device and inode prove it is not a destination without opening it.
+
+- The CI performance guard compares report bytes: on pull requests the
+  candidate must reproduce the base's report for every scanner workload unless
+  the pull request is labelled `output-change`, and repeated runs must agree.
+  New workloads cover a mixed corpus with multi-MiB files, an existing
+  `--output` destination, a deep directory tree and a `--baseline` scan.
+- An opt-in `corpus-benchmark` workflow measures full scans of a pinned
+  VS Code commit with the x86-64 glibc and static musl builds
+  (`scripts/bench-corpus.py`).
+
+### Added
+
+- `--jobs N` analyzes selections of 32 files or more on up to N worker threads.
+  The CLI defaults to the available cores, at most 4. Files are still read and
+  verified against Git in path order on one thread. Workers only parse, bind
+  coverage and score, and results are merged in path order. Reports, baselines,
+  exit codes and the reported error (the first failing file in path order,
+  including panics) are the same for every N. In-flight source text is capped
+  at 64 MiB, and a larger file is analyzed alone. Sources over 128 KiB are
+  analyzed on the calling thread and worker results are copied into its heap,
+  which keeps glibc's per-thread heaps small: on the VS Code repository
+  (hosted x86-64, 4 jobs) peak memory was 1.14x a sequential scan with glibc
+  and unchanged with the static musl build, at 1.64x and 1.37x the speed
+  (`docs/measurements/wp4-parallel-rss-2026-11-15.json`).
+- `ScanExtensions::jobs` for library callers. It defaults to 1, so `scan` and
+  `scan_with` start no threads unless asked.
+- `Baseline::render_report_to` streams a report's baseline snapshot without
+  copying it first; it writes the same bytes as `Baseline::capture` followed by
+  `render_to`. It is part of the stable 2.x Rust API, so together with
+  `ScanExtensions::jobs` the next release is a minor one.
+
 ## 2.4.0 — 2026-11-10
 
 Adds configurable excluded directories, syntax-error reporting that keeps

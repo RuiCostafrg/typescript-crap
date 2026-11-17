@@ -705,7 +705,7 @@
    "archive_before": 1167208,
    "archive_after": 1081820
   },
-  "x86_64-pc-windows-msvc": "not measured; MSVC binaries keep symbols in a separate PDB that is not shipped"
+  "x86_64-pc-windows-msvc": "see dist_build_check: unchanged, MSVC keeps symbols in a separate PDB that is not shipped"
  },
  "d4_tuf_cache": {
   "location": "$XDG_CACHE_HOME/gh/.sigstore/root (default ~/.cache/gh/.sigstore/root): tuf-repo-cdn.sigstore.dev/ and tuf-repo.github.com/, each with root, timestamp, snapshot and targets metadata plus targets/trusted_root.json, and a <repo>.json file holding lastTimestamp.",
@@ -725,5 +725,36 @@
    ]
   },
   "decision": "Dropped. A warm cache saves only 0.2-0.5 s, about what an actions/cache restore round trip costs, plus a save step and the caller's cache quota. Restoring the directory would also make a cache entry, writable by other workflow runs in the repository, the TUF trust anchor instead of the root embedded in gh; that is a cache keyed by what the cache supplies."
+ },
+ "dist_build_check": {
+  "run": "https://github.com/RuiCostafrg/typescript-crap/actions/runs/43820997557",
+  "pr": "https://github.com/RuiCostafrg/typescript-crap/pull/88",
+  "date": "2026-11-16",
+  "method": "The release pipeline step itself, on each release runner: cargo-dist 0.33.1 `dist build --tag v2.4.0 --artifacts=local --target T`, first with the strip line removed from [profile.dist] (as in v2.4.0), then as shipped. Archives are the dist-produced release archives (.tar.xz, .zip on Windows). Covers the four targets the D0 run did not build.",
+  "checks": "All passed on all four targets: identical artifact lists in the two dist manifests, identical --version, byte-identical JSON scan of tests/fixtures/golden with the same exit code.",
+  "x86_64-apple-darwin": {
+   "binary_before": 6654820,
+   "binary_after": 6141284,
+   "archive_before": 1340232,
+   "archive_after": 1252704
+  },
+  "aarch64-unknown-linux-gnu": {
+   "binary_before": 7044240,
+   "binary_after": 6166104,
+   "archive_before": 1267676,
+   "archive_after": 1140440
+  },
+  "x86_64-unknown-linux-gnu": {
+   "binary_before": 7200960,
+   "binary_after": 6583304,
+   "archive_before": 1409776,
+   "archive_after": 1303780
+  },
+  "x86_64-pc-windows-msvc": {
+   "binary_before": 6589952,
+   "binary_after": 6590976,
+   "archive_before": 1856997,
+   "archive_after": 1857266
+  }
  }
 }

@@ -135,7 +135,7 @@ replaces the manual install step in the example workflow. It installs the
 
 Before anything downloaded runs, the action:
 
-1. Downloads the archive and its `.sha256` with `gh` into a fresh directory
+1. Downloads the archive with `gh` into a fresh directory
    under `RUNNER_TEMP`, making up to three attempts when the error is transient.
    Meanwhile it fetches the Sigstore trusted root once per install
    (`gh attestation trusted-root`, a full TUF refresh). Either failing stops the
@@ -150,7 +150,11 @@ Before anything downloaded runs, the action:
    ([GHSA-4mq3-hpgx-9cx8](https://github.com/cli/cli/security/advisories/GHSA-4mq3-hpgx-9cx8)).
    Some hosted images still ship such versions, for example 2.98.0 on
    `macos-26` Intel.
-3. Checks the SHA-256, and that the checksum file names that exact archive.
+3. Reads the subjects of the verified attestation and requires every subject
+   named like the archive to carry the archive's SHA-256. `gh` alone accepts any
+   attested subject with a matching digest, so this stops another attested
+   release asset, such as a different platform's archive, standing in for the
+   one requested. The unsigned `.sha256` file is no longer used.
 4. Requires exactly one executable that reports `ts-crap VERSION`, then adds
    its directory to `PATH`.
 
@@ -171,7 +175,7 @@ steps:
       persist-credentials: false
   - uses: RuiCostafrg/typescript-crap@<full commit SHA> # vX.Y.Z
     with:
-      version: 2.4.0
+      version: 2.5.0
       helpers: true
   # ts-crap and $TS_CRAP_HELPERS are now available to later steps.
 ```
@@ -207,7 +211,7 @@ jobs:
           persist-credentials: false
       - uses: RuiCostafrg/typescript-crap@<full commit SHA> # vX.Y.Z
         with:
-          version: 2.4.0
+          version: 2.5.0
           scan: true
           sarif: true
           upload-sarif: true
@@ -253,7 +257,7 @@ Release tags are annotated, and the `^{}` suffix returns the commit rather
 than the tag object.
 
 For the owner's commits and PRs, [Action CI](../.github/workflows/github-action.yml)
-runs the action against the published v2.4.0 release on Ubuntu 26.04 and 24.04
+runs the action against the published v2.5.0 release on Ubuntu 26.04 and 24.04
 (x86-64 and ARM64), macOS Apple Silicon and Intel, and Windows x86-64. It
 checks the Linux binary is static, scans with SARIF, uploads to code scanning
 (on pushes to `main` and manual runs only, so PR runs keep read-only tokens),

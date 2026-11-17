@@ -1,6 +1,6 @@
 [package]
 name = "ts-crap"
-version = "2.4.0"
+version = "2.5.0"
 edition = "2024"
 rust-version = "1.90"
 description = "Source-aware CRAP scores for TypeScript functions"
@@ -55,6 +55,9 @@ same-file = "1"
 tempfile = "3"
 tree-sitter = "0.27"
 tree-sitter-typescript = "0.23"
+
+[target.'cfg(target_env = "musl")'.dependencies]
+mimalloc = { version = "0.1", default-features = false, features = ["override"] }
 
 [dev-dependencies]
 quick-xml = "0.42"

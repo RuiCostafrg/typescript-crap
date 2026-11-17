@@ -615,25 +615,19 @@ impl SourceMutants<'_> {
     pub fn assign(&self, methods: &[Method]) -> Vec<Counts> {
         let mut counts = vec![Counts::default(); methods.len()];
         let mut open: Vec<usize> = Vec::new();
-        let mut next = 0;
+        // An iterator rather than an index: the cursor can only move forward.
+        let mut pending = methods.iter().enumerate().peekable();
         for (mutant, &(start, end)) in self.mutants.iter().zip(&self.spans) {
-            while next < methods.len() && methods[next].start <= start {
-                while open
-                    .last()
-                    .is_some_and(|&index| methods[index].end <= methods[next].start)
-                {
+            while let Some((index, method)) = pending.next_if(|(_, m)| m.start <= start) {
+                while open.last().is_some_and(|&o| methods[o].end <= method.start) {
                     open.pop();
                 }
-                open.push(next);
-                next += 1;
+                open.push(index);
             }
-            while open
-                .last()
-                .is_some_and(|&index| methods[index].end <= start)
-            {
+            while open.last().is_some_and(|&o| methods[o].end <= start) {
                 open.pop();
             }
-            if let Some(&owner) = open.iter().rev().find(|&&index| end <= methods[index].end) {
+            if let Some(&owner) = open.iter().rev().find(|&&o| end <= methods[o].end) {
                 counts[owner].add(mutant.outcome);
             }
         }

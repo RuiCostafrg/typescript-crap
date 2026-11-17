@@ -140,6 +140,11 @@ class LinuxPackagesTests(unittest.TestCase):
                     self.assertIn('usr/bin/ts-crap', names)
                     self.assertIn('usr/share/ts-crap/coverage-helpers/version.json', names)
                     self.assertIn('usr/share/doc/ts-crap/musl-COPYRIGHT', names)
+                    self.assertIn('usr/share/doc/ts-crap/mimalloc-LICENSE', names)
+                    copyright_notice = next(m for m in members if m.name.endswith('/copyright'))
+                    notices = data.extractfile(copyright_notice).read()
+                    self.assertIn(b'musl as a whole', notices)
+                    self.assertIn(b'Copyright (c) 2018-2025 Microsoft Corporation', notices)
                     binary = next(m for m in members if m.name.endswith('/bin/ts-crap'))
                     self.assertEqual(binary.mode, 0o755)
                     self.assertEqual(data.extractfile(binary).read(), elf(machine=machine))
@@ -229,12 +234,15 @@ class LinuxPackagesTests(unittest.TestCase):
             subprocess.run(command, check=True, capture_output=True, text=True)
             self.assertTrue((installed / 'usr/share/ts-crap/coverage-helpers/version.json').is_file())
             self.assertFalse((installed / 'usr/share/doc/ts-crap/musl-COPYRIGHT').exists())
-            self.assertIn(b'musl as a whole',
-                          (installed / 'usr/share/doc/ts-crap/copyright').read_bytes())
-            # The standalone notice is also present in the package.
+            self.assertFalse((installed / 'usr/share/doc/ts-crap/mimalloc-LICENSE').exists())
+            notices = (installed / 'usr/share/doc/ts-crap/copyright').read_bytes()
+            self.assertIn(b'musl as a whole', notices)
+            self.assertIn(b'Copyright (c) 2018-2025 Microsoft Corporation', notices)
+            # The standalone notices are also present in the package.
             with tarfile.open(fileobj=io.BytesIO(subprocess.check_output(
                     ['dpkg-deb', '--fsys-tarfile', str(output)]))) as data:
                 self.assertTrue(any(m.name.endswith('/musl-COPYRIGHT') for m in data))
+                self.assertTrue(any(m.name.endswith('/mimalloc-LICENSE') for m in data))
 
     def test_bundle_rejects_version_mismatch_and_unlisted_files(self):
         """Optional installed helpers must still match the scanner and the strict bundle allowlist."""

@@ -18,6 +18,8 @@ linux = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(linux)
 
 MAIN = 'typescript-crap'
+# First release whose static Linux build links mimalloc and ships its notice.
+MIMALLOC_NOTICE_VERSION = (2, 5, 0)
 # Release target -> (npm platform suffix, os, cpu). Linux uses the static musl
 # build, so there is one package per CPU and no libc field.
 TARGETS = {
@@ -36,6 +38,11 @@ BIN = {'ts-crap': 'bin/ts-crap.js', 'typescript-crap': 'bin/typescript-crap.js'}
 MTIME = 499162500
 MAX_BINARY = 128 * 1024 * 1024
 MACHO = {'x86_64-apple-darwin': 0x01000007, 'aarch64-apple-darwin': 0x0100000C}
+
+
+def ships_mimalloc_notice(version):
+    """Whether a release's Linux packages carry the bundled mimalloc MIT notice."""
+    return tuple(int(part) for part in version.split('-', 1)[0].split('.')) >= MIMALLOC_NOTICE_VERSION
 
 
 def platform_name(target):
@@ -113,6 +120,8 @@ def platform_files(target, version, binary):
              f'bin/{binary_name(target)}': (binary, 0o755)}
     if 'linux' in target:
         files['musl-COPYRIGHT'] = ((ROOT / 'packaging/licenses/musl-COPYRIGHT').read_bytes(), 0o644)
+        if ships_mimalloc_notice(version):
+            files['mimalloc-LICENSE'] = ((ROOT / 'packaging/licenses/mimalloc-LICENSE').read_bytes(), 0o644)
     return name, files
 
 

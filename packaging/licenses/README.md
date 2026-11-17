@@ -8,3 +8,15 @@ SHA-256: `f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af`.
 The release archives include this notice through cargo-dist's explicit include
 list. Debian packages install it under `/usr/share/doc/ts-crap/`. The project's
 own MIT license remains in `LICENSE` and the package's `copyright` file.
+
+# Static mimalloc notice
+
+`mimalloc-LICENSE` is the unmodified notice from the mimalloc bundled in
+libmimalloc-sys 0.1.49:
+https://github.com/microsoft/mimalloc
+
+SHA-256: `82ade5d7d9b029044b5fbbc326207fc47c2d44ee4dd71e8a559c36d728217de9`.
+
+The static Linux/musl build links mimalloc. The release archives include this
+notice through cargo-dist's explicit include list, and Debian packages install
+it under `/usr/share/doc/ts-crap/`, alongside the musl notice.

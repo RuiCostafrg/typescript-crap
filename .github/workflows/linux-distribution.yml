@@ -55,7 +55,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           mkdir -p target/linux-assets
-          tar -cJf "target/linux-assets/ts-crap-$TARGET.tar.xz" -C "target/$TARGET/dist" ts-crap -C "$GITHUB_WORKSPACE/packaging/licenses" musl-COPYRIGHT
+          tar -cJf "target/linux-assets/ts-crap-$TARGET.tar.xz" -C "target/$TARGET/dist" ts-crap -C "$GITHUB_WORKSPACE/packaging/licenses" musl-COPYRIGHT mimalloc-LICENSE
           (cd target/linux-assets && sha256sum "ts-crap-$TARGET.tar.xz" > "ts-crap-$TARGET.tar.xz.sha256")
           python3 scripts/bundle-coverage.py target/linux-assets
           version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')

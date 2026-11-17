@@ -60,7 +60,7 @@ jobs:
           import hashlib, pathlib, sys, tarfile, zipfile
           target = sys.argv[1]
           binary = pathlib.Path('target', target, 'dist', 'ts-crap.exe' if 'windows' in target else 'ts-crap')
-          notices = [pathlib.Path(p) for p in ('LICENSE', 'README.md', 'CHANGELOG.md', 'packaging/licenses/musl-COPYRIGHT')]
+          notices = [pathlib.Path(p) for p in ('LICENSE', 'README.md', 'CHANGELOG.md', 'packaging/licenses/musl-COPYRIGHT', 'packaging/licenses/mimalloc-LICENSE')]
           out = pathlib.Path('target/npm-archives')
           out.mkdir(parents=True)
           if 'windows' in target:

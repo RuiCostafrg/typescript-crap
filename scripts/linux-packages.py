@@ -165,8 +165,10 @@ def _build(assets, version, epoch, targets):
             stage = Path(temporary) / 'root'
             files = {'usr/bin/ts-crap': (binary, 0o755),
                      'usr/share/doc/ts-crap/copyright': ((ROOT / 'LICENSE').read_bytes() + b'\n\n' +
-                         (ROOT / 'packaging/licenses/musl-COPYRIGHT').read_bytes(), 0o644),
-                     'usr/share/doc/ts-crap/musl-COPYRIGHT': ((ROOT / 'packaging/licenses/musl-COPYRIGHT').read_bytes(), 0o644)}
+                         (ROOT / 'packaging/licenses/musl-COPYRIGHT').read_bytes() + b'\n\n' +
+                         (ROOT / 'packaging/licenses/mimalloc-LICENSE').read_bytes(), 0o644),
+                     'usr/share/doc/ts-crap/musl-COPYRIGHT': ((ROOT / 'packaging/licenses/musl-COPYRIGHT').read_bytes(), 0o644),
+                     'usr/share/doc/ts-crap/mimalloc-LICENSE': ((ROOT / 'packaging/licenses/mimalloc-LICENSE').read_bytes(), 0o644)}
             files.update({f'usr/share/ts-crap/coverage-helpers/{n}': (data, 0o644) for n, data in contents.items()})
             installed_size = sum((len(data) + 1023) // 1024 for data, _ in files.values())
             control = (f'Package: ts-crap\nVersion: {debian_version(version)}\nArchitecture: {architecture}\n'

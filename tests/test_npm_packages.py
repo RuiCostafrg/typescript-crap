@@ -137,7 +137,19 @@ class NpmPackageTests(unittest.TestCase):
                 binary = 'bin/ts-crap.exe' if os_name == 'win32' else 'bin/ts-crap'
                 self.assertEqual(files[binary], (EXECUTABLES[target], 0o755))
                 self.assertEqual('musl-COPYRIGHT' in files, os_name == 'linux')
+                self.assertEqual('mimalloc-LICENSE' in files, os_name == 'linux')
                 self.assertEqual(files['LICENSE'][0], (ROOT / 'LICENSE').read_bytes())
+                if os_name == 'linux':
+                    self.assertEqual(files['mimalloc-LICENSE'][0],
+                                     (ROOT / 'packaging/licenses/mimalloc-LICENSE').read_bytes())
+
+    def test_releases_before_mimalloc_do_not_require_its_notice(self):
+        """Published 2.4.0 and earlier predate the bundled mimalloc notice."""
+        for target in ('x86_64-unknown-linux-musl', 'aarch64-unknown-linux-musl'):
+            with self.subTest(target=target):
+                _, files = npm.platform_files(target, '2.4.0', b'')
+                self.assertIn('musl-COPYRIGHT', files)
+                self.assertNotIn('mimalloc-LICENSE', files)
 
     def test_main_package_pins_every_platform_and_ships_the_helper_bundle_bytes(self):
         self.build()

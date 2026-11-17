@@ -32,6 +32,13 @@ coverage. Oximut is read-only for ts-crap and is unchanged.
   attributes in XML, and the new SARIF rule `TSCRAP003` for surviving or
   uncovered mutants. Machine output is unaffected by presentation options.
 
+### Changed
+
+- Release archives, Debian packages and the Linux npm packages ship
+  mimalloc's MIT notice (`mimalloc-LICENSE`) next to musl's, because the static
+  musl build links mimalloc from 2.5.0. Debian's `copyright` file includes it
+  too.
+
 ## 2.5.0 — 2026-11-16
 
 Faster scans with byte-identical reports: bounded parallel analysis

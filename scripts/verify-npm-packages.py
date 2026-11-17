@@ -67,7 +67,10 @@ def verify(assets, packages, version):
             raise ValueError(f'{path.name}: {binary} differs from {npm.archive_name(target)}')
         if files[binary][1] != 0o755:
             raise ValueError(f'{path.name}: {binary} is not executable')
-        extra = set(files) - {'package.json', 'README.md', 'LICENSE', 'musl-COPYRIGHT', binary}
+        # The mimalloc notice is allowed but not required: published releases
+        # before 2.5.0 do not carry it.
+        extra = set(files) - {'package.json', 'README.md', 'LICENSE', 'musl-COPYRIGHT',
+                              'mimalloc-LICENSE', binary}
         if extra:
             raise ValueError(f'{path.name}: unexpected files {sorted(extra)}')
         same(path, files, npm.platform_files(target, version, files[binary][0])[1])

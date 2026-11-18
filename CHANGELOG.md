@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Mutation evidence: an Oximut report with a `mutators` field is now rejected
+  when any `mutator families=` diagnostic cannot be read or contradicts it,
+  including diagnostics that disagree with each other. Previously those cases
+  were skipped as unknown.
+- Mutation evidence: an explicit `"sources": null` or `"mutators": null` is
+  rejected instead of falling back to the weaker rc1 mutant-id binding.
+- XML output now carries `equivalent` per function, and `files-with-mutants`
+  and (with `sources`) `files-not-in-report` on `<mutation-evidence>`, so its
+  counts add up like the other formats.
+
 ## 2.6.0 — 2026-11-18
 
 Optional mutation-testing evidence from Oximut, additive and opt-in: a

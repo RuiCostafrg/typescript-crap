@@ -904,7 +904,7 @@ fn all_formats_agree_on_the_mutation_gate() {
     );
     assert!(
         xml.contains(
-            "mutants=\"1\" killed=\"0\" survived=\"1\" no-coverage=\"0\" inconclusive=\"0\" effective-crap=\"2\""
+            "mutants=\"1\" killed=\"0\" survived=\"1\" no-coverage=\"0\" equivalent=\"0\" inconclusive=\"0\" effective-crap=\"2\""
         ),
         "{xml}"
     );
@@ -1098,7 +1098,7 @@ fn mutation_tables_list_only_unkilled_functions_with_exact_inconclusive_counts()
     let xml = render(&report, Format::Xml).unwrap();
     assert!(
         xml.contains(
-            "mutants=\"5\" killed=\"2\" survived=\"1\" no-coverage=\"0\" inconclusive=\"2\""
+            "mutants=\"5\" killed=\"2\" survived=\"1\" no-coverage=\"0\" equivalent=\"0\" inconclusive=\"2\""
         ),
         "{xml}"
     );
@@ -1426,11 +1426,12 @@ fn source_hashes_bind_every_listed_file_including_ones_without_mutants() {
     let json = json_report(&scanned);
     assert_eq!(json["mutation"]["source_binding"], "oximut-source-sha256");
     assert_eq!(json["mutation"]["files_not_in_report"], 0);
+    let xml = render(&scanned, Format::Xml).unwrap();
     assert!(
-        render(&scanned, Format::Xml)
-            .unwrap()
-            .contains("source-binding=\"oximut-source-sha256\"")
+        xml.contains("source-binding=\"oximut-source-sha256\" files-not-in-report=\"0\"/>"),
+        "{xml}"
     );
+    assert!(xml.contains("files-with-mutants=\"1\""), "{xml}");
 
     // A file with no mutants is now bound: editing it makes the report stale.
     fs::write(
@@ -1562,6 +1563,31 @@ fn the_mutators_field_sets_the_scope_and_must_agree_with_diagnostics() {
         "{error}"
     );
 
+    // Diagnostics that disagree with each other, or cannot be read, also
+    // contradict the field rather than being skipped as unknown.
+    for diagnostics in [
+        json!(["mutator families=boolean-literal", "mutator families=all"]),
+        json!([
+            "mutator families=boolean-literal",
+            "mutator families=not-a-family"
+        ]),
+    ] {
+        let mut corrupt = subset.clone();
+        corrupt["diagnostics"] = diagnostics;
+        let error = format!("{:#}", try_scan(&root, &project, &corrupt).unwrap_err());
+        assert!(
+            error.contains("disagrees with its mutator families diagnostic"),
+            "{error}"
+        );
+    }
+
+    // An explicit null is malformed, not a quiet fall back to the rc1 binding.
+    for field in ["sources", "mutators"] {
+        let mut null = subset.clone();
+        null[field] = Value::Null;
+        assert!(try_scan(&root, &project, &null).is_err(), "{field}: null");
+    }
+
     let mut empty = subset.clone();
     empty["mutators"] = json!({"selection": "subset", "families": []});
     let error = format!("{:#}", try_scan(&root, &project, &empty).unwrap_err());
@@ -1615,5 +1641,11 @@ fn an_acknowledged_survivor_leaves_the_inconclusive_count_and_the_table_row_exac
     assert!(
         text.contains("Equivalent mutants: 1 acknowledged by configuration; 0 configured entries matched no mutant"),
         "{text}"
+    );
+    // The XML row adds up: 2 killed + 1 survived + 1 equivalent + 1 inconclusive.
+    let xml = render(&report, Format::Xml).unwrap();
+    assert!(
+        xml.contains("mutants=\"5\" killed=\"2\" survived=\"1\" no-coverage=\"0\" equivalent=\"1\" inconclusive=\"1\""),
+        "{xml}"
     );
 }

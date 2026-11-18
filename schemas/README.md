@@ -25,7 +25,7 @@ Config defaults are annotations; the scanner applies them, not the validator.
 Report schemas allow additive fields for forward-compatible readers. Input
 schemas remain closed and reject unsupported document versions.
 
-The report schema's optional `mutation` object (unreleased) is an
+The report schema's optional `mutation` object (since 2.6.0) is an
 additive output extension: it documents the Oximut evidence ts-crap attaches
 when `--mutation-report` is supplied. Its `functions` list is parallel to the
 report's `functions`; the mutation gate, count sums, and scope labelling are

@@ -3,7 +3,7 @@
 Written **2026-11-12** against `9907f22` (v2.4.0). Raw numbers are in
 [the measurements file](measurements/vscode-profile-2026-11-12.json).
 
-## Status (2026-11-16)
+## Status (2026-11-18)
 
 WP0–WP5 and the install track are merged. Every change kept reports byte for
 byte identical, checked by the golden fixtures, the CI guard's report
@@ -20,7 +20,9 @@ comparison and full VS Code scans.
 | WP5 report and baseline memory | #79 | `--write-baseline` peak RSS 480 → 178 MB on VS Code |
 | D0–D2, D5 install track | #76, #88 | Trusted root fetched during the download (0.55–0.67 s per Action install); archives 6.5–10% smaller |
 | D3 attested digest (hardening) | #93 | The Action binds each asset to its own attested subject digest and no longer downloads the unsigned `.sha256` sidecar |
-| WP6 Node coverage helpers | #89 | Open. Fewer allocations; source maps decoded once per generated file |
+| WP6 Node coverage helpers | #89 | Fewer allocations; source maps decoded once per generated file |
+| WP6 single AST walk | #100 | One traversal for scopes, metrics and identity hashes; vs 2.5.0 on one hosted runner: glibc 24.3 → 21.8 s, musl 26.3 → 22.6 s ([raw data](measurements/vscode-hosted-single-walk-2026-11-18.json)) |
+| WP6 pipelined `git cat-file` | #99 | Diff/PR blob requests written ahead by a helper thread; no hosted measurement (local proot timings too noisy) |
 
 Hosted full VS Code scans (15,246 files, 431,594 functions, default job count;
 [raw data](measurements/vscode-hosted-after-wp5-2026-11-16.json)):
@@ -65,9 +67,9 @@ All four builds produced the identical report:
 - **Public API:** WP5's `Baseline::render_report_to` and WP4's
   `ScanExtensions::jobs` are stable 2.x API (pinned by an external-crate test
   in #90), so the next release is 2.5.0.
-- **Still open in WP6:** a single merged AST walk (do it only if collection is
-  still a large share on a hosted profile) and pipelined `git cat-file` for
-  large diffs.
+- **WP6 done (2.6.0):** the single merged AST walk (#100, old walks kept as a
+  test oracle; identical on all 371,152 VS Code functions) and pipelined
+  `git cat-file` for diff scans (#99).
 - **3.0 candidate:** 32-byte identities and shared path strings, issue #86.
 
 This plan supersedes the sentence in [PERFORMANCE.md](PERFORMANCE.md) that

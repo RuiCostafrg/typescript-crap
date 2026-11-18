@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased
+## 2.6.0 — 2026-11-18
 
 Optional mutation-testing evidence from Oximut, additive and opt-in: a
 function with a surviving or unreached mutant now fails even at 100% line
-coverage. ts-crap only reads Oximut reports; it never runs Oximut.
+coverage. ts-crap only reads Oximut reports; it never runs Oximut. Scans are
+also faster with byte-identical reports: on a full VS Code scan on one hosted
+x86-64 runner, the single syntax-tree walk took 10% less wall time than 2.5.0
+on glibc (24.3 s to 21.8 s) and 14% less on musl (26.3 s to 22.6 s), with
+unchanged peak memory.
 
 ### Added
 
@@ -48,14 +52,13 @@ coverage. ts-crap only reads Oximut reports; it never runs Oximut.
   outer walk plus, for every function, a metrics walk and an identity-hash
   walk). Identities, names, complexity and owned lines are unchanged: the old
   implementation stays in the tests as an oracle, and it agrees on all 371,152
-  functions of a full VS Code checkout.
-
+  functions of a full VS Code checkout. On the hosted VS Code benchmark it cut
+  user CPU by 12% on glibc and 16% on musl.
 - `--diff` and `--pr` scans send all committed-blob requests to their one
   `git cat-file --batch` process up front from a helper thread, so Git
   streams each file's blob while the previous file is read and compared,
   instead of one request-and-reply round trip per file. Reports, errors and
   the byte-for-byte check against HEAD are unchanged.
-
 - Release archives, Debian packages and the Linux npm packages ship
   mimalloc's MIT notice (`mimalloc-LICENSE`) next to musl's, because the static
   musl build links mimalloc from 2.5.0. Debian's `copyright` file includes it

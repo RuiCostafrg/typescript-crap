@@ -1645,8 +1645,13 @@ fn a_real_oximut_ci_report_binds_by_source_hash_and_fails_the_survivor() {
 
     // Any edit to the scanned source makes the real report stale.
     fs::write(root.join(SUBJECT), format!("{}\n", fixture("subject.ts"))).unwrap();
-    let error = scan_with(&opts, &with_mutation_report(&report_path))
+    // Scan without coverage: its own hash check would otherwise fail first.
+    let error = scan_with(&options(&root), &with_mutation_report(&report_path))
         .unwrap_err()
         .to_string();
-    assert!(error.contains("SHA256 mismatch"), "{error}");
+    assert!(
+        error.contains("mutation report is stale for src/subject.ts")
+            && error.contains("Oximut source SHA256 mismatch"),
+        "{error}"
+    );
 }

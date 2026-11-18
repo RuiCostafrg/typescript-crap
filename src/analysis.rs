@@ -491,6 +491,8 @@ impl<'t> Collector<'_, 't> {
                 column: node.start_position().column + 1,
                 column_utf16: self.utf16.at(node, source),
                 end_line: node.end_position().row + 1,
+                start: (node.start_position().row, node.start_position().column),
+                end: (node.end_position().row, node.end_position().column),
                 complexity: 1,
                 lines: Vec::new(),
             });
@@ -1021,6 +1023,8 @@ mod oracle_tests {
         assert_eq!(new.column, old.column, "{at}: column");
         assert_eq!(new.column_utf16, old.column_utf16, "{at}: column_utf16");
         assert_eq!(new.end_line, old.end_line, "{at}: end_line");
+        assert_eq!(new.start, old.start, "{at}: start");
+        assert_eq!(new.end, old.end, "{at}: end");
         assert_eq!(new.complexity, old.complexity, "{at}: complexity");
         assert_eq!(new.lines, old.lines, "{at}: lines");
     }

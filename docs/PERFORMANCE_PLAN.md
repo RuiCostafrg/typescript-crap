@@ -66,7 +66,7 @@ All four builds produced the identical report:
   anchor for 0.2–0.5 s).
 - **Public API:** WP5's `Baseline::render_report_to` and WP4's
   `ScanExtensions::jobs` are stable 2.x API (pinned by an external-crate test
-  in #90), so the next release is 2.5.0.
+  in #90), so they shipped in a minor release, 2.5.0.
 - **WP6 done (2.6.0):** the single merged AST walk (#100, old walks kept as a
   test oracle; identical on all 371,152 VS Code functions) and pipelined
   `git cat-file` for diff scans (#99).

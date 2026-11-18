@@ -25,6 +25,16 @@ Config defaults are annotations; the scanner applies them, not the validator.
 Report schemas allow additive fields for forward-compatible readers. Input
 schemas remain closed and reject unsupported document versions.
 
+The report schema's optional `mutation` object (unreleased) is an
+additive output extension: it documents the Oximut evidence ts-crap attaches
+when `--mutation-report` is supplied. Its `functions` list is parallel to the
+report's `functions`; the mutation gate, count sums, and scope labelling are
+cross-field invariants checked by executable contract tests, not by this
+schema. The `mutators` and `evidence` enumerations cover the values this
+schema version's scanner emits; a newer scanner release may add values, so
+pin the schema to the scanner release it documents. See
+[the mutation evidence note](../docs/MUTATION_EVIDENCE.md).
+
 These schemas do not replace runtime validation. JSON parsers must reject
 duplicate decoded object keys before schema validation. Glob syntax, source hashes,
 source line bounds, finite f64/u64/platform-integer bounds, baseline thresholds,

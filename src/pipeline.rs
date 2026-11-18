@@ -6,8 +6,11 @@
 //! collect, bind coverage and score, and never touch the filesystem. Results
 //! are merged in file order, and the outcome of the lowest-index failing file
 //! is the one reported, so the result never depends on thread timing.
-use crate::{FunctionScore, OnSyntaxError, UnparsedFile, analysis, coverage};
+use crate::{
+    FunctionMutation, FunctionScore, OnSyntaxError, UnparsedFile, analysis, coverage, mutation,
+};
 use anyhow::{Result, anyhow};
+use std::collections::BTreeSet;
 use std::{
     collections::BTreeMap,
     panic::{AssertUnwindSafe, catch_unwind, resume_unwind},
@@ -65,6 +68,9 @@ pub(crate) struct FileContext<'a> {
     pub coverage: Option<&'a coverage::Coverage>,
     pub threshold: f64,
     pub on_syntax_error: OnSyntaxError,
+    pub mutation: Option<&'a mutation::Mutation>,
+    /// Reviewed equivalent-mutant acknowledgments; empty without evidence.
+    pub equivalents: &'a mutation::Equivalents,
 }
 
 /// One file reduced to what the report keeps: no tree, source or line sets.
@@ -73,6 +79,14 @@ pub(crate) struct FileOutcome {
     missing_file: bool,
     functions_missing: usize,
     syntax_error: Option<UnparsedFile>,
+    /// Parallel to `functions` when mutation evidence is supplied.
+    mutated: Vec<FunctionMutation>,
+    /// Mutants the evidence has for this file, owned by a function or not.
+    mutants: usize,
+    /// Equivalent entries that matched a mutant in this file.
+    matched_equivalents: BTreeSet<usize>,
+    /// The report's `sources` list names this file.
+    listed: bool,
 }
 
 /// Report fields accumulated in file order.
@@ -82,6 +96,13 @@ pub(crate) struct Totals {
     pub files_missing_coverage: usize,
     pub functions_missing_coverage: usize,
     pub syntax_errors: Vec<UnparsedFile>,
+    pub mutated: Vec<FunctionMutation>,
+    pub mutants_in_selection: usize,
+    pub files_with_mutants: usize,
+    /// Indexes of equivalent entries that matched in any file.
+    pub matched_equivalents: BTreeSet<usize>,
+    /// Selected files named by the report's `sources` list.
+    pub files_listed: usize,
 }
 
 impl Totals {
@@ -90,6 +111,12 @@ impl Totals {
         self.functions_missing_coverage += outcome.functions_missing;
         self.functions.append(&mut outcome.functions);
         self.syntax_errors.extend(outcome.syntax_error);
+        self.mutated.append(&mut outcome.mutated);
+        self.mutants_in_selection += outcome.mutants;
+        self.files_with_mutants += usize::from(outcome.mutants > 0);
+        self.matched_equivalents
+            .append(&mut outcome.matched_equivalents);
+        self.files_listed += usize::from(outcome.listed);
     }
 }
 
@@ -113,7 +140,16 @@ pub(crate) fn analyze_file(
                 .coverage
                 .map(|coverage| coverage.for_source(relative, source))
                 .transpose()?;
+            // Nor stale mutation evidence; an unparsed file owns no functions.
+            let source_mutants = context
+                .mutation
+                .map(|mutation| mutation.for_source(relative, source))
+                .transpose()?;
             return Ok(FileOutcome {
+                mutated: Vec::new(),
+                mutants: source_mutants.as_ref().map_or(0, |m| m.len()),
+                listed: source_mutants.as_ref().is_some_and(|m| m.listed),
+                matched_equivalents: BTreeSet::new(),
                 functions: Vec::new(),
                 missing_file: source_coverage.as_ref().is_none_or(|c| !c.present()),
                 functions_missing: 0,
@@ -138,6 +174,20 @@ pub(crate) fn analyze_file(
         .map(|cov| cov.for_source(relative, source))
         .transpose()?;
     let missing_file = source_coverage.as_ref().is_none_or(|c| !c.present());
+    // Validate mutation evidence even for files with no implemented functions.
+    let source_mutants = context
+        .mutation
+        .map(|mutation| mutation.for_source(relative, source))
+        .transpose()?;
+    let mutants = source_mutants.as_ref().map_or(0, |m| m.len());
+    let listed = source_mutants.as_ref().is_some_and(|m| m.listed);
+    let mut matched_equivalents = BTreeSet::new();
+    let mut owned = source_mutants.as_ref().map(|mutants| {
+        let (counts, matched) = mutants.assign(&methods, &context.equivalents.for_path(relative));
+        matched_equivalents = matched;
+        counts.into_iter()
+    });
+    let mut mutated = Vec::new();
     let mut functions = Vec::with_capacity(methods.len());
     let mut functions_missing = 0;
     for method in methods {
@@ -148,8 +198,14 @@ pub(crate) fn analyze_file(
             .unwrap_or_default();
         functions_missing += usize::from(!evidence.complete);
         let cov = evidence.fraction;
-        let cc = f64::from(method.complexity);
-        let crap = cc * cc * (1.0 - cov).powi(3) + cc;
+        let crap = mutation::crap(method.complexity, cov);
+        let mut failed = crap > context.threshold;
+        if let Some(owned) = &mut owned {
+            let counts = owned.next().unwrap_or_default();
+            let evidence = FunctionMutation::new(&method, relative, counts, cov);
+            failed |= evidence.failed;
+            mutated.push(evidence);
+        }
         functions.push(FunctionScore {
             identity: method.identity,
             path: relative.to_owned(),
@@ -161,7 +217,7 @@ pub(crate) fn analyze_file(
             complexity: method.complexity,
             coverage: cov,
             crap,
-            failed: crap > context.threshold,
+            failed,
         });
     }
     Ok(FileOutcome {
@@ -169,6 +225,10 @@ pub(crate) fn analyze_file(
         missing_file,
         functions_missing,
         syntax_error: None,
+        mutated,
+        mutants,
+        matched_equivalents,
+        listed,
     })
 }
 
@@ -290,6 +350,11 @@ fn rehome(outcome: &mut FileOutcome) {
     }
     drop(functions);
     outcome.functions = copied;
+    for evidence in &mut outcome.mutated {
+        evidence.identity = evidence.identity.as_str().to_owned();
+        evidence.path = evidence.path.as_str().to_owned();
+        evidence.name = evidence.name.as_str().to_owned();
+    }
     if let Some(error) = &mut outcome.syntax_error {
         error.path = error.path.as_str().to_owned();
         error.message = error.message.as_str().to_owned();

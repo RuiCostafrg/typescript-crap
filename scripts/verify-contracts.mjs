@@ -125,6 +125,24 @@ try {
       files: { [relative]: { sha256: "a".repeat(64), lines: {} } },
     });
   }
+  await fs.rm(path.join(temporary, "ts-crap.json"));
+  // Validate the opt-in report extension against the additive version-1 schema.
+  await fs.mkdir(path.join(temporary, "src"));
+  await fs.copyFile(
+    path.join(repository, "tests/fixtures/oximut/subject.ts"),
+    path.join(temporary, "src/subject.ts"),
+  );
+  const mutationInput = path.join(temporary, "mutation.json");
+  await fs.writeFile(
+    mutationInput,
+    (
+      await fs.readFile(path.join(repository, "tests/fixtures/oximut/full.json"), "utf8")
+    ).replaceAll("<ROOT>", JSON.stringify(temporary).slice(1, -1)),
+  );
+  const mutated = scan(["--mutation-report", mutationInput], 1);
+  assert(mutated.mutation.functions.some((f) => f.failed && f.survived > 0));
+  assert.equal(mutated.mutation.mutators, "all");
+  invalid("report", { ...mutated, mutation: { ...mutated.mutation, mutators: "invalid" } });
   console.log(
     "PASS schemas and executable v1 contracts: examples, reports, baselines, coverage, gate invariants, strict inputs and additive outputs",
   );

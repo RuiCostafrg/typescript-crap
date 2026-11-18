@@ -122,6 +122,7 @@ fn scan(root: &Path, jobs: usize, mode: OnSyntaxError) -> anyhow::Result<crate::
     let extensions = ScanExtensions {
         on_syntax_error: mode,
         jobs,
+        ..ScanExtensions::default()
     };
     scan_with(
         &ScanOptions {
@@ -182,6 +183,8 @@ fn run_parallel(
         coverage: None,
         threshold: 10.0,
         on_syntax_error: OnSyntaxError::Fail,
+        mutation: None,
+        equivalents: &crate::mutation::Equivalents::default(),
     };
     let mut totals = Totals::default();
     let peaks = parallel(&paths, jobs, limits, &mut load, &context, &mut totals);
@@ -365,6 +368,7 @@ fn large_selections_really_run_on_workers_and_small_ones_do_not_in_child() {
         let extensions = ScanExtensions {
             on_syntax_error: OnSyntaxError::Fail,
             jobs,
+            ..ScanExtensions::default()
         };
         scan_with(
             &ScanOptions {
@@ -427,6 +431,10 @@ fn rehoming_keeps_every_field_of_a_worker_result() {
             column_utf16: 2,
             message: "invalid".to_owned(),
         }),
+        mutated: Vec::new(),
+        mutants: 0,
+        matched_equivalents: Default::default(),
+        listed: false,
     };
     super::rehome(&mut outcome);
     let function = &outcome.functions[0];

@@ -30,7 +30,9 @@ pub enum MutatorScope {
 pub enum EvidenceKind {
     /// No mutant lies in the function: its line-coverage result stands alone.
     None,
-    /// Every mutant in the function was inconclusive (timeout, invalid, ...).
+    /// The function has mutants but none is scoreable: every one was
+    /// inconclusive (timeout, invalid, ...) or an acknowledged equivalent
+    /// mutant, which is excluded from the score.
     Inconclusive,
     /// At least one mutant was killed, survived or had no coverage.
     Scored,
@@ -53,6 +55,9 @@ pub struct FunctionMutation {
     pub killed: usize,
     /// Tests ran the mutated code and still passed.
     pub survived: usize,
+    /// Survivors acknowledged as equivalent by the project configuration. They
+    /// are not in `survived`, do not fail the gate and are outside `kill_ratio`.
+    pub equivalent: usize,
     /// No test reached the mutant.
     pub no_coverage: usize,
     pub timeout: usize,
@@ -61,7 +66,8 @@ pub struct FunctionMutation {
     pub resource_exhausted: usize,
     pub skipped: usize,
     /// `killed / (killed + survived + no_coverage)`, Oximut's own score
-    /// definition; `None` unless `evidence` is `Scored`.
+    /// definition (acknowledged equivalent mutants excluded); `None` unless
+    /// `evidence` is `Scored`.
     pub kill_ratio: Option<f64>,
     /// `min(coverage, kill_ratio)`: mutation evidence never raises coverage.
     pub effective_coverage: Option<f64>,
@@ -94,7 +100,132 @@ pub struct MutationEvidence {
     pub files_without_mutants: usize,
     /// Functions whose CRAP score passes and whose mutation gate fails.
     pub functions_failed_by_mutation_only: usize,
+    /// Mutants acknowledged as equivalent by configuration, over all functions.
+    pub equivalent_acknowledged: usize,
+    /// Configured equivalent entries that matched no mutant in this scan, in
+    /// configuration order. They do not fail the scan: a report limited with
+    /// `--mutators` legitimately lacks them.
+    pub unmatched_equivalents: Vec<UnmatchedEquivalent>,
     pub functions: Vec<FunctionMutation>,
+}
+
+/// One reviewed acknowledgment from `ts-crap.json`: a surviving mutant that
+/// cannot change behaviour. Matched by function identity and exact edit.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct EquivalentEntry {
+    pub path: String,
+    pub identity: String,
+    pub operator: String,
+    pub original: String,
+    pub replacement: String,
+    pub reason: String,
+}
+
+/// An acknowledgment that matched nothing, as reported.
+#[derive(Debug, Serialize)]
+#[non_exhaustive]
+pub struct UnmatchedEquivalent {
+    pub path: String,
+    pub identity: String,
+    pub operator: String,
+    pub original: String,
+    pub replacement: String,
+}
+
+impl EquivalentEntry {
+    /// Config-time validation; `identity` is normalized to lowercase.
+    pub(crate) fn validate(&mut self) -> Result<()> {
+        ensure!(
+            crate::validation::normalized_relative_path(&self.path),
+            "mutation.equivalent path must be a normalized root-relative path: {:?}",
+            self.path
+        );
+        ensure!(
+            crate::validation::sha256_digest(&self.identity),
+            "mutation.equivalent identity must be 64 hexadecimal characters: {:?}",
+            self.identity
+        );
+        ensure!(
+            !self.reason.trim().is_empty(),
+            "mutation.equivalent reason must not be blank (path {:?})",
+            self.path
+        );
+        self.identity.make_ascii_lowercase();
+        Ok(())
+    }
+
+    fn key(&self) -> [&str; 5] {
+        [
+            &self.path,
+            &self.identity,
+            &self.operator,
+            &self.original,
+            &self.replacement,
+        ]
+    }
+
+    fn matches(&self, method: &Method, mutant: &Mutant) -> bool {
+        self.identity == method.identity
+            && self.operator == mutant.operator
+            && self.original == mutant.original
+            && self.replacement == mutant.replacement
+    }
+}
+
+/// Validate a configured list: each entry, then duplicates.
+pub(crate) fn validate_equivalents(entries: &mut [EquivalentEntry]) -> Result<()> {
+    let mut seen = BTreeSet::new();
+    for entry in entries {
+        entry.validate()?;
+        ensure!(
+            seen.insert(entry.key().map(str::to_owned)),
+            "duplicate mutation.equivalent entry for {:?} {:?} {:?}",
+            entry.path,
+            entry.operator,
+            entry.original
+        );
+    }
+    Ok(())
+}
+
+/// The configured entries with a per-path lookup, built once per scan.
+#[derive(Debug, Default)]
+pub(crate) struct Equivalents {
+    entries: Vec<EquivalentEntry>,
+    by_path: BTreeMap<String, Vec<usize>>,
+}
+
+impl Equivalents {
+    pub fn new(entries: Vec<EquivalentEntry>) -> Self {
+        let mut by_path = BTreeMap::<String, Vec<usize>>::new();
+        for (index, entry) in entries.iter().enumerate() {
+            by_path.entry(entry.path.clone()).or_default().push(index);
+        }
+        Self { entries, by_path }
+    }
+
+    /// `(index, entry)` pairs for one file, in configuration order.
+    pub fn for_path(&self, path: &str) -> Vec<(usize, &EquivalentEntry)> {
+        self.by_path.get(path).map_or_else(Vec::new, |indexes| {
+            indexes.iter().map(|&i| (i, &self.entries[i])).collect()
+        })
+    }
+
+    pub fn unmatched(&self, matched: &BTreeSet<usize>) -> Vec<UnmatchedEquivalent> {
+        self.entries
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| !matched.contains(index))
+            .map(|(_, e)| UnmatchedEquivalent {
+                path: e.path.clone(),
+                identity: e.identity.clone(),
+                operator: e.operator.clone(),
+                original: e.original.clone(),
+                replacement: e.replacement.clone(),
+            })
+            .collect()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -234,6 +365,8 @@ type Point = (usize, usize);
 pub(crate) struct Counts {
     pub killed: usize,
     pub survived: usize,
+    /// Survivors acknowledged as equivalent; never also in `survived`.
+    pub equivalent: usize,
     pub no_coverage: usize,
     pub invalid: usize,
     pub timeout: usize,
@@ -255,11 +388,13 @@ impl Counts {
             Outcome::Skipped => &mut self.skipped,
         } += 1;
     }
+    /// Scoreable mutants: acknowledged equivalent mutants are excluded.
     fn scored(&self) -> usize {
         self.killed + self.survived + self.no_coverage
     }
     pub fn total(&self) -> usize {
         self.scored()
+            + self.equivalent
             + self.invalid
             + self.timeout
             + self.infrastructure_error
@@ -300,6 +435,7 @@ impl FunctionMutation {
             mutants: counts.total(),
             killed: counts.killed,
             survived: counts.survived,
+            equivalent: counts.equivalent,
             no_coverage: counts.no_coverage,
             timeout: counts.timeout,
             invalid: counts.invalid,
@@ -483,6 +619,7 @@ impl Mutation {
             infrastructure_error: s.infrastructure_error,
             resource_exhausted: s.resource_exhausted,
             skipped: s.skipped,
+            ..Counts::default()
         };
         // A truncated or edited mutant list must not pass as the run's evidence.
         ensure!(
@@ -584,6 +721,7 @@ impl Mutation {
         files_with_mutants: usize,
         files_without_mutants: usize,
         functions_failed_by_mutation_only: usize,
+        unmatched_equivalents: Vec<UnmatchedEquivalent>,
     ) -> MutationEvidence {
         let mutants_in_functions = functions.iter().map(|f| f.mutants).sum::<usize>();
         MutationEvidence {
@@ -599,6 +737,8 @@ impl Mutation {
             files_with_mutants,
             files_without_mutants,
             functions_failed_by_mutation_only,
+            equivalent_acknowledged: functions.iter().map(|f| f.equivalent).sum(),
+            unmatched_equivalents,
             functions,
         }
     }
@@ -612,8 +752,18 @@ impl SourceMutants<'_> {
     /// Each mutant belongs to the innermost function whose node contains its
     /// whole edit, matching CRAP ownership: nested functions are scored
     /// separately. `methods` must be in the analyzer's preorder.
-    pub fn assign(&self, methods: &[Method]) -> Vec<Counts> {
+    ///
+    /// A `survived` mutant matching one of `equivalents` (this file's entries,
+    /// see `Equivalents::for_path`) on its owner's identity and exact edit
+    /// counts as `equivalent` instead. Also returns the indexes of the entries
+    /// that matched at least one mutant.
+    pub fn assign(
+        &self,
+        methods: &[Method],
+        equivalents: &[(usize, &EquivalentEntry)],
+    ) -> (Vec<Counts>, BTreeSet<usize>) {
         let mut counts = vec![Counts::default(); methods.len()];
+        let mut matched = BTreeSet::new();
         let mut open: Vec<usize> = Vec::new();
         // An iterator rather than an index: the cursor can only move forward.
         let mut pending = methods.iter().enumerate().peekable();
@@ -628,10 +778,26 @@ impl SourceMutants<'_> {
                 open.pop();
             }
             if let Some(&owner) = open.iter().rev().find(|&&o| end <= methods[o].end) {
-                counts[owner].add(mutant.outcome);
+                // Only a survivor can be equivalent: untested code is not.
+                let acknowledged = (mutant.outcome == Outcome::Survived)
+                    .then(|| {
+                        equivalents
+                            .iter()
+                            .filter(|(_, entry)| entry.matches(&methods[owner], mutant))
+                            .map(|&(index, _)| index)
+                            .collect::<Vec<_>>()
+                    })
+                    .filter(|indexes| !indexes.is_empty());
+                match acknowledged {
+                    Some(indexes) => {
+                        counts[owner].equivalent += 1;
+                        matched.extend(indexes);
+                    }
+                    None => counts[owner].add(mutant.outcome),
+                }
             }
         }
-        counts
+        (counts, matched)
     }
 }
 

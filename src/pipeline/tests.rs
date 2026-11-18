@@ -184,6 +184,7 @@ fn run_parallel(
         threshold: 10.0,
         on_syntax_error: OnSyntaxError::Fail,
         mutation: None,
+        equivalents: &crate::mutation::Equivalents::default(),
     };
     let mut totals = Totals::default();
     let peaks = parallel(&paths, jobs, limits, &mut load, &context, &mut totals);
@@ -432,6 +433,7 @@ fn rehoming_keeps_every_field_of_a_worker_result() {
         }),
         mutated: Vec::new(),
         mutants: 0,
+        matched_equivalents: Default::default(),
     };
     super::rehome(&mut outcome);
     let function = &outcome.functions[0];

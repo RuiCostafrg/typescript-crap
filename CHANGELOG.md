@@ -8,6 +8,11 @@ coverage. Oximut is read-only for ts-crap and is unchanged.
 
 ### Added
 
+- `mutation.equivalent` in `ts-crap.json` acknowledges surviving mutants that
+  cannot change behaviour, matched by function identity and exact edit (never
+  no-coverage mutants). Acknowledged mutants are reported as `equivalent`, do
+  not fail the mutation gate, and unmatched entries are listed in
+  `mutation.unmatched_equivalents`.
 - `--mutation-report FILE` (and `ScanExtensions::mutation_report` in the Rust
   library) accepts an Oximut report (`schemaVersion` 1, tested against
   1.0.0-rc.1) describing the same checkout and root. Surviving or

@@ -10,6 +10,7 @@ use crate::{
     FunctionMutation, FunctionScore, OnSyntaxError, UnparsedFile, analysis, coverage, mutation,
 };
 use anyhow::{Result, anyhow};
+use std::collections::BTreeSet;
 use std::{
     collections::BTreeMap,
     panic::{AssertUnwindSafe, catch_unwind, resume_unwind},
@@ -68,6 +69,8 @@ pub(crate) struct FileContext<'a> {
     pub threshold: f64,
     pub on_syntax_error: OnSyntaxError,
     pub mutation: Option<&'a mutation::Mutation>,
+    /// Reviewed equivalent-mutant acknowledgments; empty without evidence.
+    pub equivalents: &'a mutation::Equivalents,
 }
 
 /// One file reduced to what the report keeps: no tree, source or line sets.
@@ -80,6 +83,8 @@ pub(crate) struct FileOutcome {
     mutated: Vec<FunctionMutation>,
     /// Mutants the evidence has for this file, owned by a function or not.
     mutants: usize,
+    /// Equivalent entries that matched a mutant in this file.
+    matched_equivalents: BTreeSet<usize>,
 }
 
 /// Report fields accumulated in file order.
@@ -92,6 +97,8 @@ pub(crate) struct Totals {
     pub mutated: Vec<FunctionMutation>,
     pub mutants_in_selection: usize,
     pub files_with_mutants: usize,
+    /// Indexes of equivalent entries that matched in any file.
+    pub matched_equivalents: BTreeSet<usize>,
 }
 
 impl Totals {
@@ -103,6 +110,8 @@ impl Totals {
         self.mutated.append(&mut outcome.mutated);
         self.mutants_in_selection += outcome.mutants;
         self.files_with_mutants += usize::from(outcome.mutants > 0);
+        self.matched_equivalents
+            .append(&mut outcome.matched_equivalents);
     }
 }
 
@@ -135,6 +144,7 @@ pub(crate) fn analyze_file(
             return Ok(FileOutcome {
                 mutated: Vec::new(),
                 mutants,
+                matched_equivalents: BTreeSet::new(),
                 functions: Vec::new(),
                 missing_file: source_coverage.as_ref().is_none_or(|c| !c.present()),
                 functions_missing: 0,
@@ -165,9 +175,12 @@ pub(crate) fn analyze_file(
         .map(|mutation| mutation.for_source(relative, source))
         .transpose()?;
     let mutants = source_mutants.as_ref().map_or(0, |m| m.len());
-    let mut owned = source_mutants
-        .as_ref()
-        .map(|mutants| mutants.assign(&methods).into_iter());
+    let mut matched_equivalents = BTreeSet::new();
+    let mut owned = source_mutants.as_ref().map(|mutants| {
+        let (counts, matched) = mutants.assign(&methods, &context.equivalents.for_path(relative));
+        matched_equivalents = matched;
+        counts.into_iter()
+    });
     let mut mutated = Vec::new();
     let mut functions = Vec::with_capacity(methods.len());
     let mut functions_missing = 0;
@@ -208,6 +221,7 @@ pub(crate) fn analyze_file(
         syntax_error: None,
         mutated,
         mutants,
+        matched_equivalents,
     })
 }
 

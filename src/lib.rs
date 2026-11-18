@@ -5,7 +5,9 @@ pub mod baseline;
 mod config;
 mod coverage;
 mod mutation;
-pub use mutation::{EvidenceKind, FunctionMutation, MutationEvidence, MutatorScope};
+pub use mutation::{
+    EvidenceKind, FunctionMutation, MutationEvidence, MutatorScope, UnmatchedEquivalent,
+};
 mod pipeline;
 mod report;
 pub use report::terminal as escape_terminal;
@@ -259,6 +261,12 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
         .as_deref()
         .map(|path| mutation::Mutation::load(path, &root))
         .transpose()?;
+    // Validated by `Rules::load` even without a report; used only with one.
+    let equivalents = mutation::Equivalents::new(if mutation.is_some() {
+        rules.mutation_equivalent.clone()
+    } else {
+        Vec::new()
+    });
     let mut totals = pipeline::Totals::default();
     let mut committed = if files.is_empty() || selection.committed.is_empty() {
         None
@@ -283,6 +291,7 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
         threshold,
         on_syntax_error: extensions.on_syntax_error,
         mutation: mutation.as_ref(),
+        equivalents: &equivalents,
     };
     pipeline::run(&files, extensions.jobs, &mut load, &context, &mut totals)?;
     if let Some(reader) = &mut committed {
@@ -296,6 +305,7 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
         mut mutated,
         mutants_in_selection,
         files_with_mutants,
+        matched_equivalents,
     } = totals;
     if mutation.is_some() {
         // Sort both lists with one permutation so they stay parallel.
@@ -324,6 +334,7 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
             files_with_mutants,
             files.len() - files_with_mutants,
             only,
+            equivalents.unmatched(&matched_equivalents),
         )
     });
     let files_scanned = files.len();

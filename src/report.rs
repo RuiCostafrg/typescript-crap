@@ -143,7 +143,7 @@ pub fn render_to<W: Write>(
             if let Some(m) = &report.mutation {
                 writeln!(
                     s,
-                    "  <mutation-evidence tool=\"oximut\" run-complete=\"{}\" mutators=\"{}\" mutator-families=\"{}\" mutants-in-functions=\"{}\" mutants-outside-functions=\"{}\" mutants-outside-selection=\"{}\" files-without-mutants=\"{}\" functions-failed-by-mutation-only=\"{}\"/>",
+                    "  <mutation-evidence tool=\"oximut\" run-complete=\"{}\" mutators=\"{}\" mutator-families=\"{}\" mutants-in-functions=\"{}\" mutants-outside-functions=\"{}\" mutants-outside-selection=\"{}\" files-without-mutants=\"{}\" functions-failed-by-mutation-only=\"{}\" equivalent-acknowledged=\"{}\" unmatched-equivalents=\"{}\"/>",
                     m.run_complete,
                     match m.mutators {
                         MutatorScope::All => "all",
@@ -155,7 +155,9 @@ pub fn render_to<W: Write>(
                     m.mutants_outside_functions,
                     m.mutants_outside_selection,
                     m.files_without_mutants,
-                    m.functions_failed_by_mutation_only
+                    m.functions_failed_by_mutation_only,
+                    m.equivalent_acknowledged,
+                    m.unmatched_equivalents.len()
                 )?;
             }
             for (index, f) in report.functions.iter().enumerate() {
@@ -296,7 +298,18 @@ fn unkilled(f: &FunctionMutation) -> bool {
 }
 
 fn inconclusive(f: &FunctionMutation) -> usize {
-    f.mutants - f.killed - f.survived - f.no_coverage
+    f.mutants - f.killed - f.survived - f.equivalent - f.no_coverage
+}
+
+/// Omitted when no equivalent entry is configured, so default output is unchanged.
+fn equivalents_line(mutation: &MutationEvidence) -> Option<String> {
+    (mutation.equivalent_acknowledged > 0 || !mutation.unmatched_equivalents.is_empty()).then(|| {
+        format!(
+            "Equivalent mutants: {} acknowledged by configuration; {} configured entries matched no mutant",
+            mutation.equivalent_acknowledged,
+            mutation.unmatched_equivalents.len()
+        )
+    })
 }
 
 fn percent(value: Option<f64>) -> String {
@@ -353,6 +366,9 @@ fn mutation_text(
         "Mutation gate: {} functions pass on CRAP and fail the mutation gate; {} functions have no mutants",
         mutation.functions_failed_by_mutation_only, none
     )?;
+    if let Some(line) = equivalents_line(mutation) {
+        writeln!(s, "{line}")?;
+    }
     Ok(())
 }
 
@@ -390,6 +406,9 @@ fn mutation_html(
         )?;
     }
     s.write_all(b"</tbody></table>")?;
+    if let Some(line) = equivalents_line(mutation) {
+        write!(s, "<p>{}</p>", escape(&line))?;
+    }
     Ok(())
 }
 

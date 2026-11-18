@@ -125,8 +125,8 @@ are recorded in
    survived or no-coverage mutant fails the function regardless of complexity
    or CRAP threshold; `effective_coverage`/`effective_crap` stay
    informational. Trade-off to weigh: Oximut reports have no way to mark an
-   equivalent mutant, so one equivalent survivor fails its function with no
-   suppression. Capped effective coverage gating on `effective_crap` would
+   equivalent mutant; a reviewed `mutation.equivalent` list in `ts-crap.json`
+   acknowledges one (see [MUTATION_EVIDENCE.md](MUTATION_EVIDENCE.md)). Capped effective coverage gating on `effective_crap` would
    tolerate that for low-complexity functions but never flags a CC 1 function.
 2. Whether filtered-subset evidence may ever lower a score, or only be shown.
 

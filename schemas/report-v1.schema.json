@@ -200,6 +200,42 @@
           "minimum": 0,
           "description": "Functions whose CRAP score passes and whose mutation gate fails."
         },
+        "equivalent_acknowledged": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Surviving mutants acknowledged as equivalent by `mutation.equivalent` in the project configuration; they do not fail the mutation gate. Absent in reports from releases before equivalent acknowledgments."
+        },
+        "unmatched_equivalents": {
+          "type": "array",
+          "description": "Configured equivalent entries that matched no mutant in this scan, in configuration order. They do not fail the scan: a report limited with --mutators legitimately lacks them. Absent in reports from releases before equivalent acknowledgments.",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "identity",
+              "operator",
+              "original",
+              "replacement"
+            ],
+            "properties": {
+              "path": {
+                "$ref": "#/$defs/path"
+              },
+              "identity": {
+                "$ref": "#/$defs/sha256"
+              },
+              "operator": {
+                "type": "string"
+              },
+              "original": {
+                "type": "string"
+              },
+              "replacement": {
+                "type": "string"
+              }
+            }
+          }
+        },
         "functions": {
           "type": "array",
           "items": {
@@ -265,6 +301,11 @@
               "survived": {
                 "type": "integer",
                 "minimum": 0
+              },
+              "equivalent": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Survivors acknowledged as equivalent by configuration: not in `survived`, not gated, excluded from kill_ratio. Absent in reports from releases before equivalent acknowledgments."
               },
               "no_coverage": {
                 "type": "integer",

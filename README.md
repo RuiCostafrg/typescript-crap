@@ -503,7 +503,9 @@ mutation-testing report (`schemaVersion` 1, tested against 1.0.0-rc.1) as
 extra evidence. The report must come from the same checkout and the same
 `--root`, because Oximut records absolute paths. ts-crap only reads the
 report; it never runs or changes Oximut — produce the report with Oximut as
-its own documentation describes, then pass its path here.
+its own documentation describes, then pass its path here. A surviving mutant
+that cannot change behaviour can be acknowledged with a reviewed
+`mutation.equivalent` entry in `ts-crap.json` (see `docs/MUTATION_EVIDENCE.md`).
 
 ```sh
 # Run Oximut against the same root as documented by Oximut, then:

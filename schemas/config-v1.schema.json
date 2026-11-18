@@ -69,6 +69,77 @@
         "coverage"
       ],
       "description": "Replaces the default excluded directory names for scanning and coverage collection. Requires ts-crap 2.4.0 or later."
+    },
+    "mutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Settings for --mutation-report; validated but ignored without it.",
+      "properties": {
+        "equivalent": {
+          "type": "array",
+          "description": "Reviewed acknowledgments of surviving mutants that cannot change behaviour. An entry matches a `survived` mutant (never no-coverage) owned by the function with this identity whose operator, original and replacement are byte-equal. Duplicate entries are an error.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "identity",
+              "operator",
+              "original",
+              "replacement",
+              "reason"
+            ],
+            "properties": {
+              "path": {
+                "$ref": "#/$defs/path",
+                "description": "Normalized root-relative forward-slash source path, as in the report."
+              },
+              "identity": {
+                "$ref": "#/$defs/sha256",
+                "description": "Function identity, as in functions[].identity of the JSON report."
+              },
+              "operator": {
+                "type": "string"
+              },
+              "original": {
+                "type": "string"
+              },
+              "replacement": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "Human justification; must not be blank."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        {
+          "not": {
+            "pattern": "[\\\\:]"
+          }
+        },
+        {
+          "not": {
+            "pattern": "(^/|/(?![\\s\\S])|//|(^|/)\\.{1,2}(/|(?![\\s\\S])))"
+          }
+        }
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "minLength": 64,
+      "maxLength": 64
     }
   }
 }

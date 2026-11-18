@@ -1149,3 +1149,215 @@ fn unparsable_files_count_their_mutants_in_the_selection_totals() {
     assert_eq!(evidence.files_with_mutants, 2);
     assert_eq!(evidence.files_without_mutants, 1);
 }
+
+/// Runs the CLI in `root` with the recorded survivor report; returns exit code and JSON.
+fn cli(root: &Path, report: &Path) -> (Option<i32>, Value, String) {
+    let output = Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+        .arg("--root")
+        .arg(root)
+        .args(["--format", "json", "--mutation-report"])
+        .arg(report)
+        .output()
+        .unwrap();
+    (
+        output.status.code(),
+        serde_json::from_slice(&output.stdout).unwrap_or(Value::Null),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
+}
+
+/// The recorded survivor in `uncalled` as a config entry; `identity` can be replaced.
+fn survivor_entry(root: &Path, report: &Path, identity: Option<&str>) -> Value {
+    let (_, json, _) = cli(root, report);
+    let function = json["mutation"]["functions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(json["functions"].as_array().unwrap())
+        .find(|(_, f)| f["name"] == "uncalled")
+        .unwrap()
+        .0
+        .clone();
+    let mutant = serde_json::from_str::<Value>(&substituted(&fixture("full.json"), root)).unwrap()
+        ["mutants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["outcome"] == "survived")
+        .unwrap()
+        .clone();
+    json!({
+        "path": SUBJECT,
+        "identity": identity.unwrap_or(function["identity"].as_str().unwrap()),
+        "operator": mutant["operator"],
+        "original": mutant["original"],
+        "replacement": mutant["replacement"],
+        "reason": "the replacement cannot change observable behaviour",
+    })
+}
+
+fn write_config(root: &Path, equivalent: &[Value]) {
+    fs::write(
+        root.join("ts-crap.json"),
+        serde_json::to_string(&json!({"version": 1, "mutation": {"equivalent": equivalent}}))
+            .unwrap(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn acknowledged_equivalent_survivor_passes_the_mutation_gate() {
+    let (project, root) = subject_project();
+    let report = write_report(
+        &project,
+        "full.json",
+        &substituted(&fixture("full.json"), &root),
+    );
+    let entry = survivor_entry(&root, &report, None);
+    write_config(&root, &[entry]);
+    let (code, json, stderr) = cli(&root, &report);
+    assert_eq!(code, Some(0), "{stderr}");
+    let mutation = &json["mutation"];
+    let function = mutation["functions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["equivalent"] == 1)
+        .unwrap();
+    assert_eq!(function["survived"], 0);
+    assert_eq!(function["failed"], false);
+    assert_eq!(function["evidence"], "inconclusive");
+    assert_eq!(function["mutants"], 1);
+    assert_eq!(function["kill_ratio"], Value::Null);
+    assert_eq!(mutation["equivalent_acknowledged"], 1);
+    assert_eq!(mutation["unmatched_equivalents"], json!([]));
+    assert_eq!(mutation["functions_failed_by_mutation_only"], 0);
+    for format in ["text", "html", "xml"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+            .arg("--root")
+            .arg(&root)
+            .args(["--format", format, "--mutation-report"])
+            .arg(&report)
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            text.contains("1 acknowledged by configuration; 0 configured entries matched")
+                || text.contains("equivalent-acknowledged=\"1\" unmatched-equivalents=\"0\""),
+            "{format}: {text}"
+        );
+    }
+}
+
+#[test]
+fn equivalent_entry_for_another_function_identity_does_not_suppress() {
+    let (project, root) = subject_project();
+    let report = write_report(
+        &project,
+        "full.json",
+        &substituted(&fixture("full.json"), &root),
+    );
+    let other = "0".repeat(64);
+    let entry = survivor_entry(&root, &report, Some(&other));
+    write_config(&root, std::slice::from_ref(&entry));
+    let (code, json, _) = cli(&root, &report);
+    assert_eq!(code, Some(1));
+    assert_eq!(json["mutation"]["equivalent_acknowledged"], 0);
+    assert_eq!(json["mutation"]["functions_failed_by_mutation_only"], 1);
+    let mut unmatched = entry;
+    unmatched.as_object_mut().unwrap().remove("reason");
+    assert_eq!(
+        json["mutation"]["unmatched_equivalents"],
+        json!([unmatched])
+    );
+}
+
+#[test]
+fn equivalent_entries_are_ignored_without_a_mutation_report() {
+    let (_project, root) = subject_project();
+    write_config(
+        &root,
+        &[
+            json!({"path": SUBJECT, "identity": "0".repeat(64), "operator": "o",
+                 "original": "a", "replacement": "b", "reason": "r"}),
+        ],
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_ts-crap"))
+        .arg("--root")
+        .arg(&root)
+        .args(["--format", "json"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(json.get("mutation").is_none());
+}
+
+#[test]
+fn invalid_equivalent_config_is_rejected_with_exit_code_2() {
+    let (project, root) = subject_project();
+    let report = write_report(
+        &project,
+        "full.json",
+        &substituted(&fixture("full.json"), &root),
+    );
+    let good = survivor_entry(&root, &report, None);
+    let with = |field: &str, value: Value| {
+        let mut entry = good.clone();
+        entry[field] = value;
+        entry
+    };
+    for (entries, needle) in [
+        (vec![with("reason", json!("  \t"))], "reason"),
+        (vec![good.clone(), good.clone()], "duplicate"),
+        (vec![with("identity", json!("abc"))], "identity"),
+        (vec![with("path", json!("../x.ts"))], "path"),
+    ] {
+        write_config(&root, &entries);
+        let (code, _, stderr) = cli(&root, &report);
+        assert_eq!(code, Some(2), "{stderr}");
+        assert!(stderr.contains(needle), "{needle}: {stderr}");
+    }
+    // Unknown and missing entry fields fail the strict schema too.
+    for bad in [with("extra", json!(1)), {
+        let mut entry = good.clone();
+        entry.as_object_mut().unwrap().remove("original");
+        entry
+    }] {
+        write_config(&root, &[bad]);
+        assert_eq!(cli(&root, &report).0, Some(2));
+    }
+}
+
+#[test]
+fn a_no_coverage_mutant_cannot_be_acknowledged() {
+    let source = "export function f(a: boolean): boolean {\n  return a;\n}\n";
+    let survived = edit(source, "a;", 1, "boolean-literal", "!a", "no-coverage");
+    let (_project, root, report) =
+        synthetic_project(&[(SUBJECT, source)], SUBJECT, source, &[survived]);
+    let (_, json, _) = cli(&root, &report);
+    let identity = json["functions"][0]["identity"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    write_config(
+        &root,
+        &[
+            json!({"path": SUBJECT, "identity": identity, "operator": "boolean-literal",
+                 "original": "a", "replacement": "!a", "reason": "r"}),
+        ],
+    );
+    let (code, json, _) = cli(&root, &report);
+    assert_eq!(code, Some(1));
+    let function = &json["mutation"]["functions"][0];
+    assert_eq!(function["no_coverage"], 1);
+    assert_eq!(function["equivalent"], 0);
+    assert_eq!(function["failed"], true);
+    assert_eq!(
+        json["mutation"]["unmatched_equivalents"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}

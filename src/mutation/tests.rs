@@ -72,3 +72,84 @@ fn kill_ratio_follows_the_oximut_denominator() {
     );
     assert_eq!(counts.kill_ratio(), Some(0.25));
 }
+
+fn method(identity: &str, start: usize, end: usize) -> Method {
+    Method {
+        identity: identity.to_owned(),
+        name: String::new(),
+        line: 1,
+        column: 1,
+        column_utf16: 1,
+        end_line: 1,
+        start: (0, start),
+        end: (0, end),
+        complexity: 1,
+        lines: Vec::new(),
+    }
+}
+
+fn mutant(outcome: Outcome, at: usize) -> Mutant {
+    Mutant {
+        id: String::new(),
+        operator: "op".into(),
+        original: "a".into(),
+        replacement: "b".into(),
+        start: at,
+        end: at + 1,
+        outcome,
+        start_position: (1, 1),
+        end_position: (1, 1),
+    }
+}
+
+fn entry(identity: &str, replacement: &str) -> EquivalentEntry {
+    EquivalentEntry {
+        path: "a.ts".into(),
+        identity: identity.into(),
+        operator: "op".into(),
+        original: "a".into(),
+        replacement: replacement.into(),
+        reason: "r".into(),
+    }
+}
+
+#[test]
+fn only_survivors_with_the_owner_identity_and_exact_edit_are_equivalent() {
+    let mutants = [
+        mutant(Outcome::Survived, 1),
+        mutant(Outcome::Survived, 2),
+        mutant(Outcome::NoCoverage, 3),
+        mutant(Outcome::Killed, 4),
+        mutant(Outcome::Timeout, 5),
+    ];
+    let spans = (1..=5).map(|i| ((0, i), (0, i + 1))).collect();
+    let source = SourceMutants {
+        mutants: &mutants,
+        spans,
+    };
+    let methods = [method("id", 0, 10)];
+    let (hit, other_id, other_edit) = (entry("id", "b"), entry("zz", "b"), entry("id", "c"));
+    let (counts, matched) = source.assign(&methods, &[(0, &hit), (1, &other_id), (2, &other_edit)]);
+    // One entry acknowledges both identical survivors; nothing else is touched.
+    assert_eq!(matched.into_iter().collect::<Vec<_>>(), [0]);
+    let c = counts[0];
+    assert_eq!(
+        (c.equivalent, c.survived, c.no_coverage, c.killed, c.timeout),
+        (2, 0, 1, 1, 1)
+    );
+    assert_eq!(c.total(), 5);
+    // Equivalent mutants leave the score: 1 killed of (killed + no_coverage).
+    assert_eq!(c.kill_ratio(), Some(0.5));
+    // No entries means no behaviour change.
+    let (plain, none) = source.assign(&methods, &[]);
+    assert!(none.is_empty());
+    assert_eq!((plain[0].survived, plain[0].equivalent), (2, 0));
+    // Equivalent-only (plus inconclusive) functions have nothing to score.
+    let only = Counts {
+        equivalent: 2,
+        timeout: 1,
+        ..Counts::default()
+    };
+    assert_eq!(only.kill_ratio(), None);
+    assert_eq!(only.total(), 3);
+}

@@ -52,12 +52,58 @@ Ownership uses the analyzed function spans, so an unparsable selected file
 (retained under `--on-syntax-error report`) owns no functions: its mutants are
 still validated for freshness and counted, but never scored.
 
+## Equivalent mutants
+
+An equivalent mutant changes the code without changing behaviour, so no test
+can kill it. Acknowledge a surviving one in `ts-crap.json`:
+
+```json
+{
+  "version": 1,
+  "mutation": {
+    "equivalent": [
+      {
+        "path": "src/a.ts",
+        "identity": "<function identity from functions[].identity>",
+        "operator": "...",
+        "original": "...",
+        "replacement": "...",
+        "reason": "why this edit cannot change behaviour"
+      }
+    ]
+  }
+}
+```
+
+**Rule:** a mutant is acknowledged only if its outcome is `survived`, its
+owning function (see ownership above) has the entry's root-relative `path` and
+`identity`, and its `operator`, `original` and `replacement` equal the entry's
+byte for byte. One entry may match several mutants. An acknowledged mutant is
+counted in `equivalent`, not in `survived`; it still counts in `mutants`, and it
+leaves `kill_ratio` (numerator and denominator). A function whose only mutants
+are equivalent or inconclusive has `evidence: inconclusive`.
+
+Why this key: matching is by function identity plus the exact edit, not by the
+Oximut mutant id, because that id changes whenever any byte of the file
+changes. A function identity hashes the function's own tokens (comments and
+nested functions excluded), so an acknowledgment survives line shifts and edits
+elsewhere in the file, but any edit to the function's own code changes its
+identity and leaves the entry unmatched until it is reviewed again. `no_coverage` mutants
+can never be acknowledged: they are untested code, not equivalent code.
+
+Entries are validated on every run (non-blank `reason`, normalized `path`,
+64-hex `identity`, no duplicates; errors exit 2) but only used with
+`--mutation-report`. An entry that matches no mutant does not fail the scan,
+since a report filtered with `--mutators` legitimately lacks it; it is listed in
+`mutation.unmatched_equivalents` and counted in the text, HTML and XML reports,
+next to `mutation.equivalent_acknowledged`.
+
 ## The mutation gate (recommendation)
 
 This is the implemented recommendation; the owner has not yet chosen between
-it and the capped-coverage alternative below. One known cost: Oximut reports
-cannot mark a mutant as equivalent, so an equivalent survivor fails its
-function and nothing in this slice can suppress it.
+it and the capped-coverage alternative below. Oximut reports cannot mark a
+mutant as equivalent, so ts-crap offers a reviewed project-level
+acknowledgment list instead (see "Equivalent mutants" above).
 
 **A function fails a separate mutation gate when it owns at least one mutant
 with outcome `survived` or `no_coverage`.** The gate is independent of the CRAP

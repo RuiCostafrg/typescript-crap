@@ -575,6 +575,39 @@ fn collect<'t>(node: Node<'t>, source: &str, kinds: &Kinds, out: &mut Vec<Method
         }
     }
 }
+// Private copies of `walk` and `walk_with_ancestors` for the oracle, so a
+// broken production traversal (or a mutant of one) makes the oracle tests
+// fail instead of hanging them.
+#[cfg(test)]
+fn oracle_walk(node: Node<'_>, mut visit: impl FnMut(Node<'_>) -> bool) {
+    oracle_walk_with_ancestors(node, |node, _| visit(node));
+}
+
+#[cfg(test)]
+fn oracle_walk_with_ancestors<'t>(
+    node: Node<'t>,
+    mut visit: impl FnMut(Node<'t>, &[Node<'t>]) -> bool,
+) {
+    let mut cursor = node.walk();
+    let mut ancestors = Vec::new();
+    loop {
+        let current = cursor.node();
+        if visit(current, &ancestors) && cursor.goto_first_child() {
+            ancestors.push(current);
+            continue;
+        }
+        loop {
+            if cursor.goto_next_sibling() {
+                break;
+            }
+            if !cursor.goto_parent() {
+                return;
+            }
+            ancestors.pop();
+        }
+    }
+}
+
 // Reference implementation kept for tests: the production `collect` computes
 // the same values in a single traversal.
 // Each decision adds one independent execution path. Descendant functions are
@@ -589,7 +622,7 @@ fn metrics_oracle(
     lines: &mut Vec<usize>,
 ) {
     let fields = kinds.fields;
-    walk(node, |node| {
+    oracle_walk(node, |node| {
         let flags = kinds.flags(node);
         if flags & (FUNCTION | TYPE_ONLY) != 0 {
             return false;
@@ -629,7 +662,7 @@ fn collect_oracle(node: Node<'_>, source: &str, kinds: &Kinds, out: &mut Vec<Met
     let mut scopes: Vec<Scope<'_>> = Vec::new();
     let mut utf16 = Utf16Column::default();
     let mut buffer = Vec::with_capacity(HASH_CHUNK);
-    walk_with_ancestors(node, |node, ancestors| {
+    oracle_walk_with_ancestors(node, |node, ancestors| {
         let flags = kinds.flags(node);
         let class_name = if flags & CLASS != 0 {
             Kinds::child(node, fields.name)
@@ -677,7 +710,7 @@ fn collect_oracle(node: Node<'_>, source: &str, kinds: &Kinds, out: &mut Vec<Met
             // deeply nested functions; line shifts do not change identity.
             let mut hash = Sha256::new();
             buffer.clear();
-            walk(node, |token| {
+            oracle_walk(node, |token| {
                 let flags = kinds.flags(token);
                 if flags & COMMENT != 0 || (token != node && flags & FUNCTION != 0) {
                     return false;

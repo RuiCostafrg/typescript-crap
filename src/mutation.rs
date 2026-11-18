@@ -82,7 +82,9 @@ pub struct FunctionMutation {
 #[non_exhaustive]
 pub struct MutationEvidence {
     pub tool: &'static str,
-    /// Pinned implementation binding, not an upstream stable source-hash field.
+    /// How selected files were bound to the report: `oximut-source-sha256`
+    /// when the report lists per-file hashes in `sources`, else the pinned
+    /// `oximut-1.0.0-rc.1-mutant-id` reproduction.
     pub source_binding: &'static str,
     pub report_schema_version: u32,
     /// Oximut's `summary.complete`. An incomplete run has inconclusive mutants.
@@ -98,6 +100,9 @@ pub struct MutationEvidence {
     pub files_with_mutants: usize,
     /// Selected files the report has no mutants for: no evidence either way.
     pub files_without_mutants: usize,
+    /// Selected files missing from the report's `sources` list: Oximut did not
+    /// run on them. `None` when the report has no `sources` (Oximut 1.0.0-rc.1).
+    pub files_not_in_report: Option<usize>,
     /// Functions whose CRAP score passes and whose mutation gate fails.
     pub functions_failed_by_mutation_only: usize,
     /// Mutants acknowledged as equivalent by configuration, over all functions.
@@ -261,6 +266,32 @@ struct Document {
     mutants: Vec<Entry>,
     diagnostics: Vec<String>,
     summary: Summary,
+    /// Per-file source hashes; absent from Oximut 1.0.0-rc.1 reports.
+    #[serde(default)]
+    sources: Option<Vec<SourceEntry>>,
+    /// Machine-readable mutator selection; absent from 1.0.0-rc.1 reports.
+    #[serde(default)]
+    mutators: Option<Mutators>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SourceEntry {
+    file: String,
+    sha256: String,
+    mutants: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct Mutators {
+    selection: Selection,
+    families: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum Selection {
+    All,
+    Subset,
 }
 
 #[derive(Debug, Deserialize)]
@@ -341,10 +372,21 @@ struct Mutant {
     end_position: (usize, usize),
 }
 
+/// Selected-file counts for `Mutation::summary`.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SelectedFiles {
+    pub total: usize,
+    pub with_mutants: usize,
+    /// Named by the report's `sources` list.
+    pub listed: usize,
+}
+
 /// A loaded report. Mutants are grouped by root-relative source identity.
 #[derive(Debug)]
 pub(crate) struct Mutation {
     files: BTreeMap<String, Vec<Mutant>>,
+    /// Lowercase SHA-256 per root-relative source the run read, when reported.
+    hashes: Option<BTreeMap<String, String>>,
     total: usize,
     run_complete: bool,
     mutators: MutatorScope,
@@ -355,6 +397,8 @@ pub(crate) struct Mutation {
 #[derive(Debug)]
 pub(crate) struct SourceMutants<'a> {
     mutants: &'a [Mutant],
+    /// The report's `sources` lists this file (always false without `sources`).
+    pub listed: bool,
     /// Zero-based (row, UTF-8 byte column) span per mutant, as Tree-sitter counts.
     spans: Vec<(Point, Point)>,
 }
@@ -461,12 +505,7 @@ fn mutators(diagnostics: &[String]) -> (MutatorScope, Vec<String>) {
         let families: BTreeSet<&str> = list.split(',').map(str::trim).collect();
         let current = if list == "all" {
             (MutatorScope::All, Vec::new())
-        } else if families.iter().all(|family| {
-            !family.is_empty()
-                && family
-                    .bytes()
-                    .all(|byte| byte.is_ascii_lowercase() || byte == b'-')
-        }) {
+        } else if families.iter().all(|family| valid_family(family)) {
             (
                 MutatorScope::Subset,
                 families.into_iter().map(str::to_owned).collect(),
@@ -528,6 +567,69 @@ impl Cursor {
     }
 }
 
+fn valid_family(family: &str) -> bool {
+    !family.is_empty()
+        && family
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte == b'-')
+}
+
+/// Oximut records canonical absolute paths; both tools must share the root.
+fn relative_source(file: &str, root: &Path) -> Result<String> {
+    Path::new(file)
+        .strip_prefix(root)
+        .ok()
+        .and_then(|relative| crate::validation::source_path(relative).ok())
+        .with_context(|| {
+            format!(
+                "mutant file {file:?} is not inside the project root {}: run Oximut and ts-crap on the same checkout with the same root",
+                root.display()
+            )
+        })
+}
+
+/// Validates `sources` against the grouped mutants: every mutant's file is
+/// listed once, with exactly as many mutants as the list claims.
+fn source_hashes(
+    sources: Vec<SourceEntry>,
+    files: &BTreeMap<String, Vec<Mutant>>,
+    root: &Path,
+) -> Result<BTreeMap<String, String>> {
+    let mut hashes = BTreeMap::new();
+    for source in sources {
+        let relative = relative_source(&source.file, root)?;
+        ensure!(
+            crate::validation::sha256_digest(&source.sha256),
+            "invalid Oximut source SHA256 for {relative}"
+        );
+        let found = files.get(&relative).map_or(0, Vec::len);
+        ensure!(
+            found == source.mutants,
+            "Oximut sources entry for {relative} claims {} mutants, the report has {found}",
+            source.mutants
+        );
+        ensure!(
+            hashes
+                .insert(relative.clone(), source.sha256.to_ascii_lowercase())
+                .is_none(),
+            "duplicate Oximut sources entry for {relative}"
+        );
+    }
+    if let Some(file) = files.keys().find(|file| !hashes.contains_key(*file)) {
+        bail!("Oximut report has mutants for {file} but no sources entry for it");
+    }
+    Ok(hashes)
+}
+
+fn rc1_id_matches(prefix: &Sha256, mutant: &Mutant) -> bool {
+    let mut hash = prefix.clone();
+    field(&mut hash, mutant.start.to_string().as_bytes());
+    field(&mut hash, mutant.end.to_string().as_bytes());
+    field(&mut hash, mutant.operator.as_bytes());
+    field(&mut hash, mutant.replacement.as_bytes());
+    hex::encode(hash.finalize()).eq_ignore_ascii_case(&mutant.id)
+}
+
 fn field(hash: &mut Sha256, bytes: &[u8]) {
     hash.update((bytes.len() as u64).to_le_bytes());
     hash.update(bytes);
@@ -564,17 +666,7 @@ impl Mutation {
         let total = document.mutants.len();
         for entry in document.mutants {
             tally.add(entry.outcome);
-            let relative = Path::new(&entry.file)
-                .strip_prefix(root)
-                .ok()
-                .and_then(|relative| crate::validation::source_path(relative).ok())
-                .with_context(|| {
-                    format!(
-                        "mutant file {:?} is not inside the project root {}: run Oximut and ts-crap on the same checkout with the same root",
-                        entry.file,
-                        root.display()
-                    )
-                })?;
+            let relative = relative_source(&entry.file, root)?;
             ensure!(
                 entry.location.start.offset <= entry.location.end.offset,
                 "mutant {} in {relative} has an inverted location",
@@ -646,9 +738,38 @@ impl Mutation {
         for mutants in files.values_mut() {
             mutants.sort_by(|a, b| (a.start, a.end, &a.id).cmp(&(b.start, b.end, &b.id)));
         }
-        let (mutators, mutator_families) = mutators(&document.diagnostics);
+        let hashes = document
+            .sources
+            .map(|sources| source_hashes(sources, &files, root))
+            .transpose()?;
+        let (mut mutators, mut mutator_families) = mutators(&document.diagnostics);
+        if let Some(declared) = document.mutators {
+            let families: BTreeSet<String> = declared.families.into_iter().collect();
+            ensure!(
+                families.iter().all(|family| valid_family(family)),
+                "Oximut mutators field names an invalid family"
+            );
+            let declared = match declared.selection {
+                Selection::All => (MutatorScope::All, Vec::new()),
+                Selection::Subset => {
+                    ensure!(
+                        !families.is_empty(),
+                        "Oximut mutators subset names no families"
+                    );
+                    (MutatorScope::Subset, families.into_iter().collect())
+                }
+            };
+            // The field is authoritative; a contradicting diagnostic is corrupt.
+            ensure!(
+                mutators == MutatorScope::Unknown
+                    || (mutators, &mutator_families) == (declared.0, &declared.1),
+                "Oximut mutators field disagrees with its mutator families diagnostic"
+            );
+            (mutators, mutator_families) = declared;
+        }
         Ok(Self {
             files,
+            hashes,
             total,
             run_complete: s.complete,
             mutators,
@@ -663,9 +784,24 @@ impl Mutation {
             .get(relative_path)
             .map(Vec::as_slice)
             .unwrap_or_default();
+        let expected = self
+            .hashes
+            .as_ref()
+            .and_then(|hashes| hashes.get(relative_path));
+        if let Some(expected) = expected {
+            // Binds every byte, including files whose run produced no mutants.
+            let actual = hex::encode(Sha256::digest(source.as_bytes()));
+            ensure!(
+                actual == *expected,
+                "mutation report is stale for {relative_path}: Oximut source SHA256 mismatch; the source changed since the mutation run"
+            );
+        }
+        // Without reported hashes, reproduce rc1's ids, which hash the whole
+        // source. With them, ids stay opaque, as Oximut documents.
+        let reproduce_ids = self.hashes.is_none();
         // Hash the path and whole source once; each mutant extends a clone.
         let mut prefix = Sha256::new();
-        if !mutants.is_empty() {
+        if reproduce_ids && !mutants.is_empty() {
             field(&mut prefix, relative_path.as_bytes());
             field(&mut prefix, source.as_bytes());
         }
@@ -684,12 +820,7 @@ impl Mutation {
             }
             // Oximut 1.0.0-rc.1 derives each id from the root-relative path, the
             // whole source and the edit, which binds every other byte of the file.
-            let mut hash = prefix.clone();
-            field(&mut hash, mutant.start.to_string().as_bytes());
-            field(&mut hash, mutant.end.to_string().as_bytes());
-            field(&mut hash, mutant.operator.as_bytes());
-            field(&mut hash, mutant.replacement.as_bytes());
-            if !hex::encode(hash.finalize()).eq_ignore_ascii_case(&mutant.id) {
+            if reproduce_ids && !rc1_id_matches(&prefix, mutant) {
                 bail!(
                     "mutation report does not match {relative_path}: mutant {} was not generated from the current source. The source changed since the mutation run, Oximut ran with a different --root, or this Oximut version derives mutant ids differently from 1.0.0-rc.1",
                     short(&mutant.id)
@@ -711,22 +842,34 @@ impl Mutation {
             }
             spans.push((start, end));
         }
-        Ok(SourceMutants { mutants, spans })
+        Ok(SourceMutants {
+            mutants,
+            listed: expected.is_some(),
+            spans,
+        })
     }
 
     pub fn summary(
         &self,
         functions: Vec<FunctionMutation>,
         mutants_in_selection: usize,
-        files_with_mutants: usize,
-        files_without_mutants: usize,
+        files: SelectedFiles,
         functions_failed_by_mutation_only: usize,
         unmatched_equivalents: Vec<UnmatchedEquivalent>,
     ) -> MutationEvidence {
+        let SelectedFiles {
+            total,
+            with_mutants: files_with_mutants,
+            listed,
+        } = files;
         let mutants_in_functions = functions.iter().map(|f| f.mutants).sum::<usize>();
         MutationEvidence {
             tool: "oximut",
-            source_binding: "oximut-1.0.0-rc.1-mutant-id",
+            source_binding: if self.hashes.is_some() {
+                "oximut-source-sha256"
+            } else {
+                "oximut-1.0.0-rc.1-mutant-id"
+            },
             report_schema_version: 1,
             run_complete: self.run_complete,
             mutators: self.mutators,
@@ -735,7 +878,8 @@ impl Mutation {
             mutants_outside_functions: mutants_in_selection - mutants_in_functions,
             mutants_outside_selection: self.total - mutants_in_selection,
             files_with_mutants,
-            files_without_mutants,
+            files_without_mutants: total - files_with_mutants,
+            files_not_in_report: self.hashes.as_ref().map(|_| total - listed),
             functions_failed_by_mutation_only,
             equivalent_acknowledged: functions.iter().map(|f| f.equivalent).sum(),
             unmatched_equivalents,

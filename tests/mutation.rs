@@ -1361,3 +1361,204 @@ fn a_no_coverage_mutant_cannot_be_acknowledged() {
         1
     );
 }
+
+const OTHER: &str = "src/other.ts";
+const OTHER_SOURCE: &str = "export function other(a: number): number {\n  return a;\n}\n";
+
+fn sha256_hex(text: &str) -> String {
+    hex::encode(Sha256::digest(text.as_bytes()))
+}
+
+/// The recorded subject plus a mutant-free `src/other.ts`.
+fn two_file_project() -> (tempfile::TempDir, PathBuf) {
+    let project = common::project(&[(SUBJECT, &fixture("subject.ts")), (OTHER, OTHER_SOURCE)]);
+    let root = fs::canonicalize(project.path()).unwrap();
+    (project, root)
+}
+
+/// A fixture with the `sources` and `mutators` fields newer Oximut emits.
+fn with_sources(root: &Path, fixture_name: &str, sources: &[(&str, &str)]) -> Value {
+    let mut report: Value =
+        serde_json::from_str(&substituted(&fixture(fixture_name), root)).unwrap();
+    let entries: Vec<Value> = sources
+        .iter()
+        .map(|(relative, source)| {
+            let file = root.join(relative).to_string_lossy().into_owned();
+            let mutants = report["mutants"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|mutant| mutant["file"] == file.as_str())
+                .count();
+            json!({"file": file, "sha256": sha256_hex(source), "mutants": mutants})
+        })
+        .collect();
+    report["sources"] = Value::Array(entries);
+    report["mutators"] = json!({"selection": "all", "families": ["arithmetic", "boolean-literal", "comparison-boundary"]});
+    report
+}
+
+fn try_scan(root: &Path, project: &tempfile::TempDir, report: &Value) -> anyhow::Result<Report> {
+    let path = write_report(project, "sources.json", &report.to_string());
+    scan_with(&options(root), &with_mutation_report(&path))
+}
+
+#[test]
+fn source_hashes_bind_every_listed_file_including_ones_without_mutants() {
+    let (project, root) = two_file_project();
+    let report = with_sources(
+        &root,
+        "full.json",
+        &[(SUBJECT, &fixture("subject.ts")), (OTHER, OTHER_SOURCE)],
+    );
+    let scanned = try_scan(&root, &project, &report).unwrap();
+    let mutation = scanned.mutation.as_ref().unwrap();
+    assert_eq!(mutation.source_binding, "oximut-source-sha256");
+    assert_eq!(mutation.files_without_mutants, 1);
+    assert_eq!(mutation.files_not_in_report, Some(0));
+    assert_eq!(mutation.mutators, MutatorScope::All);
+    assert!(mutation.mutator_families.is_empty());
+    let json = json_report(&scanned);
+    assert_eq!(json["mutation"]["source_binding"], "oximut-source-sha256");
+    assert_eq!(json["mutation"]["files_not_in_report"], 0);
+    assert!(
+        render(&scanned, Format::Xml)
+            .unwrap()
+            .contains("source-binding=\"oximut-source-sha256\"")
+    );
+
+    // A file with no mutants is now bound: editing it makes the report stale.
+    fs::write(
+        root.join(OTHER),
+        OTHER_SOURCE.replace("return a", "return a + 1"),
+    )
+    .unwrap();
+    let error = try_scan(&root, &project, &report).unwrap_err().to_string();
+    assert!(
+        error.contains("mutation report is stale for src/other.ts")
+            && error.contains("SHA256 mismatch"),
+        "{error}"
+    );
+    fs::write(root.join(OTHER), OTHER_SOURCE).unwrap();
+
+    // With hashes, mutant ids are opaque again: a different derivation passes.
+    let mut opaque = report.clone();
+    for mutant in opaque["mutants"].as_array_mut().unwrap() {
+        let id = mutant["id"].as_str().unwrap();
+        mutant["id"] = json!(sha256_hex(id));
+    }
+    try_scan(&root, &project, &opaque).unwrap();
+
+    // Byte ranges are still checked against the hashed source.
+    let mut shifted = report.clone();
+    let start = &mut shifted["mutants"][0]["location"]["start"]["offset"];
+    *start = json!(start.as_u64().unwrap() + 1);
+    let error = try_scan(&root, &project, &shifted).unwrap_err().to_string();
+    assert!(error.contains("expects"), "{error}");
+}
+
+#[test]
+fn a_rc1_report_without_sources_keeps_the_mutant_id_binding() {
+    let (project, root) = two_file_project();
+    let report: Value = serde_json::from_str(&substituted(&fixture("full.json"), &root)).unwrap();
+    let scanned = try_scan(&root, &project, &report).unwrap();
+    let mutation = scanned.mutation.as_ref().unwrap();
+    assert_eq!(mutation.source_binding, "oximut-1.0.0-rc.1-mutant-id");
+    assert_eq!(mutation.files_not_in_report, None);
+    assert!(json_report(&scanned)["mutation"]["files_not_in_report"].is_null());
+}
+
+#[test]
+fn selected_files_missing_from_sources_are_counted_as_not_run() {
+    let (project, root) = two_file_project();
+    let report = with_sources(&root, "full.json", &[(SUBJECT, &fixture("subject.ts"))]);
+    let scanned = try_scan(&root, &project, &report).unwrap();
+    let mutation = scanned.mutation.as_ref().unwrap();
+    assert_eq!(mutation.files_not_in_report, Some(1));
+    let text = render(&scanned, Format::Text).unwrap();
+    assert!(
+        text.contains("1 selected files have no mutants (1 not run by Oximut)"),
+        "{text}"
+    );
+}
+
+#[test]
+fn sources_must_agree_with_the_mutant_list() {
+    let (project, root) = two_file_project();
+    let subject = fixture("subject.ts");
+    let good = with_sources(
+        &root,
+        "full.json",
+        &[(SUBJECT, &subject), (OTHER, OTHER_SOURCE)],
+    );
+    let rejects = |report: &Value, needle: &str| {
+        let error = format!("{:#}", try_scan(&root, &project, report).unwrap_err());
+        assert!(error.contains(needle), "{needle:?} not in {error}");
+    };
+
+    let mut miscounted = good.clone();
+    miscounted["sources"][1]["mutants"] = json!(2);
+    rejects(&miscounted, "claims 2 mutants, the report has 0");
+
+    let mut unlisted = good.clone();
+    unlisted["sources"].as_array_mut().unwrap().remove(0);
+    rejects(
+        &unlisted,
+        "has mutants for src/subject.ts but no sources entry",
+    );
+
+    let mut duplicate = good.clone();
+    let first = duplicate["sources"][1].clone();
+    duplicate["sources"].as_array_mut().unwrap().push(first);
+    rejects(
+        &duplicate,
+        "duplicate Oximut sources entry for src/other.ts",
+    );
+
+    let mut bad_hash = good.clone();
+    bad_hash["sources"][0]["sha256"] = json!("not-a-hash");
+    rejects(&bad_hash, "invalid Oximut source SHA256 for src/subject.ts");
+
+    let mut outside = good.clone();
+    outside["sources"][1]["file"] = json!("/elsewhere/other.ts");
+    rejects(&outside, "is not inside the project root");
+}
+
+#[test]
+fn the_mutators_field_sets_the_scope_and_must_agree_with_diagnostics() {
+    let (project, root) = subject_project();
+    let subject = fixture("subject.ts");
+    let mut subset = with_sources(&root, "subset.json", &[(SUBJECT, &subject)]);
+    subset["mutators"] = json!({"selection": "subset", "families": ["boolean-literal"]});
+    let scanned = try_scan(&root, &project, &subset).unwrap();
+    let mutation = scanned.mutation.as_ref().unwrap();
+    assert_eq!(mutation.mutators, MutatorScope::Subset);
+    assert_eq!(mutation.mutator_families, ["boolean-literal"]);
+    // A filtered run's survivors still fail: they are real evidence.
+    assert!(scanned.failed);
+
+    // Without the diagnostic, the field alone decides the scope.
+    let mut field_only = subset.clone();
+    field_only["diagnostics"] = json!([]);
+    let scanned = try_scan(&root, &project, &field_only).unwrap();
+    assert_eq!(
+        scanned.mutation.as_ref().unwrap().mutators,
+        MutatorScope::Subset
+    );
+
+    let mut contradicting = subset.clone();
+    contradicting["mutators"] = json!({"selection": "all", "families": ["arithmetic", "boolean-literal", "comparison-boundary"]});
+    let error = format!(
+        "{:#}",
+        try_scan(&root, &project, &contradicting).unwrap_err()
+    );
+    assert!(
+        error.contains("disagrees with its mutator families diagnostic"),
+        "{error}"
+    );
+
+    let mut empty = subset.clone();
+    empty["mutators"] = json!({"selection": "subset", "families": []});
+    let error = format!("{:#}", try_scan(&root, &project, &empty).unwrap_err());
+    assert!(error.contains("subset names no families"), "{error}");
+}

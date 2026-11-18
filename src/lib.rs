@@ -306,6 +306,7 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
         mutants_in_selection,
         files_with_mutants,
         matched_equivalents,
+        files_listed,
     } = totals;
     if mutation.is_some() {
         // Sort both lists with one permutation so they stay parallel.
@@ -331,8 +332,11 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
         mutation.summary(
             mutated,
             mutants_in_selection,
-            files_with_mutants,
-            files.len() - files_with_mutants,
+            mutation::SelectedFiles {
+                total: files.len(),
+                with_mutants: files_with_mutants,
+                listed: files_listed,
+            },
             only,
             equivalents.unmatched(&matched_equivalents),
         )

@@ -4,10 +4,10 @@ Drafted 2026-11-13. This is a plan, not a record of shipped behaviour. The
 implementing thread should correct it wherever the code or Oximut's report
 contract contradicts it.
 
-**Status 2026-11-17: M1–M5 implemented; the branch is merged up to main
-(v2.5.0, parallel pipeline). [Draft PR #81](https://github.com/RuiCostafrg/typescript-crap/pull/81)
-stays a draft: no merge, release or npm publish. Open items: the hosted
-mutation gate (see "Hosted mutation gate" below) and the owner decisions.**
+**Status 2026-11-18: M1–M5 implemented and the owner decisions below are
+settled and implemented. The owner authorized merging
+[PR #81](https://github.com/RuiCostafrg/typescript-crap/pull/81) once checks
+pass; no release or npm publish.**
 
 ## Goal
 
@@ -113,32 +113,28 @@ are recorded in
 
 ## Out of scope
 
-- Changes to Oximut.
+- Changes to Oximut, except the owner-requested `sources`/`mutators` report
+  fields (separate Oximut PR).
 - Baselines and move matching for mutation evidence.
 - Mutation evidence in `dotnet-crap`.
 
-## Decisions for the owner
+## Owner decisions (2026-11-18)
 
-1. Scoring rule: capped effective coverage versus a separate gate.
-
-   **Implemented recommendation, awaiting the owner: separate gate.** Any
-   survived or no-coverage mutant fails the function regardless of complexity
-   or CRAP threshold; `effective_coverage`/`effective_crap` stay
-   informational. Trade-off to weigh: Oximut reports have no way to mark an
-   equivalent mutant; a reviewed `mutation.equivalent` list in `ts-crap.json`
-   acknowledges one (see [MUTATION_EVIDENCE.md](MUTATION_EVIDENCE.md)). Capped effective coverage gating on `effective_crap` would
-   tolerate that for low-complexity functions but never flags a CC 1 function.
-2. Whether filtered-subset evidence may ever lower a score, or only be shown.
-
-   **Implemented recommendation, awaiting the owner: subset/unknown reports
-   may fail functions but never prove complete adequacy.** With the separate gate, nothing is "lowered":
-   `subset`/`unknown` is labelled partial evidence in every report.
-3. Whether to ask Oximut for source hashes before this ships as stable.
-
-   **Recommendation for this opt-in slice: do not block on upstream changes.** The rc1 mutant-ID digest is the
-   strongest available binding and is used as documented; a per-file source
-   hash and machine-readable mutator list remain the written-down ask for a
-   future Oximut release. Oximut stays unchanged.
+1. **Scoring rule: separate gate.** Any survived or no-coverage mutant fails
+   the function regardless of complexity or CRAP threshold;
+   `effective_coverage`/`effective_crap` stay informational. Equivalent
+   survivors are acknowledged through a reviewed `mutation.equivalent` list in
+   `ts-crap.json`, matched by function identity and exact edit; no-coverage
+   mutants can never be acknowledged.
+2. **Filtered or unknown mutator scope may fail functions.** Survivors are real
+   evidence whatever the scope; `subset`/`unknown` is labelled partial
+   evidence and never proves adequacy. The scope is read from Oximut's
+   machine-readable `mutators` field when present.
+3. **Oximut emits per-file source hashes and the mutator set.** Implemented in
+   Oximut as additive schema-1 fields `sources` and `mutators`
+   ([oximut#69](https://github.com/RuiCostafrg/oximut/pull/69)); ts-crap
+   validates them when present (binding `oximut-source-sha256`) and keeps the
+   rc1 mutant-id binding for reports without them.
 
 ## Local verification (2026-11-14)
 
@@ -170,7 +166,8 @@ regressions). The second sync (2026-11-17) took v2.5.0, whose bounded parallel
 pipeline (`src/pipeline.rs`) replaced the scan loop; mutation evidence now
 travels per file through it, so parallel and sequential scans agree.
 
-No merge is authorized: the PR stays a draft until the owner decides.
+On 2026-11-18 the owner settled the open decisions and authorized merging
+once the checks pass.
 
 ## Hosted mutation gate
 

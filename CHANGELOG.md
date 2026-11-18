@@ -4,7 +4,7 @@
 
 Optional mutation-testing evidence from Oximut, additive and opt-in: a
 function with a surviving or unreached mutant now fails even at 100% line
-coverage. Oximut is read-only for ts-crap and is unchanged.
+coverage. ts-crap only reads Oximut reports; it never runs Oximut.
 
 ### Added
 
@@ -24,7 +24,12 @@ coverage. Oximut is read-only for ts-crap and is unchanged.
   evidence that can fail functions but never proves adequacy.
   `kill_ratio`, `effective_coverage` and `effective_crap` are informational
   estimates only.
-- Freshness binding without a source hash: each mutant's Oximut ID digest is
+- Per-file source hashes: when an Oximut report carries `sources`, every
+  listed selected file is checked against its SHA-256, including files without
+  mutants, the list must agree with the mutant entries, and selected files it
+  does not name are counted in `mutation.files_not_in_report`. The
+  machine-readable `mutators` field, when present, sets the mutator scope.
+- Fallback freshness binding without a source hash: each mutant's Oximut ID digest is
   recomputed from the root-relative path, the whole source and the edit, so
   any source change since the run is rejected with exit 2. This reproduces
   the pinned rc1 derivation, is not a public stable hash contract, and

@@ -143,7 +143,7 @@ pub fn render_to<W: Write>(
             if let Some(m) = &report.mutation {
                 writeln!(
                     s,
-                    "  <mutation-evidence tool=\"oximut\" run-complete=\"{}\" mutators=\"{}\" mutator-families=\"{}\" mutants-in-functions=\"{}\" mutants-outside-functions=\"{}\" mutants-outside-selection=\"{}\" files-without-mutants=\"{}\" functions-failed-by-mutation-only=\"{}\" equivalent-acknowledged=\"{}\" unmatched-equivalents=\"{}\"/>",
+                    "  <mutation-evidence tool=\"oximut\" run-complete=\"{}\" mutators=\"{}\" mutator-families=\"{}\" mutants-in-functions=\"{}\" mutants-outside-functions=\"{}\" mutants-outside-selection=\"{}\" files-without-mutants=\"{}\" functions-failed-by-mutation-only=\"{}\" equivalent-acknowledged=\"{}\" unmatched-equivalents=\"{}\" source-binding=\"{}\"/>",
                     m.run_complete,
                     match m.mutators {
                         MutatorScope::All => "all",
@@ -157,7 +157,8 @@ pub fn render_to<W: Write>(
                     m.files_without_mutants,
                     m.functions_failed_by_mutation_only,
                     m.equivalent_acknowledged,
-                    m.unmatched_equivalents.len()
+                    m.unmatched_equivalents.len(),
+                    m.source_binding
                 )?;
             }
             for (index, f) in report.functions.iter().enumerate() {
@@ -279,11 +280,15 @@ fn mutators(mutation: &MutationEvidence) -> String {
 
 fn mutation_heading(mutation: &MutationEvidence) -> String {
     format!(
-        "Mutation evidence (oximut): {} mutants in functions, {} outside functions, {} in unselected files; {} selected files have no mutants. Mutators: {}{}",
+        "Mutation evidence (oximut): {} mutants in functions, {} outside functions, {} in unselected files; {} selected files have no mutants{}. Mutators: {}{}",
         mutation.mutants_in_functions,
         mutation.mutants_outside_functions,
         mutation.mutants_outside_selection,
         mutation.files_without_mutants,
+        match mutation.files_not_in_report {
+            Some(0) | None => String::new(),
+            Some(count) => format!(" ({count} not run by Oximut)"),
+        },
         mutators(mutation),
         if mutation.run_complete {
             ""

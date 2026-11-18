@@ -125,6 +125,7 @@ fn only_survivors_with_the_owner_identity_and_exact_edit_are_equivalent() {
     let spans = (1..=5).map(|i| ((0, i), (0, i + 1))).collect();
     let source = SourceMutants {
         mutants: &mutants,
+        listed: false,
         spans,
     };
     let methods = [method("id", 0, 10)];

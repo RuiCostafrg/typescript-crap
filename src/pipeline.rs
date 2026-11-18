@@ -85,6 +85,8 @@ pub(crate) struct FileOutcome {
     mutants: usize,
     /// Equivalent entries that matched a mutant in this file.
     matched_equivalents: BTreeSet<usize>,
+    /// The report's `sources` list names this file.
+    listed: bool,
 }
 
 /// Report fields accumulated in file order.
@@ -99,6 +101,8 @@ pub(crate) struct Totals {
     pub files_with_mutants: usize,
     /// Indexes of equivalent entries that matched in any file.
     pub matched_equivalents: BTreeSet<usize>,
+    /// Selected files named by the report's `sources` list.
+    pub files_listed: usize,
 }
 
 impl Totals {
@@ -112,6 +116,7 @@ impl Totals {
         self.files_with_mutants += usize::from(outcome.mutants > 0);
         self.matched_equivalents
             .append(&mut outcome.matched_equivalents);
+        self.files_listed += usize::from(outcome.listed);
     }
 }
 
@@ -136,14 +141,14 @@ pub(crate) fn analyze_file(
                 .map(|coverage| coverage.for_source(relative, source))
                 .transpose()?;
             // Nor stale mutation evidence; an unparsed file owns no functions.
-            let mutants = context
+            let source_mutants = context
                 .mutation
                 .map(|mutation| mutation.for_source(relative, source))
-                .transpose()?
-                .map_or(0, |mutants| mutants.len());
+                .transpose()?;
             return Ok(FileOutcome {
                 mutated: Vec::new(),
-                mutants,
+                mutants: source_mutants.as_ref().map_or(0, |m| m.len()),
+                listed: source_mutants.as_ref().is_some_and(|m| m.listed),
                 matched_equivalents: BTreeSet::new(),
                 functions: Vec::new(),
                 missing_file: source_coverage.as_ref().is_none_or(|c| !c.present()),
@@ -175,6 +180,7 @@ pub(crate) fn analyze_file(
         .map(|mutation| mutation.for_source(relative, source))
         .transpose()?;
     let mutants = source_mutants.as_ref().map_or(0, |m| m.len());
+    let listed = source_mutants.as_ref().is_some_and(|m| m.listed);
     let mut matched_equivalents = BTreeSet::new();
     let mut owned = source_mutants.as_ref().map(|mutants| {
         let (counts, matched) = mutants.assign(&methods, &context.equivalents.for_path(relative));
@@ -222,6 +228,7 @@ pub(crate) fn analyze_file(
         mutated,
         mutants,
         matched_equivalents,
+        listed,
     })
 }
 

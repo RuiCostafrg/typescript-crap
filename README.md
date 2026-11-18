@@ -539,13 +539,15 @@ CRAP ownership; mutants with no owning function fail no gate.
 
 ### Freshness and its limits
 
-Because Oximut rc1 offers no source hash, ts-crap reproduces the strongest
-binding the report offers: every mutant's ID is recomputed from the recorded
-root-relative path, the whole source bytes, and the edit, so any source change
-since the run is rejected with exit 2. **This reproduces a pinned rc1
-behavior; it is not a public stable hash contract** — a future Oximut that
-derives IDs differently is rejected, not silently accepted. A file the report
-has no mutants for carries no freshness binding. Details, load validation, and
+When the report lists per-file source hashes (Oximut's `sources` field),
+every listed selected file must still hash to the recorded SHA-256, including
+files that produced no mutants, and any change since the run is rejected with
+exit 2 (`source_binding: "oximut-source-sha256"`). Selected files the list
+does not name are counted in `files_not_in_report`. Reports without
+`sources`, such as Oximut 1.0.0-rc.1, fall back to recomputing each mutant's ID
+from the root-relative path, the whole source bytes and the edit. **That
+reproduces a pinned rc1 behavior, not a public stable hash contract**, and a
+file with no mutants then carries no freshness binding. Details, load validation, and
 the rejected alternatives are in
 [the mutation evidence note](docs/MUTATION_EVIDENCE.md).
 

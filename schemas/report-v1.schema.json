@@ -368,7 +368,15 @@
         },
         "source_binding": {
           "type": "string",
-          "description": "Pinned source binding used for selected files with mutants; currently oximut-1.0.0-rc.1-mutant-id. No binding is claimed for files without mutants."
+          "description": "How selected files were bound to the report: oximut-source-sha256 when the report lists per-file hashes in `sources` (every listed file is bound, including files without mutants), else oximut-1.0.0-rc.1-mutant-id (only files with mutants are bound). Newer releases may add values."
+        },
+        "files_not_in_report": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Selected files missing from the report's `sources` list: Oximut did not run on them. Null when the report has no `sources` list."
         }
       }
     },

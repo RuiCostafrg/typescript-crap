@@ -434,6 +434,7 @@ fn rehoming_keeps_every_field_of_a_worker_result() {
         mutated: Vec::new(),
         mutants: 0,
         matched_equivalents: Default::default(),
+        listed: false,
     };
     super::rehome(&mut outcome);
     let function = &outcome.functions[0];

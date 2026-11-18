@@ -98,12 +98,12 @@ since a report filtered with `--mutators` legitimately lacks it; it is listed in
 `mutation.unmatched_equivalents` and counted in the text, HTML and XML reports,
 next to `mutation.equivalent_acknowledged`.
 
-## The mutation gate (recommendation)
+## The mutation gate
 
-This is the implemented recommendation; the owner has not yet chosen between
-it and the capped-coverage alternative below. Oximut reports cannot mark a
-mutant as equivalent, so ts-crap offers a reviewed project-level
-acknowledgment list instead (see "Equivalent mutants" above).
+The owner chose this rule over the capped-coverage alternative below
+(2026-11-18). Oximut reports cannot mark a mutant as equivalent, so ts-crap
+offers a reviewed project-level acknowledgment list instead (see "Equivalent
+mutants" above).
 
 **A function fails a separate mutation gate when it owns at least one mutant
 with outcome `survived` or `no_coverage`.** The gate is independent of the CRAP
@@ -142,52 +142,47 @@ and do not decide the mutation gate.** They illustrate the rejected coverage-cap
 
 ### Partial mutator scope
 
-`mutators` reports which mutator families the run generated, as far as the
-report's diagnostic text says: `all`, `subset` (with the named
-`mutator_families`), or `unknown` when the report does not say or the
-diagnostics are unreadable or disagree. **`subset` and `unknown` are explicitly
+`mutators` reports which mutator families the run generated: `all`, `subset`
+(with the named `mutator_families`), or `unknown`. A report with Oximut's
+machine-readable `mutators` field is read from that field; a contradicting
+`mutator families=` diagnostic rejects the report. Older reports fall back to
+the diagnostic text, and are `unknown` when it is missing, unreadable or
+disagrees with itself. **`subset` and `unknown` are explicitly
 partial evidence: such a report can fail functions, but it can never prove
-complete adequacy.** A clean mutation result under a filtered or unnamed
+complete adequacy.** Survivors in a filtered run are real untested behaviour,
+so they fail their functions exactly as in a full run (decided 2026-11-18). A clean mutation result under a filtered or unnamed
 mutator set shows only that those mutants were caught. Family names are taken
 only from agreeing, readable `mutator families=` diagnostics; anything else is
 `unknown` rather than a guess.
 
 ## Freshness binding
 
-Coverage binds evidence with a documented source hash. Oximut 1.0.0-rc.1
-offers no source hash, no machine-readable mutator set, and absolute paths
-only, so mutation evidence uses the strongest binding the report actually
-offers:
+Coverage binds evidence with a documented source hash, and so does mutation
+evidence when the report provides one. Two bindings exist, recorded in
+`mutation.source_binding`:
 
-- **Byte-range check.** Every mutant's recorded byte range must select exactly
-  its recorded `original` text from the current source.
-- **Mutant-ID reproduction.** Each Oximut mutant `id` is an opaque digest. As
-  observed in 1.0.0-rc.1, it is derived from the root-relative source path, the
-  whole source bytes, and the edit (start/end offsets, operator, replacement).
-  ts-crap recomputes that digest and rejects the report on any mismatch. Since
-  the ID covers the full source, one mutant in a file binds every other byte of
-  that file.
+- **`oximut-source-sha256`** (reports with a `sources` list). Each entry names
+  a source Oximut read, the SHA-256 of the exact bytes it mutated, and how
+  many of the report's mutants belong to it. At load, every mutant's file must
+  be listed exactly once with a matching count, so a truncated or spliced list
+  is rejected. Per selected file, a listed file's current bytes must hash to
+  the recorded value, **including files that produced no mutants**. Mutant ids
+  stay opaque, as Oximut documents them. A selected file the list does not
+  name was not run by Oximut and is counted in `files_not_in_report`.
+- **`oximut-1.0.0-rc.1-mutant-id`** (reports without `sources`, such as
+  1.0.0-rc.1). Each mutant `id` was observed to be derived from the
+  root-relative source path, the whole source bytes and the edit (start/end
+  offsets, operator, replacement); ts-crap recomputes that digest. Since the
+  id covers the full source, one mutant binds every other byte of that file,
+  but a file without mutants carries no binding, and nothing is claimed about
+  its freshness (`files_not_in_report` is `null`). This reproduces a pinned
+  rc1 behaviour, not a public contract: an Oximut version that derives ids
+  differently, or a report generated with a different `--root`, is rejected
+  with a specific message, never silently accepted.
 
-JSON records `source_binding: "oximut-1.0.0-rc.1-mutant-id"` to identify this
-check. This is an integrity check that reproduces a pinned rc1 behavior. **It is not a
-public stable hash contract**: Oximut does not document the ID derivation as an
-interface, and ts-crap does not promise to track future derivations. An Oximut
-release that derives IDs differently — or a report generated with a different
-`--root` — is rejected with a specific message telling the user which version
-the scan expects, never silently accepted.
-
-Two documented limits:
-
-- **No evidence freshness for zero mutants.** A selected file the report has no
-  mutants for carries nothing that binds its bytes, so a stale report cannot be
-  detected for that file. Such files have no mutation evidence either way
-  (`files_without_mutants`), and nothing is claimed about their freshness.
-- Editing a selected source after the mutation run is always rejected with
-  exit 2 for files that do have mutants, never silently accepted.
-
-What a stronger binding would require from Oximut: a per-file source hash
-(collected against a pre-run snapshot, as the coverage helpers do) and a
-machine-readable mutator-family list instead of diagnostic text.
+Under both bindings every mutant's recorded byte range must select exactly its
+recorded `original` text, and its line/UTF-16 column must agree with its byte
+offsets. Editing a bound source after the mutation run is rejected with exit 2.
 
 ## Rejected alternatives
 

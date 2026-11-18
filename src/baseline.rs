@@ -175,8 +175,15 @@ impl Baseline {
             }
             failures.push(failed);
         }
-        for (function, failed) in report.functions.iter_mut().zip(failures) {
-            function.failed = failed;
+        // Snapshots hold CRAP scores only and cannot suppress mutation findings.
+        let mutation: Vec<_> = report.mutation.as_ref().map_or_else(
+            || vec![false; report.functions.len()],
+            |m| m.functions.iter().map(|f| f.failed).collect(),
+        );
+        for ((function, failed), mutation) in
+            report.functions.iter_mut().zip(failures).zip(mutation)
+        {
+            function.failed = failed || mutation;
         }
         report.failed = report.completeness_failed || report.functions.iter().any(|f| f.failed);
         Ok(())

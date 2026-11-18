@@ -1,3 +1,4 @@
+use crate::mutation::EquivalentEntry;
 use anyhow::{Context, Result, bail};
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use serde::Deserialize;
@@ -21,6 +22,16 @@ struct Config {
     /// Omitted means the defaults; an explicit null is invalid, as in the schema.
     #[serde(default, deserialize_with = "present_list")]
     excluded_directories: Option<Vec<String>>,
+    #[serde(default)]
+    mutation: MutationConfig,
+}
+
+/// Reviewed acknowledgments for `--mutation-report`; see docs/MUTATION_EVIDENCE.md.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MutationConfig {
+    #[serde(default)]
+    equivalent: Vec<EquivalentEntry>,
 }
 
 fn present_list<'de, D: serde::Deserializer<'de>>(
@@ -73,6 +84,8 @@ pub struct Rules {
     pub require_coverage: bool,
     pub fail_on_empty: bool,
     pub excluded_directories: Vec<String>,
+    /// Validated equivalent-mutant acknowledgments; used only with a mutation report.
+    pub(crate) mutation_equivalent: Vec<EquivalentEntry>,
 }
 fn compile(patterns: &[String]) -> Result<GlobSet> {
     let mut builder = GlobSetBuilder::new();
@@ -117,6 +130,7 @@ impl Rules {
                     require_coverage: false,
                     fail_on_empty: false,
                     excluded_directories: None,
+                    mutation: MutationConfig::default(),
                 }
             }
             Err(error) => return Err(error).context("cannot read project configuration"),
@@ -134,8 +148,11 @@ impl Rules {
         }
         let excluded_directories = excluded_directories(settings.excluded_directories)
             .context("invalid project configuration")?;
+        crate::mutation::validate_equivalents(&mut settings.mutation.equivalent)
+            .context("invalid project configuration")?;
         Ok(Self {
             excluded_directories,
+            mutation_equivalent: settings.mutation.equivalent,
             include: compile(&settings.include)?,
             exclude: compile(&settings.exclude)?,
             threshold: settings.threshold,

@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "runId": "22121-1794655448212925462",
+  "baseline": {
+    "protocol": 1,
+    "runId": "22121-1794655448212925462",
+    "jobId": "baseline",
+    "generation": 0,
+    "outcome": "passed",
+    "tests": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "errors": []
+  },
+  "mutants": [
+    {
+      "id": "641c30d54b8db3f4d8d1212ac1bb3a4f0b65044421a93240a2bd8fac98aabcc7",
+      "file": "<ROOT>/src/subject.ts",
+      "operator": "boolean-literal",
+      "original": "true",
+      "replacement": "false",
+      "location": {
+        "start": {
+          "offset": 46,
+          "line": 2,
+          "column": 10
+        },
+        "end": {
+          "offset": 50,
+          "line": 2,
+          "column": 14
+        }
+      },
+      "outcome": "killed",
+      "tests": {
+        "passed": 1,
+        "failed": 1,
+        "skipped": 0
+      },
+      "errors": [
+        "expected false to be true // Object.is equality"
+      ],
+      "provenance": {
+        "source": "executed",
+        "reason": "outcomes copied from the recorded Oximut M1 run of this fixture"
+      }
+    },
+    {
+      "id": "c6b0a1eacb6302f1a93a386334d6b06ebbd26bfddb6ee024539082a895a335b9",
+      "file": "<ROOT>/src/subject.ts",
+      "operator": "boolean-literal",
+      "original": "false",
+      "replacement": "true",
+      "location": {
+        "start": {
+          "offset": 258,
+          "line": 11,
+          "column": 10
+        },
+        "end": {
+          "offset": 263,
+          "line": 11,
+          "column": 15
+        }
+      },
+      "outcome": "survived",
+      "tests": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      "errors": [],
+      "provenance": {
+        "source": "executed",
+        "reason": "outcomes copied from the recorded Oximut M1 run of this fixture"
+      }
+    }
+  ],
+  "diagnostics": [
+    "execution=fresh; isolation=fresh-controller-and-test-process",
+    "mutator families=boolean-literal; exclusions are not part of this run"
+  ],
+  "summary": {
+    "total": 2,
+    "killed": 1,
+    "survived": 1,
+    "noCoverage": 0,
+    "invalid": 0,
+    "timeout": 0,
+    "infrastructureError": 0,
+    "resourceExhausted": 0,
+    "skipped": 0,
+    "scoreDenominator": 2,
+    "score": 50.0,
+    "complete": true
+  },
+  "cache": {
+    "enabled": false,
+    "outcomesEnabled": false,
+    "reason": "cache-not-requested",
+    "instrumentationHits": 0,
+    "instrumentationMisses": 0,
+    "outcomeHits": 0,
+    "outcomeMisses": 0,
+    "persistence": "not-written",
+    "runnerHashMs": 0,
+    "fingerprintProfiles": []
+  },
+  "resources": {
+    "admissionPauses": 0,
+    "admissionWorkerCostBytes": 51123200,
+    "budgetBytes": 12115951616,
+    "cgroups": [],
+    "configuredBudgetBytes": null,
+    "configuredWorkers": 1,
+    "cpuLimitWorkers": 8,
+    "disabledValidationRuns": [],
+    "effectiveWorkers": 1,
+    "enforcement": "best-effort sampled admission and process-tree cancellation; existing cgroup limits are OS-enforced; no new hard cap installed",
+    "exhaustion": null,
+    "maxActiveJobs": 1,
+    "measuredWorkerPeakBytes": 40898560,
+    "measurement": "Linux /proc smaps_rollup Rss sum, approximate stat RSS fallback on older/restricted kernels: main CLI and all worker/adapter/controller/test descendants; shared pages counted per process",
+    "peakAggregateRssBytes": 49172480,
+    "phaseWallMs": {
+      "coverageBaseline": 0.000521,
+      "disabledSwitchValidation": 0.000781,
+      "finalInputValidation": 0.000937,
+      "inputAndSchedulerPreparation": 47.360729,
+      "mutationExecution": 0.004323,
+      "mutationPlanning": 0.037604,
+      "originalBaseline": 1230.625521,
+      "postBaselineValidation": 0.0020829999999999998,
+      "teardown": 40.622604
+    },
+    "recycledIdleWorkers": 0,
+    "reserveBytes": 67108864,
+    "sampleIntervalMs": 50,
+    "samples": 5
+  }
+}

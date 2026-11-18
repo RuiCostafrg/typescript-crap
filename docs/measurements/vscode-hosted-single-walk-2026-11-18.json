@@ -1,0 +1,495 @@
+{
+  "summary": "Hosted VS Code scans of the single syntax-tree walk (PR #100 at 7127546; the same analysis.rs was later rebased onto main as e215684) against v2.5.0, built and measured in the same corpus-benchmark run on one runner. All 12 scans produced the same report SHA-256.",
+  "date": "2026-11-18",
+  "how_to_read": [
+    "Compare only within this run: absolute times depend on the hosted runner's CPU model.",
+    "Both builds use the default job count (4 on this 4-CPU runner). Peak RSS is GNU time %M.",
+    "'absent' writes a new report; 'existing' overwrites one (the output preflight walk runs)."
+  ],
+  "workflow_run": "https://github.com/RuiCostafrg/typescript-crap/actions/runs/44266219325",
+  "findings": [
+    "glibc: wall 24.32 s -> 21.77 s (-10.5%), user CPU 55.83 s -> 49.36 s (-11.6%), peak RSS unchanged (266 MB).",
+    "musl (mimalloc): wall 26.31 s -> 22.56 s (-14.3%), user CPU 59.22 s -> 49.99 s (-15.6%), peak RSS within noise (215-219 MB).",
+    "Report SHA-256 8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981 for every scan of both builds."
+  ],
+  "results": {
+    "version": 1,
+    "command": [
+      "ts-crap",
+      "--root",
+      "<corpus>",
+      "--on-syntax-error",
+      "report",
+      "--format",
+      "json",
+      "--output",
+      "<report.json>"
+    ],
+    "corpus": {
+      "name": "microsoft/vscode",
+      "commit": "f42f0a1102cedb0047aed92bcdf1f4ba422d02b8"
+    },
+    "candidate_commit": "7127546ae5ea8069b95b35f24711c44547033ba4",
+    "runs": 3,
+    "report": {
+      "bytes": 184383769,
+      "functions": 431594,
+      "files_scanned": 15246,
+      "syntax_errors": 50,
+      "failed": true
+    },
+    "report_consistent": true,
+    "report_sha256s": [
+      "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+    ],
+    "baseline": {
+      "ref": "v2.5.0",
+      "commit": "c1e48eaebebcea3479cccef7d8585732135cb126",
+      "report_matches": true,
+      "report_sha256s": [
+        "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+      ]
+    },
+    "machine": {
+      "platform": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "cpus": 4,
+      "runner": "GitHub Actions 1000031572",
+      "image": "ubuntu26",
+      "image_version": "20261111.196.1",
+      "time_tool": [
+        "time (GNU Time) UNKNOWN"
+      ]
+    },
+    "results": {
+      "glibc": {
+        "binary_sha256": "b178acfd758208dae4837f53ada78e131ea1d9b55c5ee1c7c7545193eb64c201",
+        "version": "ts-crap 2.5.0",
+        "linkage": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 3.2.0, BuildID[sha1]=69430a7ba8222db63bf0e605a3fffe7c84f2da31, stripped",
+        "summary": {
+          "absent": {
+            "runs": 3,
+            "wall_s": {
+              "median": 21.770583552000062,
+              "min": 21.414697136999962,
+              "max": 21.870547198000054
+            },
+            "user_s": {
+              "median": 49.36,
+              "min": 48.99,
+              "max": 49.53
+            },
+            "system_s": {
+              "median": 0.63,
+              "min": 0.63,
+              "max": 0.69
+            },
+            "peak_rss_kib": {
+              "median": 266176,
+              "min": 265124,
+              "max": 266196
+            }
+          },
+          "existing": {
+            "runs": 3,
+            "wall_s": {
+              "median": 21.767906927000013,
+              "min": 21.62270209899998,
+              "max": 21.999376494000217
+            },
+            "user_s": {
+              "median": 49.13,
+              "min": 49.0,
+              "max": 49.56
+            },
+            "system_s": {
+              "median": 0.8,
+              "min": 0.77,
+              "max": 0.82
+            },
+            "peak_rss_kib": {
+              "median": 265280,
+              "min": 264740,
+              "max": 265952
+            }
+          }
+        },
+        "observations": {
+          "absent": [
+            {
+              "user_s": 49.53,
+              "system_s": 0.63,
+              "peak_rss_kib": 266176,
+              "exit_status": 1,
+              "wall_s": 21.870547198000054,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 49.36,
+              "system_s": 0.69,
+              "peak_rss_kib": 266196,
+              "exit_status": 1,
+              "wall_s": 21.770583552000062,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 48.99,
+              "system_s": 0.63,
+              "peak_rss_kib": 265124,
+              "exit_status": 1,
+              "wall_s": 21.414697136999962,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            }
+          ],
+          "existing": [
+            {
+              "user_s": 49.13,
+              "system_s": 0.82,
+              "peak_rss_kib": 265952,
+              "exit_status": 1,
+              "wall_s": 21.767906927000013,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 49.56,
+              "system_s": 0.8,
+              "peak_rss_kib": 265280,
+              "exit_status": 1,
+              "wall_s": 21.999376494000217,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 49.0,
+              "system_s": 0.77,
+              "peak_rss_kib": 264740,
+              "exit_status": 1,
+              "wall_s": 21.62270209899998,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            }
+          ]
+        }
+      },
+      "musl": {
+        "binary_sha256": "72d2bf45d45fe4d90bbef56bf5eee5f9752ebe902be2afb11bf409da8d1c9e0d",
+        "version": "ts-crap 2.5.0",
+        "linkage": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, BuildID[sha1]=d8c2d84dd83c53ab0de17a4484cb9f2d0181f635, stripped",
+        "summary": {
+          "absent": {
+            "runs": 3,
+            "wall_s": {
+              "median": 22.559060320999947,
+              "min": 22.50127509899994,
+              "max": 22.69844130499996
+            },
+            "user_s": {
+              "median": 49.99,
+              "min": 49.93,
+              "max": 50.32
+            },
+            "system_s": {
+              "median": 0.63,
+              "min": 0.61,
+              "max": 0.64
+            },
+            "peak_rss_kib": {
+              "median": 219364,
+              "min": 217396,
+              "max": 219460
+            }
+          },
+          "existing": {
+            "runs": 3,
+            "wall_s": {
+              "median": 22.77025870700004,
+              "min": 22.412294611999982,
+              "max": 23.0092960689999
+            },
+            "user_s": {
+              "median": 49.93,
+              "min": 49.63,
+              "max": 50.19
+            },
+            "system_s": {
+              "median": 0.83,
+              "min": 0.78,
+              "max": 0.84
+            },
+            "peak_rss_kib": {
+              "median": 219040,
+              "min": 209400,
+              "max": 221060
+            }
+          }
+        },
+        "observations": {
+          "absent": [
+            {
+              "user_s": 49.99,
+              "system_s": 0.64,
+              "peak_rss_kib": 219364,
+              "exit_status": 1,
+              "wall_s": 22.559060320999947,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 50.32,
+              "system_s": 0.61,
+              "peak_rss_kib": 219460,
+              "exit_status": 1,
+              "wall_s": 22.69844130499996,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 49.93,
+              "system_s": 0.63,
+              "peak_rss_kib": 217396,
+              "exit_status": 1,
+              "wall_s": 22.50127509899994,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            }
+          ],
+          "existing": [
+            {
+              "user_s": 49.63,
+              "system_s": 0.78,
+              "peak_rss_kib": 219040,
+              "exit_status": 1,
+              "wall_s": 22.412294611999982,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 49.93,
+              "system_s": 0.83,
+              "peak_rss_kib": 209400,
+              "exit_status": 1,
+              "wall_s": 22.77025870700004,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 50.19,
+              "system_s": 0.84,
+              "peak_rss_kib": 221060,
+              "exit_status": 1,
+              "wall_s": 23.0092960689999,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            }
+          ]
+        }
+      },
+      "baseline-glibc": {
+        "binary_sha256": "152914fade7bb038dae6f6e19a9f86556d6452ddea6e7dc792a6500b671307a1",
+        "version": "ts-crap 2.5.0",
+        "linkage": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 3.2.0, BuildID[sha1]=45ab3fc141fbda2f64cf776fefcb2a7f203dceb8, stripped",
+        "summary": {
+          "absent": {
+            "runs": 3,
+            "wall_s": {
+              "median": 24.32090478600003,
+              "min": 24.11710643899994,
+              "max": 24.53419273199995
+            },
+            "user_s": {
+              "median": 55.83,
+              "min": 55.52,
+              "max": 56.27
+            },
+            "system_s": {
+              "median": 0.64,
+              "min": 0.61,
+              "max": 0.66
+            },
+            "peak_rss_kib": {
+              "median": 265656,
+              "min": 264304,
+              "max": 265940
+            }
+          },
+          "existing": {
+            "runs": 3,
+            "wall_s": {
+              "median": 24.80251338999983,
+              "min": 24.266192318999856,
+              "max": 24.858058262999975
+            },
+            "user_s": {
+              "median": 56.27,
+              "min": 55.47,
+              "max": 56.61
+            },
+            "system_s": {
+              "median": 0.79,
+              "min": 0.77,
+              "max": 0.81
+            },
+            "peak_rss_kib": {
+              "median": 265692,
+              "min": 265172,
+              "max": 266040
+            }
+          }
+        },
+        "observations": {
+          "absent": [
+            {
+              "user_s": 55.52,
+              "system_s": 0.66,
+              "peak_rss_kib": 264304,
+              "exit_status": 1,
+              "wall_s": 24.11710643899994,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 56.27,
+              "system_s": 0.64,
+              "peak_rss_kib": 265940,
+              "exit_status": 1,
+              "wall_s": 24.53419273199995,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 55.83,
+              "system_s": 0.61,
+              "peak_rss_kib": 265656,
+              "exit_status": 1,
+              "wall_s": 24.32090478600003,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            }
+          ],
+          "existing": [
+            {
+              "user_s": 56.27,
+              "system_s": 0.79,
+              "peak_rss_kib": 265172,
+              "exit_status": 1,
+              "wall_s": 24.858058262999975,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 55.47,
+              "system_s": 0.77,
+              "peak_rss_kib": 265692,
+              "exit_status": 1,
+              "wall_s": 24.266192318999856,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 56.61,
+              "system_s": 0.81,
+              "peak_rss_kib": 266040,
+              "exit_status": 1,
+              "wall_s": 24.80251338999983,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            }
+          ]
+        }
+      },
+      "baseline-musl": {
+        "binary_sha256": "9377642f44aff0d78315aa037bee49fe2db98122a254df25e4bf84fd4d9461f2",
+        "version": "ts-crap 2.5.0",
+        "linkage": "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, BuildID[sha1]=22062a4e89bb3bd90b0c227a6b49c36878484c3c, stripped",
+        "summary": {
+          "absent": {
+            "runs": 3,
+            "wall_s": {
+              "median": 26.311816953999937,
+              "min": 26.296094633000052,
+              "max": 26.656086985
+            },
+            "user_s": {
+              "median": 59.22,
+              "min": 59.07,
+              "max": 59.25
+            },
+            "system_s": {
+              "median": 0.71,
+              "min": 0.61,
+              "max": 0.71
+            },
+            "peak_rss_kib": {
+              "median": 214688,
+              "min": 207704,
+              "max": 220524
+            }
+          },
+          "existing": {
+            "runs": 3,
+            "wall_s": {
+              "median": 26.714121000999967,
+              "min": 26.51045946399995,
+              "max": 26.85292758999981
+            },
+            "user_s": {
+              "median": 59.35,
+              "min": 59.03,
+              "max": 59.44
+            },
+            "system_s": {
+              "median": 0.78,
+              "min": 0.78,
+              "max": 0.82
+            },
+            "peak_rss_kib": {
+              "median": 213948,
+              "min": 211160,
+              "max": 215692
+            }
+          }
+        },
+        "observations": {
+          "absent": [
+            {
+              "user_s": 59.25,
+              "system_s": 0.71,
+              "peak_rss_kib": 214688,
+              "exit_status": 1,
+              "wall_s": 26.656086985,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 59.22,
+              "system_s": 0.61,
+              "peak_rss_kib": 220524,
+              "exit_status": 1,
+              "wall_s": 26.311816953999937,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 59.07,
+              "system_s": 0.71,
+              "peak_rss_kib": 207704,
+              "exit_status": 1,
+              "wall_s": 26.296094633000052,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            }
+          ],
+          "existing": [
+            {
+              "user_s": 59.03,
+              "system_s": 0.78,
+              "peak_rss_kib": 211160,
+              "exit_status": 1,
+              "wall_s": 26.51045946399995,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 59.35,
+              "system_s": 0.82,
+              "peak_rss_kib": 215692,
+              "exit_status": 1,
+              "wall_s": 26.714121000999967,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            },
+            {
+              "user_s": 59.44,
+              "system_s": 0.78,
+              "peak_rss_kib": 213948,
+              "exit_status": 1,
+              "wall_s": 26.85292758999981,
+              "report_sha256": "8826dc2cf05b691ce3f186c609c9a6dee44cb472877035aef1607d24840fa981"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

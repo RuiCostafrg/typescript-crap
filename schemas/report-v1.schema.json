@@ -129,7 +129,7 @@
     },
     "mutation": {
       "type": "object",
-      "description": "Oximut mutation evidence, present only with --mutation-report (ts-crap 2.5.0 or later). `functions` is parallel to `functions` in the report. Any surviving or uncovered mutant fails a separate mutation gate regardless of the CRAP threshold; `effective_coverage` and `effective_crap` are informational estimates only. Subset/unknown mutator scope is partial evidence that may fail functions but never proves adequacy. Cross-field invariants (parallel function lists, count sums, gate consistency) are validated by executable contract tests, not this schema.",
+      "description": "Oximut mutation evidence, present only with --mutation-report (ts-crap 2.6.0 or later). `functions` is parallel to `functions` in the report. Any surviving or uncovered mutant fails a separate mutation gate regardless of the CRAP threshold; `effective_coverage` and `effective_crap` are informational estimates only. Subset/unknown mutator scope is partial evidence that may fail functions but never proves adequacy. Cross-field invariants (parallel function lists, count sums, gate consistency) are validated by executable contract tests, not this schema.",
       "required": [
         "tool",
         "report_schema_version",

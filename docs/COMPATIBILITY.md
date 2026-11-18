@@ -167,7 +167,7 @@ the protected release workflow; live Homebrew synchronization and a clean
 published-tool CI-guide run supply publication evidence. Do not claim release
 acceptance from a branch's local tests alone or bypass failed quality checks.
 
-## Opt-in Oximut mutation evidence (unreleased)
+## Opt-in Oximut mutation evidence (2.6.0)
 
 `--mutation-report` and `ScanExtensions::mutation_report` add evidence without
 changing the CRAP formula, coverage, or threshold. The JSON version-1 report

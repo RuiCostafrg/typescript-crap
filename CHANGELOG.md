@@ -44,6 +44,12 @@ coverage. ts-crap only reads Oximut reports; it never runs Oximut.
 
 ### Changed
 
+- Function analysis walks each syntax tree once instead of three times (an
+  outer walk plus, for every function, a metrics walk and an identity-hash
+  walk). Identities, names, complexity and owned lines are unchanged: the old
+  implementation stays in the tests as an oracle, and it agrees on all 371,152
+  functions of a full VS Code checkout.
+
 - `--diff` and `--pr` scans send all committed-blob requests to their one
   `git cat-file --batch` process up front from a helper thread, so Git
   streams each file's blob while the previous file is read and compared,

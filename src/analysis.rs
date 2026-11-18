@@ -328,11 +328,299 @@ fn walk_with_ancestors<'t>(node: Node<'t>, mut visit: impl FnMut(Node<'t>, &[Nod
         }
     }
 }
+// Hashed tokens are buffered and fed to SHA-256 in chunks: the digest of a
+// stream does not depend on how it is split.
+const HASH_CHUNK: usize = 16 * 1024;
 
+/// An open function with a body: the state of its identity hash and metrics,
+/// finished when the traversal leaves the function node. Nodes are classified
+/// by depth, never by byte range: zero-width MISSING nodes share positions.
+struct Frame<'t> {
+    /// Index of the function's `Method` in the output.
+    index: usize,
+    /// Depth of the function node in the traversal.
+    depth: usize,
+    body: Node<'t>,
+    parameters: Option<Node<'t>>,
+    hash: Sha256,
+    buffer: Vec<u8>,
+    complexity: u32,
+    lines: Vec<usize>,
+    /// Depth of the comment or descendant function whose subtree is not hashed.
+    hash_pruned: Option<usize>,
+    /// Depth of the `body` or `parameters` node the metrics walk is inside.
+    metrics_root: Option<usize>,
+    /// Depth of the function or type-only node whose subtree is not measured.
+    metrics_pruned: Option<usize>,
+}
+
+impl Frame<'_> {
+    /// Account for a strict descendant of the function node, in preorder. Hash
+    /// and metrics pruning are independent of each other.
+    fn observe(&mut self, node: Node<'_>, flags: u16, depth: usize, source: &str, kinds: &Kinds) {
+        // Hash owned tokens, excluding trivia and descendant functions (which
+        // have their own identities). Pruning avoids quadratic hashing of
+        // deeply nested functions; line shifts do not change identity.
+        if self.hash_pruned.is_none() {
+            if flags & (COMMENT | FUNCTION) != 0 {
+                self.hash_pruned = Some(depth);
+            } else if node.child_count() == 0 {
+                self.buffer.extend_from_slice(kinds.kind(node).as_bytes());
+                self.buffer.push(0);
+                self.buffer.extend_from_slice(text(node, source).as_bytes());
+                self.buffer.push(0);
+                if self.buffer.len() >= HASH_CHUNK {
+                    self.hash.update(&self.buffer);
+                    self.buffer.clear();
+                }
+            }
+        }
+        // Only the body and the parameters (default argument expressions execute
+        // as part of the function) are measured; both are direct children.
+        if self.metrics_root.is_none()
+            && depth == self.depth + 1
+            && (node == self.body || Some(node) == self.parameters)
+        {
+            self.metrics_root = Some(depth);
+        }
+        if self.metrics_root.is_none() || self.metrics_pruned.is_some() {
+            return;
+        }
+        if flags & (FUNCTION | TYPE_ONLY) != 0 {
+            self.metrics_pruned = Some(depth);
+            return;
+        }
+        let fields = kinds.fields;
+        if flags & DECISION != 0 {
+            self.complexity += 1;
+        }
+        if flags & LOGICAL != 0
+            && let Some(operator) = Kinds::child(node, fields.operator)
+            && matches!(
+                text(operator, source),
+                "&&" | "||" | "??" | "&&=" | "||=" | "??="
+            )
+        {
+            self.complexity += 1;
+        }
+        if flags & OWNED_LINE != 0 {
+            self.lines.push(node.start_position().row + 1);
+        }
+        let initializer = if flags & PARAMETER != 0 {
+            Kinds::child(node, fields.value)
+        } else if flags & PATTERN != 0 {
+            Kinds::child(node, fields.right)
+        } else {
+            None
+        };
+        if let Some(value) = initializer {
+            self.lines.push(value.start_position().row + 1);
+        }
+    }
+
+    /// The traversal left a descendant at `depth`; end any pruning it started.
+    fn leave(&mut self, depth: usize) {
+        if self.hash_pruned == Some(depth) {
+            self.hash_pruned = None;
+        }
+        if self.metrics_pruned == Some(depth) {
+            self.metrics_pruned = None;
+        }
+        if self.metrics_root == Some(depth) {
+            self.metrics_root = None;
+        }
+    }
+}
+
+struct Collector<'a, 't> {
+    source: &'a str,
+    kinds: &'a Kinds,
+    out: &'a mut Vec<Method>,
+    scopes: Vec<Scope<'a>>,
+    utf16: Utf16Column,
+    /// Open functions, innermost last. Every open function node is an ancestor
+    /// of the current node, so only the innermost frame can own the current
+    /// node: a nested function prunes it from the frames around it.
+    frames: Vec<Frame<'t>>,
+    /// Hash buffers of finished frames, reused by later ones.
+    spare: Vec<Vec<u8>>,
+}
+
+impl<'t> Collector<'_, 't> {
+    fn visit(&mut self, node: Node<'t>, parent: Option<Node<'t>>, depth: usize) {
+        let (source, kinds) = (self.source, self.kinds);
+        let fields = kinds.fields;
+        let flags = kinds.flags(node);
+        if let Some(frame) = self.frames.last_mut() {
+            frame.observe(node, flags, depth, source, kinds);
+        }
+        let class_name = if flags & CLASS != 0 {
+            Kinds::child(node, fields.name)
+        } else {
+            None
+        };
+        if flags & FUNCTION == 0 && class_name.is_none() {
+            return;
+        }
+        // Only scope events need to expire entries; intervening AST nodes do not
+        // use the stack. Named classes reset qualification; anonymous ones don't.
+        while self
+            .scopes
+            .last()
+            .is_some_and(|scope| scope.end <= node.start_byte())
+        {
+            self.scopes.pop();
+        }
+        if let Some(class_name) = class_name {
+            self.scopes.push(Scope {
+                end: node.end_byte(),
+                name: ScopeName::Class(text(class_name, source)),
+            });
+        } else if let Some(body) = Kinds::child(node, fields.body) {
+            let local = local_name(node, parent, source, kinds);
+            let name = match self.scopes.last().map(|scope| &scope.name) {
+                Some(ScopeName::Class(class)) => format!("{class}::{local}"),
+                Some(ScopeName::Function(index)) => format!("{}::{local}", self.out[*index].name),
+                None => local,
+            };
+            // Identity, complexity and lines are filled in when the function is left.
+            self.out.push(Method {
+                identity: String::new(),
+                name,
+                line: node.start_position().row + 1,
+                column: node.start_position().column + 1,
+                column_utf16: self.utf16.at(node, source),
+                end_line: node.end_position().row + 1,
+                start: (node.start_position().row, node.start_position().column),
+                end: (node.end_position().row, node.end_position().column),
+                complexity: 1,
+                lines: Vec::new(),
+            });
+            let index = self.out.len() - 1;
+            self.scopes.push(Scope {
+                end: node.end_byte(),
+                name: ScopeName::Function(index),
+            });
+            let mut lines = Vec::new();
+            // Expression-bodied arrows have no statement node.
+            if kinds.flags(body) & STATEMENT_BLOCK == 0 {
+                lines.push(body.start_position().row + 1);
+            }
+            let mut buffer = self
+                .spare
+                .pop()
+                .unwrap_or_else(|| Vec::with_capacity(HASH_CHUNK));
+            buffer.clear();
+            // The function node has children (its body), so it is never a hashed token.
+            self.frames.push(Frame {
+                index,
+                depth,
+                body,
+                parameters: Kinds::child(node, fields.parameters),
+                hash: Sha256::new(),
+                buffer,
+                complexity: 1,
+                lines,
+                hash_pruned: None,
+                metrics_root: None,
+                metrics_pruned: None,
+            });
+        }
+    }
+
+    fn leave(&mut self, depth: usize) {
+        if let Some(mut frame) = self.frames.pop_if(|frame| frame.depth == depth) {
+            frame.hash.update(&frame.buffer);
+            frame.buffer.clear();
+            frame.lines.sort_unstable();
+            frame.lines.dedup();
+            let method = &mut self.out[frame.index];
+            method.identity = hex::encode(frame.hash.finalize());
+            method.complexity = frame.complexity;
+            method.lines = frame.lines;
+            self.spare.push(frame.buffer);
+        }
+        if let Some(frame) = self.frames.last_mut() {
+            frame.leave(depth);
+        }
+    }
+}
+
+// One preorder traversal does the work of the outer scope walk, every
+// function's metrics walk and every function's token hash walk: each node is
+// visited once and credited to the innermost open function. Never prunes.
+fn collect<'t>(node: Node<'t>, source: &str, kinds: &Kinds, out: &mut Vec<Method>) {
+    let mut collector = Collector {
+        source,
+        kinds,
+        out,
+        scopes: Vec::new(),
+        utf16: Utf16Column::default(),
+        frames: Vec::new(),
+        spare: Vec::new(),
+    };
+    let mut cursor = node.walk();
+    let mut ancestors: Vec<Node<'t>> = Vec::new();
+    loop {
+        let current = cursor.node();
+        collector.visit(current, ancestors.last().copied(), ancestors.len());
+        if cursor.goto_first_child() {
+            ancestors.push(current);
+            continue;
+        }
+        collector.leave(ancestors.len());
+        loop {
+            if cursor.goto_next_sibling() {
+                break;
+            }
+            if !cursor.goto_parent() {
+                return;
+            }
+            ancestors.pop();
+            collector.leave(ancestors.len());
+        }
+    }
+}
+// Private copies of `walk` and `walk_with_ancestors` for the oracle, so a
+// broken production traversal (or a mutant of one) makes the oracle tests
+// fail instead of hanging them.
+#[cfg(test)]
+fn oracle_walk(node: Node<'_>, mut visit: impl FnMut(Node<'_>) -> bool) {
+    oracle_walk_with_ancestors(node, |node, _| visit(node));
+}
+
+#[cfg(test)]
+fn oracle_walk_with_ancestors<'t>(
+    node: Node<'t>,
+    mut visit: impl FnMut(Node<'t>, &[Node<'t>]) -> bool,
+) {
+    let mut cursor = node.walk();
+    let mut ancestors = Vec::new();
+    loop {
+        let current = cursor.node();
+        if visit(current, &ancestors) && cursor.goto_first_child() {
+            ancestors.push(current);
+            continue;
+        }
+        loop {
+            if cursor.goto_next_sibling() {
+                break;
+            }
+            if !cursor.goto_parent() {
+                return;
+            }
+            ancestors.pop();
+        }
+    }
+}
+
+// Reference implementation kept for tests: the production `collect` computes
+// the same values in a single traversal.
 // Each decision adds one independent execution path. Descendant functions are
 // scored separately, never charged to their enclosing function. Owned lines are
 // pushed unsorted; the caller sorts and deduplicates them once.
-fn metrics(
+#[cfg(test)]
+fn metrics_oracle(
     node: Node<'_>,
     source: &str,
     kinds: &Kinds,
@@ -340,7 +628,7 @@ fn metrics(
     lines: &mut Vec<usize>,
 ) {
     let fields = kinds.fields;
-    walk(node, |node| {
+    oracle_walk(node, |node| {
         let flags = kinds.flags(node);
         if flags & (FUNCTION | TYPE_ONLY) != 0 {
             return false;
@@ -374,16 +662,13 @@ fn metrics(
     });
 }
 
-// Hashed tokens are buffered and fed to SHA-256 in chunks: the digest of a
-// stream does not depend on how it is split.
-const HASH_CHUNK: usize = 16 * 1024;
-
-fn collect(node: Node<'_>, source: &str, kinds: &Kinds, out: &mut Vec<Method>) {
+#[cfg(test)]
+fn collect_oracle(node: Node<'_>, source: &str, kinds: &Kinds, out: &mut Vec<Method>) {
     let fields = kinds.fields;
     let mut scopes: Vec<Scope<'_>> = Vec::new();
     let mut utf16 = Utf16Column::default();
     let mut buffer = Vec::with_capacity(HASH_CHUNK);
-    walk_with_ancestors(node, |node, ancestors| {
+    oracle_walk_with_ancestors(node, |node, ancestors| {
         let flags = kinds.flags(node);
         let class_name = if flags & CLASS != 0 {
             Kinds::child(node, fields.name)
@@ -415,14 +700,14 @@ fn collect(node: Node<'_>, source: &str, kinds: &Kinds, out: &mut Vec<Method>) {
             };
             let mut complexity = 1;
             let mut lines = Vec::new();
-            metrics(body, source, kinds, &mut complexity, &mut lines);
+            metrics_oracle(body, source, kinds, &mut complexity, &mut lines);
             // Expression-bodied arrows have no statement node.
             if kinds.flags(body) & STATEMENT_BLOCK == 0 {
                 lines.push(body.start_position().row + 1);
             }
             // Default argument expressions execute as part of the function.
             if let Some(parameters) = Kinds::child(node, fields.parameters) {
-                metrics(parameters, source, kinds, &mut complexity, &mut lines);
+                metrics_oracle(parameters, source, kinds, &mut complexity, &mut lines);
             }
             lines.sort_unstable();
             lines.dedup();
@@ -431,7 +716,7 @@ fn collect(node: Node<'_>, source: &str, kinds: &Kinds, out: &mut Vec<Method>) {
             // deeply nested functions; line shifts do not change identity.
             let mut hash = Sha256::new();
             buffer.clear();
-            walk(node, |token| {
+            oracle_walk(node, |token| {
                 let flags = kinds.flags(token);
                 if flags & COMMENT != 0 || (token != node && flags & FUNCTION != 0) {
                     return false;
@@ -469,7 +754,6 @@ fn collect(node: Node<'_>, source: &str, kinds: &Kinds, out: &mut Vec<Method>) {
         true
     });
 }
-
 /// One parser per grammar, reused for all files in one scan. Trees are never
 /// reused between sources, so no stale incremental parse state is retained.
 #[derive(Default)]
@@ -692,3 +976,212 @@ impl Analyzer {
 
 #[cfg(test)]
 mod tests;
+
+// The single-pass `collect` must match the reference `collect_oracle` in every
+// field and in order, on valid and malformed trees alike.
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod oracle_tests {
+    use super::{Kinds, Method, collect, collect_oracle};
+    use std::path::{Path, PathBuf};
+    use tree_sitter::{Language, Parser};
+
+    fn languages() -> [(Language, Kinds); 2] {
+        [
+            tree_sitter_typescript::LANGUAGE_TYPESCRIPT,
+            tree_sitter_typescript::LANGUAGE_TSX,
+        ]
+        .map(|language| {
+            let language: Language = language.into();
+            let kinds = Kinds::new(&language);
+            (language, kinds)
+        })
+    }
+
+    /// Both collectors on one source; returns the number of methods compared.
+    fn assert_same(label: &str, tsx: bool, source: &str) -> usize {
+        let (language, kinds) = &languages()[usize::from(tsx)];
+        let mut parser = Parser::new();
+        parser.set_language(language).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+        let mut single = Vec::new();
+        collect(tree.root_node(), source, kinds, &mut single);
+        let mut oracle = Vec::new();
+        collect_oracle(tree.root_node(), source, kinds, &mut oracle);
+        assert_eq!(single.len(), oracle.len(), "{label}: method count");
+        for (new, old) in single.iter().zip(&oracle) {
+            assert_same_method(label, new, old);
+        }
+        single.len()
+    }
+
+    fn assert_same_method(label: &str, new: &Method, old: &Method) {
+        let at = format!("{label}: {} ({}:{})", old.name, old.line, old.column);
+        assert_eq!(new.name, old.name, "{at}: name");
+        assert_eq!(new.identity, old.identity, "{at}: identity");
+        assert_eq!(new.line, old.line, "{at}: line");
+        assert_eq!(new.column, old.column, "{at}: column");
+        assert_eq!(new.column_utf16, old.column_utf16, "{at}: column_utf16");
+        assert_eq!(new.end_line, old.end_line, "{at}: end_line");
+        assert_eq!(new.start, old.start, "{at}: start");
+        assert_eq!(new.end, old.end, "{at}: end");
+        assert_eq!(new.complexity, old.complexity, "{at}: complexity");
+        assert_eq!(new.lines, old.lines, "{at}: lines");
+    }
+
+    fn typescript_files(dir: &Path, files: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_dir() {
+                typescript_files(&path, files);
+            } else if kind.is_file()
+                && path
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    .is_some_and(|extension| matches!(extension, "ts" | "tsx" | "mts" | "cts"))
+            {
+                files.push(path);
+            }
+        }
+    }
+
+    /// Compares every TypeScript file under `dir`; returns (files, methods).
+    fn assert_directory_same(dir: &Path) -> (usize, usize) {
+        let mut files = Vec::new();
+        typescript_files(dir, &mut files);
+        files.sort();
+        let mut methods = 0;
+        let mut compared = 0;
+        for path in &files {
+            let Ok(source) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            let tsx = path.extension().is_some_and(|extension| extension == "tsx");
+            methods += assert_same(&path.display().to_string(), tsx, &source);
+            compared += 1;
+        }
+        (compared, methods)
+    }
+
+    #[test]
+    fn single_pass_matches_oracle_on_every_repository_test_file() {
+        let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+        let (files, methods) = assert_directory_same(&tests);
+        assert!(files > 0 && methods > 0, "no fixtures compared");
+    }
+
+    #[test]
+    fn single_pass_matches_oracle_on_tricky_snippets() {
+        let snippets: &[(&str, bool, &str)] = &[
+            (
+                "expression arrows",
+                false,
+                "const a = (x: number) => x + 1;\nconst b = () => x ? y : z;\nconst c = async () => await f(a && b);\n",
+            ),
+            (
+                "curried arrows",
+                false,
+                "const f = (a: number) => (b: number) => (c: number) => a + b + c;\nconst g = a => b => { return a || b; };\n",
+            ),
+            (
+                "bodiless overloads with defaults",
+                false,
+                "function f(a: number): void;\nfunction f(a = () => 1, b = (x) => x ?? 2): void;\nfunction f(a?: any, b?: any) { if (a) return b; }\nclass C { m(a = 1): void; m(a = (z) => z || 1) { return a; } abstract n(x = 2): void; }\ndeclare function d(cb: (x: number) => void): void;\n",
+            ),
+            (
+                "classes inside functions",
+                false,
+                "function outer() {\n  class Inner { run(x = 1) { return x ? 1 : 2; } static s = () => 1; get v() { return 1; } }\n  const o = class { m() { if (a) {} } };\n  return new Inner();\n}\nclass Top { method() { class Nested { deep() { return () => 1; } } return Nested; } }\n",
+            ),
+            (
+                "comments inside functions",
+                false,
+                "function f(/* p */ a: number /* q */) {\n  // line\n  /* block */ return a; // tail\n}\nconst g = () => /* c */ 1; // x\n",
+            ),
+            (
+                "default params containing arrows",
+                false,
+                "function f(cb = () => { if (a) b(); }, n = (x: number) => x > 0 ? 1 : 2) { return cb(n); }\nconst g = ({ a = () => 1, b = 2 } = {}, [c = x || y] = []) => c;\n",
+            ),
+            (
+                "destructuring defaults",
+                false,
+                "function f({ a = 1, b: { c = 2 } = {} } = {}, [d = 3, e = f2()] = [], ...rest: number[]) { const { x = 1, y = (() => 2)() } = rest; return a; }\n",
+            ),
+            (
+                "getters and setters",
+                false,
+                "class A {\n  get x(): number { return this._x ?? 0; }\n  set x(v: number) { if (v) this._x = v; }\n  static get y() { return 1; }\n}\nconst o = { get a() { return 1; }, set a(v) { this.b = v; }, m() { return 2; }, k: function () { return 3; }, l: () => 4 };\n",
+            ),
+            (
+                "nested anonymous functions",
+                false,
+                "export default function () { return [1, 2].map(function (x) { return (() => { return x ? () => 1 : () => 2; })(); }); }\nx.y = function () { return function () { return () => 1; }; };\n(function () { a ||= b; c &&= d; e ??= f; g += 1; })();\n",
+            ),
+            (
+                "type-only and annotations",
+                false,
+                "function f<T extends { a: () => void }>(x: T, cb: (v: number) => string = (v) => String(v)): T extends string ? 1 : 2 { type U = A extends B ? C : D; let z: (q: number) => void = (q) => {}; return x as any; }\n",
+            ),
+            (
+                "generators and async",
+                false,
+                "function* g() { yield 1; for (const x of y) { if (x) continue; } }\nconst h = async function* () { while (true) { do { break; } while (a); } };\nswitch (a) { case 1: break; default: }\ntry { f(); } catch (e) { throw e; }\n",
+            ),
+            (
+                "unicode columns",
+                false,
+                "const s = '😀'; const f = () => 1; const t = '日本語', g = function () { return '😀'; };\n",
+            ),
+            (
+                "tsx components",
+                true,
+                "export const View = ({ a = () => 1 }: P) => <div onClick={() => a() && b}>{x ? <b>{(() => 1)()}</b> : null}</div>;\nfunction C() { return <>{list.map((i) => <li key={i}>{i}</li>)}</>; }\nclass D extends React.Component { render() { return <p onClick={() => { if (a) b(); }}>x</p>; } }\n",
+            ),
+            (
+                "syntax error",
+                false,
+                "function f( { return 1; }\nconst g = () => { if (a) { \nclass { m() {} }\n",
+            ),
+            (
+                "missing nodes",
+                false,
+                "function f() { const x = ; return (1 + ; }\nconst g = (a, b => a;\nfunction h() { foo(1, 2\n",
+            ),
+            (
+                "missing nodes tsx",
+                true,
+                "const A = () => <div><span>{x ? : 1}</div>;\nfunction B() { return <p>{() => }</p>; }\n",
+            ),
+            ("empty", false, ""),
+            (
+                "no functions",
+                false,
+                "const x = 1; type T = { a: () => void }; interface I { m(): void; n(x = 1): void }\n",
+            ),
+        ];
+        let mut methods = 0;
+        for (label, tsx, source) in snippets {
+            methods += assert_same(label, *tsx, source);
+        }
+        assert!(methods > 30, "snippets produced {methods} methods");
+    }
+
+    // Set TS_CRAP_ORACLE_CORPUS to a directory of TypeScript to compare on a
+    // large real corpus: cargo test --release --lib -- --ignored
+    #[test]
+    #[ignore = "needs TS_CRAP_ORACLE_CORPUS to name a directory of TypeScript files"]
+    fn single_pass_matches_oracle_on_corpus() {
+        let dir = std::env::var_os("TS_CRAP_ORACLE_CORPUS")
+            .expect("TS_CRAP_ORACLE_CORPUS must name a directory");
+        let (files, methods) = assert_directory_same(Path::new(&dir));
+        assert!(files > 0, "no TypeScript files under {dir:?}");
+        eprintln!("compared {methods} methods in {files} files");
+    }
+}

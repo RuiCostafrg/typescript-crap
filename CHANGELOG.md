@@ -44,6 +44,12 @@ coverage. ts-crap only reads Oximut reports; it never runs Oximut.
 
 ### Changed
 
+- `--diff` and `--pr` scans send all committed-blob requests to their one
+  `git cat-file --batch` process up front from a helper thread, so Git
+  streams each file's blob while the previous file is read and compared,
+  instead of one request-and-reply round trip per file. Reports, errors and
+  the byte-for-byte check against HEAD are unchanged.
+
 - Release archives, Debian packages and the Linux npm packages ship
   mimalloc's MIT notice (`mimalloc-LICENSE`) next to musl's, because the static
   musl build links mimalloc from 2.5.0. Debian's `copyright` file includes it

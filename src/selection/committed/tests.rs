@@ -58,7 +58,14 @@ fn malformed_batch_framing_and_truncated_blobs_are_rejected() {
             .args(["-e", "process.stdin.once('data',()=>{process.stdout.end(process.argv[1]);process.stdin.destroy();});", response])
             .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
         let output = BufReader::new(child.stdout.take().unwrap());
-        let mut reader = BlobReader { child, output };
+        // Requests are written ahead by `new`; stand in for its writer here.
+        writeln!(child.stdin.as_mut().unwrap(), "id").unwrap();
+        let mut reader = BlobReader {
+            child,
+            output,
+            pending: 1,
+            writer: None,
+        };
         assert!(
             reader.verify("id", Path::new("a.ts"), "abc").is_err(),
             "{response:?}"
@@ -117,21 +124,22 @@ fn verification_uses_supplied_snapshot_and_consumes_each_complete_blob() {
     let source = "export const f = () => '😀';\n";
     let oid = blob(dir.path(), source);
     let path = dir.path().join("a.ts");
-    let mut reader = BlobReader::new(dir.path()).unwrap();
+    let large = format!("{}\n", "x".repeat(128 * 1024));
+    let large_oid = blob(dir.path(), &large);
+    let ids = [&oid, &oid, &large_oid, &oid].map(|id| id.clone()).to_vec();
+    let mut reader = BlobReader::new(dir.path(), ids).unwrap();
     // Disk content does not replace the caller's captured analysis snapshot.
     fs::write(&path, "different on disk").unwrap();
     reader.verify(&oid, &path, source).unwrap();
     reader
         .verify(&oid, &path, &source.replace('\n', "\r\n"))
         .unwrap();
-    let large = format!("{}\n", "x".repeat(128 * 1024));
-    let large_oid = blob(dir.path(), &large);
     reader.verify(&large_oid, &path, &large).unwrap();
     reader.verify(&oid, &path, source).unwrap();
     reader.finish().unwrap();
     // Conversely, restoring disk content cannot repair a stale captured buffer.
     fs::write(&path, source).unwrap();
-    let mut reader = BlobReader::new(dir.path()).unwrap();
+    let mut reader = BlobReader::new(dir.path(), vec![oid.clone()]).unwrap();
     assert!(
         reader
             .verify(&oid, &path, "changed snapshot")
@@ -162,7 +170,7 @@ fn missing_blob_and_nonblob_objects_fail_verification() {
         .unwrap();
     assert!(output.status.success());
     let oid = String::from_utf8(output.stdout).unwrap();
-    let mut reader = BlobReader::new(dir.path()).unwrap();
+    let mut reader = BlobReader::new(dir.path(), vec![oid.trim().to_owned()]).unwrap();
     assert!(
         reader
             .verify(oid.trim(), &dir.path().join("absent.ts"), "")
@@ -177,7 +185,7 @@ fn missing_blob_and_nonblob_objects_fail_verification() {
         .unwrap();
     assert!(output.status.success());
     let oid = String::from_utf8(output.stdout).unwrap();
-    let mut reader = BlobReader::new(dir.path()).unwrap();
+    let mut reader = BlobReader::new(dir.path(), vec![oid.trim().to_owned()]).unwrap();
     assert!(
         reader
             .verify(oid.trim(), &dir.path().join("tree.ts"), "")
@@ -197,10 +205,9 @@ fn failed_batch_process_is_rejected_and_reaped() {
             .unwrap()
             .success()
     );
-    let mut reader = BlobReader::new(dir.path()).unwrap();
+    let mut reader = idle(dir.path());
     reader.child.kill().unwrap();
     assert!(reader.finish().is_err());
-    assert!(reader.child.stdin.is_none());
     assert!(!reader.child.try_wait().unwrap().unwrap().success());
 }
 
@@ -215,7 +222,7 @@ fn dropping_a_reader_terminates_and_reaps_a_waiting_batch_process() {
             .unwrap()
             .success()
     );
-    let mut reader = BlobReader::new(dir.path()).unwrap();
+    let mut reader = idle(dir.path());
     let pid = reader.child.id();
     // Keep the input pipe open outside the reader. Dropping a handle alone would
     // leave Git waiting for more input, so successful cleanup must kill and reap.
@@ -293,4 +300,89 @@ fn short_reads_and_interruptions_preserve_normalization_and_framing() {
         io::ErrorKind::PermissionDenied
     );
     assert!(reader.input.position() < committed.len() as u64);
+}
+
+/// A reader whose Git process keeps waiting: its input pipe stays open in `child`.
+fn idle(root: &Path) -> BlobReader {
+    let mut child = Command::new("git")
+        .current_dir(root)
+        .args(["cat-file", "--batch"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let output = std::io::BufReader::new(child.stdout.take().unwrap());
+    BlobReader {
+        child,
+        output,
+        pending: 0,
+        writer: None,
+    }
+}
+
+fn git_repo() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    assert!(
+        Command::new("git")
+            .current_dir(dir.path())
+            .args(["init", "-q"])
+            .status()
+            .unwrap()
+            .success()
+    );
+    dir
+}
+
+#[test]
+fn requests_written_ahead_are_answered_in_order_beyond_pipe_capacity() {
+    let dir = git_repo();
+    // Far more request and reply bytes than one pipe buffer holds each, so
+    // writing every request ahead from the reading thread would deadlock.
+    let sources: Vec<String> = (0..300)
+        .map(|index| {
+            format!(
+                "export const f{index} = {};\n",
+                "1 + ".repeat(index * 40) + "1"
+            )
+        })
+        .collect();
+    let ids: Vec<String> = sources
+        .iter()
+        .map(|source| blob(dir.path(), source))
+        .collect();
+    let path = dir.path().join("a.ts");
+    // 3,000 requests of 41+ bytes also exceed a 64 KiB input pipe.
+    let order: Vec<usize> = (0..3000).map(|index| index % sources.len()).collect();
+    let requests = order.iter().map(|&index| ids[index].clone()).collect();
+    let mut reader = BlobReader::new(dir.path(), requests).unwrap();
+    for &index in &order {
+        reader.verify(&ids[index], &path, &sources[index]).unwrap();
+    }
+    reader.finish().unwrap();
+}
+
+#[test]
+fn early_failures_with_requests_outstanding_do_not_hang() {
+    let dir = git_repo();
+    let large = format!("{}\n", "x".repeat(256 * 1024));
+    let id = blob(dir.path(), &large);
+    let path = dir.path().join("a.ts");
+    // A mismatch on the first file leaves many large replies unread.
+    let mut reader = BlobReader::new(dir.path(), vec![id.clone(); 64]).unwrap();
+    assert!(
+        reader
+            .verify(&id, &path, "changed")
+            .unwrap_err()
+            .to_string()
+            .contains("uncommitted")
+    );
+    drop(reader);
+    // Finishing before every reply was read is an error, never a wait.
+    let mut reader = BlobReader::new(dir.path(), vec![id.clone(); 64]).unwrap();
+    reader.verify(&id, &path, &large).unwrap();
+    assert!(reader.finish().is_err());
+    // A reply for another object than the caller expects is rejected.
+    let other = blob(dir.path(), "other\n");
+    let mut reader = BlobReader::new(dir.path(), vec![other]).unwrap();
+    assert!(reader.verify(&id, &path, &large).is_err());
 }

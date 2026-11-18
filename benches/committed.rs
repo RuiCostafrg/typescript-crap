@@ -49,7 +49,8 @@ fn main() {
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success());
     let oid = String::from_utf8(output.stdout).unwrap();
-    let mut reader = committed::BlobReader::new(root.path()).unwrap();
+    let mut reader =
+        committed::BlobReader::new(root.path(), vec![oid.trim().to_owned(); 5]).unwrap();
     let mut samples = Vec::new();
     for _ in 0..5 {
         let start = Instant::now();

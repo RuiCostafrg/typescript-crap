@@ -1214,7 +1214,9 @@ fn acknowledged_equivalent_survivor_passes_the_mutation_gate() {
         &substituted(&fixture("full.json"), &root),
     );
     let entry = survivor_entry(&root, &report, None);
-    write_config(&root, &[entry]);
+    // A second, distinct entry is not a duplicate; it matches nothing here.
+    let other = survivor_entry(&root, &report, Some(&"0".repeat(64)));
+    write_config(&root, &[entry, other]);
     let (code, json, stderr) = cli(&root, &report);
     assert_eq!(code, Some(0), "{stderr}");
     let mutation = &json["mutation"];
@@ -1230,7 +1232,10 @@ fn acknowledged_equivalent_survivor_passes_the_mutation_gate() {
     assert_eq!(function["mutants"], 1);
     assert_eq!(function["kill_ratio"], Value::Null);
     assert_eq!(mutation["equivalent_acknowledged"], 1);
-    assert_eq!(mutation["unmatched_equivalents"], json!([]));
+    assert_eq!(
+        mutation["unmatched_equivalents"].as_array().unwrap().len(),
+        1
+    );
     assert_eq!(mutation["functions_failed_by_mutation_only"], 0);
     for format in ["text", "html", "xml"] {
         let output = Command::new(env!("CARGO_BIN_EXE_ts-crap"))
@@ -1242,8 +1247,8 @@ fn acknowledged_equivalent_survivor_passes_the_mutation_gate() {
             .unwrap();
         let text = String::from_utf8_lossy(&output.stdout);
         assert!(
-            text.contains("1 acknowledged by configuration; 0 configured entries matched")
-                || text.contains("equivalent-acknowledged=\"1\" unmatched-equivalents=\"0\""),
+            text.contains("1 acknowledged by configuration; 1 configured entries matched")
+                || text.contains("equivalent-acknowledged=\"1\" unmatched-equivalents=\"1\""),
             "{format}: {text}"
         );
     }
@@ -1561,4 +1566,54 @@ fn the_mutators_field_sets_the_scope_and_must_agree_with_diagnostics() {
     empty["mutators"] = json!({"selection": "subset", "families": []});
     let error = format!("{:#}", try_scan(&root, &project, &empty).unwrap_err());
     assert!(error.contains("subset names no families"), "{error}");
+}
+
+#[test]
+fn an_acknowledged_survivor_leaves_the_inconclusive_count_and_the_table_row_exact() {
+    let source = "export function mixed() { return 31 + 32 + 33 + 34 + 35; }\n";
+    let mutate = |needle: &str, outcome: &str, replacement: &str| {
+        edit(source, needle, 0, "numeric-literal", replacement, outcome)
+    };
+    let edits = [
+        mutate("31", "killed", "0"),
+        mutate("32", "killed", "0"),
+        mutate("33", "survived", "0"),
+        mutate("34", "survived", "1"),
+        mutate("35", "timeout", "0"),
+    ];
+    let (_project, root, input) = synthetic_project(&[("m.ts", source)], "m.ts", source, &edits);
+    let report = scanned(&root, &input);
+    // Nothing configured: no equivalents line in any human format.
+    for format in [Format::Text, Format::Html] {
+        let output = render(&report, format).unwrap();
+        assert!(!output.contains("Equivalent mutants"), "{output}");
+    }
+    let identity = report.functions[index_of(&report, "mixed")]
+        .identity
+        .clone();
+    write_config(
+        &root,
+        &[
+            json!({"path": "m.ts", "identity": identity, "operator": "numeric-literal",
+                 "original": "34", "replacement": "1", "reason": "34 and 1 are both truthy here"}),
+        ],
+    );
+    let report = scanned(&root, &input);
+    let mixed = &report.mutation.as_ref().unwrap().functions[index_of(&report, "mixed")];
+    assert_eq!(
+        (
+            mixed.mutants,
+            mixed.killed,
+            mixed.survived,
+            mixed.equivalent
+        ),
+        (5, 2, 1, 1)
+    );
+    assert!(mixed.failed);
+    let text = render(&report, Format::Text).unwrap();
+    assert!(text.contains("  mixed  2  1  0  1  "), "{text}");
+    assert!(
+        text.contains("Equivalent mutants: 1 acknowledged by configuration; 0 configured entries matched no mutant"),
+        "{text}"
+    );
 }

@@ -711,7 +711,7 @@ impl Mutation {
             infrastructure_error: s.infrastructure_error,
             resource_exhausted: s.resource_exhausted,
             skipped: s.skipped,
-            ..Counts::default()
+            equivalent: 0,
         };
         // A truncated or edited mutant list must not pass as the run's evidence.
         ensure!(
@@ -798,13 +798,13 @@ impl Mutation {
         }
         // Without reported hashes, reproduce rc1's ids, which hash the whole
         // source. With them, ids stay opaque, as Oximut documents.
-        let reproduce_ids = self.hashes.is_none();
         // Hash the path and whole source once; each mutant extends a clone.
-        let mut prefix = Sha256::new();
-        if reproduce_ids && !mutants.is_empty() {
+        let prefix = (self.hashes.is_none() && !mutants.is_empty()).then(|| {
+            let mut prefix = Sha256::new();
             field(&mut prefix, relative_path.as_bytes());
             field(&mut prefix, source.as_bytes());
-        }
+            prefix
+        });
         let mut spans = Vec::with_capacity(mutants.len());
         let mut cursor = Cursor::default();
         for mutant in mutants {
@@ -820,7 +820,9 @@ impl Mutation {
             }
             // Oximut 1.0.0-rc.1 derives each id from the root-relative path, the
             // whole source and the edit, which binds every other byte of the file.
-            if reproduce_ids && !rc1_id_matches(&prefix, mutant) {
+            if let Some(prefix) = &prefix
+                && !rc1_id_matches(prefix, mutant)
+            {
                 bail!(
                     "mutation report does not match {relative_path}: mutant {} was not generated from the current source. The source changed since the mutation run, Oximut ran with a different --root, or this Oximut version derives mutant ids differently from 1.0.0-rc.1",
                     short(&mutant.id)

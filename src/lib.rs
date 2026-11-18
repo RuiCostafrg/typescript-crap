@@ -234,7 +234,13 @@ pub fn scan_with(args: &ScanOptions, extensions: &ScanExtensions) -> Result<Repo
     let mut committed = if files.is_empty() || selection.committed.is_empty() {
         None
     } else {
-        Some(selection::BlobReader::new(&root)?)
+        // Ids in load order, up to the first file without one: that file still
+        // fails in `load`, after every file before it was verified.
+        let ids = files
+            .iter()
+            .map_while(|path| selection.committed.get(path).cloned())
+            .collect();
+        Some(selection::BlobReader::new(&root, ids)?)
     };
     let mut load = |path: &PathBuf| -> Result<(String, String)> {
         let relative = validation::source_path(path.strip_prefix(&root)?)?;

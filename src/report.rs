@@ -143,7 +143,7 @@ pub fn render_to<W: Write>(
             if let Some(m) = &report.mutation {
                 writeln!(
                     s,
-                    "  <mutation-evidence tool=\"oximut\" run-complete=\"{}\" mutators=\"{}\" mutator-families=\"{}\" mutants-in-functions=\"{}\" mutants-outside-functions=\"{}\" mutants-outside-selection=\"{}\" files-without-mutants=\"{}\" functions-failed-by-mutation-only=\"{}\" equivalent-acknowledged=\"{}\" unmatched-equivalents=\"{}\" source-binding=\"{}\"/>",
+                    "  <mutation-evidence tool=\"oximut\" run-complete=\"{}\" mutators=\"{}\" mutator-families=\"{}\" mutants-in-functions=\"{}\" mutants-outside-functions=\"{}\" mutants-outside-selection=\"{}\" files-without-mutants=\"{}\" functions-failed-by-mutation-only=\"{}\" files-with-mutants=\"{}\" equivalent-acknowledged=\"{}\" unmatched-equivalents=\"{}\" source-binding=\"{}\"{}/>",
                     m.run_complete,
                     match m.mutators {
                         MutatorScope::All => "all",
@@ -156,9 +156,13 @@ pub fn render_to<W: Write>(
                     m.mutants_outside_selection,
                     m.files_without_mutants,
                     m.functions_failed_by_mutation_only,
+                    m.files_with_mutants,
                     m.equivalent_acknowledged,
                     m.unmatched_equivalents.len(),
-                    m.source_binding
+                    m.source_binding,
+                    m.files_not_in_report
+                        .map(|count| format!(" files-not-in-report=\"{count}\""))
+                        .unwrap_or_default()
                 )?;
             }
             for (index, f) in report.functions.iter().enumerate() {
@@ -178,11 +182,12 @@ pub fn render_to<W: Write>(
                 if let Some(m) = report.mutation.as_ref().map(|m| &m.functions[index]) {
                     write!(
                         s,
-                        " mutants=\"{}\" killed=\"{}\" survived=\"{}\" no-coverage=\"{}\" inconclusive=\"{}\"",
+                        " mutants=\"{}\" killed=\"{}\" survived=\"{}\" no-coverage=\"{}\" equivalent=\"{}\" inconclusive=\"{}\"",
                         m.mutants,
                         m.killed,
                         m.survived,
                         m.no_coverage,
+                        m.equivalent,
                         inconclusive(m)
                     )?;
                     if let Some(crap) = m.effective_crap {

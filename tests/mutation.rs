@@ -1649,3 +1649,41 @@ fn an_acknowledged_survivor_leaves_the_inconclusive_count_and_the_table_row_exac
         "{xml}"
     );
 }
+
+/// `ci-run.json` is an unedited report from a real, successful Oximut run in
+/// Oximut's own CI (m1 fixture, all families), with only its project root
+/// replaced by `<ROOT>`. It proves ts-crap reads what Oximut actually writes.
+#[test]
+fn a_real_oximut_ci_report_binds_by_source_hash_and_fails_the_survivor() {
+    let (project, root) = subject_project();
+    let report_path = write_report(
+        &project,
+        "ci-run.json",
+        &substituted(&fixture("ci-run.json"), &root),
+    );
+    let mut opts = options(&root);
+    opts.coverage = Some(all_lines(&root, SUBJECT));
+    let report = scan_with(&opts, &with_mutation_report(&report_path)).unwrap();
+    let mutation = report.mutation.as_ref().unwrap();
+    assert!(mutation.run_complete);
+    assert_eq!(mutation.source_binding, "oximut-source-sha256");
+    assert_eq!(mutation.files_not_in_report, Some(0));
+    assert_eq!(mutation.mutators, MutatorScope::All);
+    assert_eq!(mutation.mutants_in_functions, 3);
+    let uncalled = &mutation.functions[index_of(&report, "uncalled")];
+    assert_eq!((uncalled.killed, uncalled.survived), (0, 1));
+    assert!(report.functions[index_of(&report, "uncalled")].failed);
+    assert!(report.failed);
+
+    // Any edit to the scanned source makes the real report stale.
+    fs::write(root.join(SUBJECT), format!("{}\n", fixture("subject.ts"))).unwrap();
+    // Scan without coverage: its own hash check would otherwise fail first.
+    let error = scan_with(&options(&root), &with_mutation_report(&report_path))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("mutation report is stale for src/subject.ts")
+            && error.contains("Oximut source SHA256 mismatch"),
+        "{error}"
+    );
+}

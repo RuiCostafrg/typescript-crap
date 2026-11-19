@@ -144,8 +144,10 @@ and do not decide the mutation gate.** They illustrate the rejected coverage-cap
 
 `mutators` reports which mutator families the run generated: `all`, `subset`
 (with the named `mutator_families`), or `unknown`. A report with Oximut's
-machine-readable `mutators` field is read from that field; a contradicting
-`mutator families=` diagnostic rejects the report. Older reports fall back to
+machine-readable `mutators` field is read from that field; any
+`mutator families=` diagnostic that contradicts it or cannot be read rejects
+the report, and an explicit `null` for `mutators` or `sources` is malformed.
+Older reports fall back to
 the diagnostic text, and are `unknown` when it is missing, unreadable or
 disagrees with itself. **`subset` and `unknown` are explicitly
 partial evidence: such a report can fail functions, but it can never prove
@@ -219,7 +221,9 @@ All formats agree on the gate outcome; only presentation differs.
 - **Text**: a `Mutation evidence (oximut)` section listing functions with
   surviving or uncovered mutants, plus the gate summary line.
 - **HTML**: the same section and a table of those functions.
-- **XML**: a `<mutation-evidence>` element and per-function mutant attributes.
+- **XML**: a `<mutation-evidence>` element and per-function mutant attributes,
+  including `equivalent`; `files-not-in-report` appears only when the report
+  carries `sources`.
 - **SARIF**: failed functions with surviving or uncovered mutants are reported
   under the new `TSCRAP003` rule (surviving/uncovered mutants); CRAP-only failures
   keep `TSCRAP001`.

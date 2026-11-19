@@ -267,11 +267,21 @@ struct Document {
     diagnostics: Vec<String>,
     summary: Summary,
     /// Per-file source hashes; absent from Oximut 1.0.0-rc.1 reports.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     sources: Option<Vec<SourceEntry>>,
     /// Machine-readable mutator selection; absent from 1.0.0-rc.1 reports.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     mutators: Option<Mutators>,
+}
+
+/// An optional field may be missing, but an explicit `null` is malformed: it
+/// would otherwise downgrade the report to the weaker rc1 binding.
+fn present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }
 
 #[derive(Debug, Deserialize)]
@@ -496,21 +506,32 @@ impl FunctionMutation {
 
 const FAMILIES: &str = "mutator families=";
 
+/// One `mutator families=` diagnostic, or `None` when it is unreadable.
+fn parse_families(value: &str) -> Option<(MutatorScope, Vec<String>)> {
+    let list = value.split(';').next().unwrap_or_default().trim();
+    let families: BTreeSet<&str> = list.split(',').map(str::trim).collect();
+    if list == "all" {
+        Some((MutatorScope::All, Vec::new()))
+    } else if families.iter().all(|family| valid_family(family)) {
+        Some((
+            MutatorScope::Subset,
+            families.into_iter().map(str::to_owned).collect(),
+        ))
+    } else {
+        None
+    }
+}
+
+fn family_diagnostics(diagnostics: &[String]) -> impl Iterator<Item = &str> {
+    diagnostics.iter().filter_map(|d| d.strip_prefix(FAMILIES))
+}
+
 /// The run's family filter exists only as diagnostic text. Disagreeing or
 /// unreadable entries are unknown rather than a guess.
 fn mutators(diagnostics: &[String]) -> (MutatorScope, Vec<String>) {
     let mut found: Option<(MutatorScope, Vec<String>)> = None;
-    for value in diagnostics.iter().filter_map(|d| d.strip_prefix(FAMILIES)) {
-        let list = value.split(';').next().unwrap_or_default().trim();
-        let families: BTreeSet<&str> = list.split(',').map(str::trim).collect();
-        let current = if list == "all" {
-            (MutatorScope::All, Vec::new())
-        } else if families.iter().all(|family| valid_family(family)) {
-            (
-                MutatorScope::Subset,
-                families.into_iter().map(str::to_owned).collect(),
-            )
-        } else {
+    for value in family_diagnostics(diagnostics) {
+        let Some(current) = parse_families(value) else {
             return (MutatorScope::Unknown, Vec::new());
         };
         if found.as_ref().is_some_and(|previous| *previous != current) {
@@ -759,10 +780,11 @@ impl Mutation {
                     (MutatorScope::Subset, families.into_iter().collect())
                 }
             };
-            // The field is authoritative; a contradicting diagnostic is corrupt.
+            // The field is authoritative; every family diagnostic must be
+            // readable and agree with it, or the report is corrupt.
             ensure!(
-                mutators == MutatorScope::Unknown
-                    || (mutators, &mutator_families) == (declared.0, &declared.1),
+                family_diagnostics(&document.diagnostics).all(|value| parse_families(value)
+                    .is_some_and(|parsed| (parsed.0, &parsed.1) == (declared.0, &declared.1))),
                 "Oximut mutators field disagrees with its mutator families diagnostic"
             );
             (mutators, mutator_families) = declared;

@@ -1,0 +1,208 @@
+{
+  "schemaVersion": 1,
+  "runId": "27913-1795042476859411107",
+  "baseline": {
+    "protocol": 1,
+    "runId": "27913-1795042476859411107",
+    "jobId": "baseline",
+    "generation": 0,
+    "outcome": "passed",
+    "tests": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "errors": []
+  },
+  "mutants": [
+    {
+      "id": "e1cb6842d8b4c350fb8db06adcbb32c8aee2fad0b81f0a816bd10b7455b315c0",
+      "file": "<ROOT>/src/subject.ts",
+      "operator": "comparison-boundary",
+      "original": "<",
+      "replacement": "<=",
+      "location": {
+        "start": {
+          "offset": 123,
+          "line": 6,
+          "column": 16
+        },
+        "end": {
+          "offset": 124,
+          "line": 6,
+          "column": 17
+        }
+      },
+      "outcome": "killed",
+      "tests": {
+        "passed": 1,
+        "failed": 1,
+        "skipped": 0
+      },
+      "errors": [
+        "expected true to be false // Object.is equality"
+      ],
+      "provenance": {
+        "source": "executed",
+        "reason": "forced-no-cache"
+      }
+    },
+    {
+      "id": "641c30d54b8db3f4d8d1212ac1bb3a4f0b65044421a93240a2bd8fac98aabcc7",
+      "file": "<ROOT>/src/subject.ts",
+      "operator": "boolean-literal",
+      "original": "true",
+      "replacement": "false",
+      "location": {
+        "start": {
+          "offset": 46,
+          "line": 2,
+          "column": 10
+        },
+        "end": {
+          "offset": 50,
+          "line": 2,
+          "column": 14
+        }
+      },
+      "outcome": "killed",
+      "tests": {
+        "passed": 1,
+        "failed": 1,
+        "skipped": 0
+      },
+      "errors": [
+        "expected false to be true // Object.is equality"
+      ],
+      "provenance": {
+        "source": "executed",
+        "reason": "forced-no-cache"
+      }
+    },
+    {
+      "id": "c6b0a1eacb6302f1a93a386334d6b06ebbd26bfddb6ee024539082a895a335b9",
+      "file": "<ROOT>/src/subject.ts",
+      "operator": "boolean-literal",
+      "original": "false",
+      "replacement": "true",
+      "location": {
+        "start": {
+          "offset": 258,
+          "line": 11,
+          "column": 10
+        },
+        "end": {
+          "offset": 263,
+          "line": 11,
+          "column": 15
+        }
+      },
+      "outcome": "survived",
+      "tests": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      "errors": [],
+      "provenance": {
+        "source": "executed",
+        "reason": "forced-no-cache"
+      }
+    }
+  ],
+  "diagnostics": [
+    "execution=fresh; isolation=fresh-controller-and-test-process",
+    "mutator families=all"
+  ],
+  "summary": {
+    "total": 3,
+    "killed": 2,
+    "survived": 1,
+    "noCoverage": 0,
+    "invalid": 0,
+    "timeout": 0,
+    "infrastructureError": 0,
+    "resourceExhausted": 0,
+    "skipped": 0,
+    "scoreDenominator": 3,
+    "score": 66.66666666666667,
+    "complete": true
+  },
+  "cache": {
+    "enabled": false,
+    "outcomesEnabled": false,
+    "reason": "forced-no-cache",
+    "instrumentationHits": 0,
+    "instrumentationMisses": 0,
+    "outcomeHits": 0,
+    "outcomeMisses": 0,
+    "persistence": "not-written",
+    "runnerHashMs": 0,
+    "fingerprintProfiles": []
+  },
+  "resources": {
+    "admissionPauses": 0,
+    "admissionWorkerCostBytes": 357350400,
+    "broadDiscoveries": 6,
+    "budgetBytes": 16464302080,
+    "cgroups": [
+      {
+        "initialOomEvents": 0,
+        "limitBytes": null,
+        "limitPath": "/sys/fs/cgroup/system.slice/memory.max",
+        "oomEventsPath": "/sys/fs/cgroup/system.slice/memory.events",
+        "usagePath": "/sys/fs/cgroup/system.slice/memory.current"
+      },
+      {
+        "initialOomEvents": 0,
+        "limitBytes": null,
+        "limitPath": "/sys/fs/cgroup/system.slice/hosted-compute-agent.service/memory.max",
+        "oomEventsPath": "/sys/fs/cgroup/system.slice/hosted-compute-agent.service/memory.events",
+        "usagePath": "/sys/fs/cgroup/system.slice/hosted-compute-agent.service/memory.current"
+      }
+    ],
+    "configuredBudgetBytes": null,
+    "configuredWorkers": 1,
+    "counterSamples": 12,
+    "cpuLimitWorkers": 4,
+    "disabledValidationRuns": [],
+    "effectiveWorkers": 1,
+    "enforcement": "best-effort sampled admission and process-tree cancellation; existing cgroup limits are OS-enforced; no new hard cap installed",
+    "exactSamples": 22,
+    "exhaustion": null,
+    "maxActiveJobs": 1,
+    "measuredWorkerPeakBytes": 285880320,
+    "measurement": "Peaks and decisions use exact Linux /proc smaps_rollup Rss samples (forced and periodic escalations at least once per second), approximate stat RSS fallback on older/restricted kernels; other periodic samples use kernel counters only to decide escalation; main CLI and all descendants, shared pages counted per process",
+    "peakAggregateRssBytes": 297238528,
+    "phaseWallMs": {
+      "finalInputValidation": 0.00048100000000000004,
+      "inputAndSchedulerPreparation": 2.865633,
+      "instrumentedBaseline": 0.010771000000000001,
+      "mutationExecution": 1059.846055,
+      "mutationPlanning": 0.031152999999999997,
+      "originalBaseline": 460.52539399999995,
+      "postBaselineValidation": 0.000639,
+      "teardown": 8.843001
+    },
+    "recycledIdleWorkers": 0,
+    "reserveBytes": 67108864,
+    "sampleIntervalMs": 50,
+    "samples": 34,
+    "treeDiscoveries": 28
+  },
+  "sources": [
+    {
+      "file": "<ROOT>/src/subject.ts",
+      "sha256": "a37031ae368b1bf235277cde74394fe1b82ad1fb4b6886543c522065b3659835",
+      "mutants": 3
+    }
+  ],
+  "mutators": {
+    "selection": "all",
+    "families": [
+      "arithmetic",
+      "boolean-literal",
+      "comparison-boundary"
+    ]
+  }
+}

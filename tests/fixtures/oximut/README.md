@@ -7,6 +7,8 @@ under PRoot's process-tree restrictions. `full.json` and `subset.json` copy the
 historical M1 baseline and mutant outcomes for the same source and matching IDs;
 they are not untouched successful current-run reports. The failed-baseline
 `infrastructure-error.json` is the fresh run with its original outcomes.
+`ci-run.json` is the exception: a real successful report downloaded from
+Oximut's CI (oximut#69), so ts-crap is tested against what Oximut writes.
 See `docs/MUTATION_EVIDENCE.md` for the binding and its limitations.
 
 | File | Content |
@@ -15,6 +17,7 @@ See `docs/MUTATION_EVIDENCE.md` for the binding and its limitations.
 | `full.json` | Complete run with all families: two killed mutants, one survived in `uncalled` |
 | `subset.json` | The same run filtered to `--mutators boolean-literal`: partial evidence |
 | `infrastructure-error.json` | The baseline failed, so every mutant was skipped |
+| `ci-run.json` | An unedited successful run from Oximut's CI (m1, all families) with the `sources` and `mutators` fields; only the project root is replaced by `<ROOT>` |
 
 ## The `<ROOT>` placeholder
 

@@ -132,9 +132,11 @@ are recorded in
    machine-readable `mutators` field when present.
 3. **Oximut emits per-file source hashes and the mutator set.** Implemented in
    Oximut as additive schema-1 fields `sources` and `mutators`
-   ([oximut#69](https://github.com/RuiCostafrg/oximut/pull/69)); ts-crap
+   ([oximut#69](https://github.com/RuiCostafrg/oximut/pull/69), merged
+   2026-11-18 and not yet in a tagged Oximut release); ts-crap
    validates them when present (binding `oximut-source-sha256`) and keeps the
-   rc1 mutant-id binding for reports without them.
+   rc1 mutant-id binding for reports without them. A real report from
+   Oximut's CI is a ts-crap test fixture (`tests/fixtures/oximut/ci-run.json`).
 
 ## Local verification (2026-11-14)
 

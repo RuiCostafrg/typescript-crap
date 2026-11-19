@@ -2,7 +2,8 @@
 
 ## 2.6.1 — 2026-11-19
 
-Patch release: stricter validation of Oximut mutation reports and complete XML mutation counts. Default output is unchanged.
+Patch release: stricter validation of Oximut mutation reports and complete XML
+mutation counts. Default output is unchanged.
 
 ### Fixed
 
@@ -15,6 +16,11 @@ Patch release: stricter validation of Oximut mutation reports and complete XML m
 - XML output now carries `equivalent` per function, and `files-with-mutants`
   and (with `sources`) `files-not-in-report` on `<mutation-evidence>`, so its
   counts add up like the other formats.
+
+### Changed
+
+- Dependencies: tree-sitter 0.27.1 → 0.27.2. The GitHub Action uploads SARIF
+  with `github/codeql-action/upload-sarif` v4.39.3.
 
 ## 2.6.0 — 2026-11-18
 

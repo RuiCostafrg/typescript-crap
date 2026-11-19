@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.6.1 — 2026-11-19
+
+Patch release: stricter validation of Oximut mutation reports and complete XML mutation counts. Default output is unchanged.
 
 ### Fixed
 

@@ -19,7 +19,7 @@ fn report(entries: &[(&str, &str, u8, f64)]) -> Report {
             .map(|&(path, name, identity, crap)| FunctionScore {
                 path: path.into(),
                 name: name.into(),
-                identity: format!("{identity:064x}"),
+                identity: format!("{identity:064x}").parse().unwrap(),
                 line: 1,
                 column: 1,
                 column_utf16: 1,
@@ -100,9 +100,15 @@ fn load_normalizes_digest_case_so_renamed_functions_still_match() {
     let before = report(&[("a.ts", "same", 0xab, 40.0)]);
     let mut baseline = Baseline::capture(&before);
     baseline.functions[0].identity.make_ascii_uppercase();
-    assert_ne!(baseline.functions[0].identity, before.functions[0].identity);
+    assert_ne!(
+        baseline.functions[0].identity,
+        before.functions[0].identity.to_string()
+    );
     let baseline = Baseline::load(baseline.render().unwrap().as_bytes()).unwrap();
-    assert_eq!(baseline.functions[0].identity, before.functions[0].identity);
+    assert_eq!(
+        baseline.functions[0].identity,
+        before.functions[0].identity.to_string()
+    );
     // No rename mapping: the changed path must match through its fingerprint.
     let mut after = report(&[("b.ts", "same", 0xab, 20.0)]);
     baseline.apply(&mut after, &[]).unwrap();

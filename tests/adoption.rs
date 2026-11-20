@@ -623,7 +623,7 @@ fn sarif_stream_preserves_order_fingerprints_locations_and_completeness() {
         assert_eq!(results[index]["ruleId"], "TSCRAP001");
         assert_eq!(
             results[index]["partialFingerprints"]["function/v1"],
-            function.identity
+            function.identity.to_string()
         );
         assert_eq!(
             results[index]["message"]["text"],

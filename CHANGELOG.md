@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Breaking (library API, planned for 3.0)
+
+- `FunctionScore::identity` is now `FunctionIdentity` (the raw 32-byte SHA-256
+  digest) and `FunctionScore::path` is `Arc<str>` shared by every function in a
+  file, reducing per-function memory. Serialized reports, baselines, SARIF, and
+  human-readable output stay byte-identical. See
+  [the 3.0 migration guide](docs/MIGRATING_TO_V3.md). (#86)
+
 ## 2.6.1 — 2026-11-19
 
 Patch release: stricter validation of Oximut mutation reports and complete XML

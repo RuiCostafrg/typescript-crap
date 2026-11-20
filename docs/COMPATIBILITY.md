@@ -146,7 +146,10 @@ descriptor reads.
 The public Rust API follows SemVer starting with 1.0.0. Removing/renaming public
 items, changing public struct fields or signatures, or adding variants to an
 exhaustively matchable public enum requires a major release. Nonbreaking new
-functions may be minor. `ScanOptions` gate fields use `Option`: None inherits
+functions may be minor. Planned for 3.0: `FunctionScore::identity` becomes
+`FunctionIdentity` and `FunctionScore::path` becomes `Arc<str>`; see
+[the 3.0 migration guide](MIGRATING_TO_V3.md). `ScanOptions` gate fields use
+`Option`: None inherits
 policy; Some(value), including Some(false), explicitly overrides it. The resolved
 `Report.threshold` remains a scalar. The minimum supported Rust version is 1.90;
 raising it requires a documented minor release and CI verification.

@@ -614,7 +614,15 @@ try {
         .join(", ") || "no framework declared";
   }
   console.error(`FAIL ${versions ?? "shared fixture"} (${under})`);
+  // Print the cause now: a cleanup failure below must not hide it.
+  console.error(error);
   throw error;
 } finally {
-  await fs.rm(temporary, { recursive: true, force: true });
+  // Windows can briefly keep handles open after test workers exit (EBUSY/EPERM);
+  // retry, and only warn if the temporary directory still cannot be removed.
+  try {
+    await fs.rm(temporary, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch (error) {
+    console.warn(`warning: could not remove ${temporary}: ${error.message}`);
+  }
 }

@@ -12,3 +12,15 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     reviewers: [RuiCostafrg]
+  - package-ecosystem: npm
+    directory: /tests/tooling
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    reviewers: [RuiCostafrg]
+  - package-ecosystem: npm
+    directory: /tests/fixtures/frameworks
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    reviewers: [RuiCostafrg]

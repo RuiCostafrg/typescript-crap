@@ -38,7 +38,7 @@ coverage, mutation, and release checks.
   [static-musl rewrite](LINUX_DISTRIBUTION.md#shell-installer-selection) first
   and expect static musl. Candidate release verification runs Linux installers
   with `--archive-target` set to the musl archive.
-- PowerShell: Windows Server 2022 x86-64, both Windows PowerShell and PowerShell
+- PowerShell: Windows Server 2025 x86-64, both Windows PowerShell and PowerShell
   Core in published-pair CI; candidate release verification uses Windows PowerShell.
 - Homebrew: macOS 26 Apple Silicon/Intel and Ubuntu 26.04 x86-64. Linux ARM64
   archives are verified through shell/manual installation; Homebrew on that

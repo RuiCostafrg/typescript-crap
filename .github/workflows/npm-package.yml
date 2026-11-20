@@ -30,15 +30,15 @@ jobs:
             target: x86_64-apple-darwin
           - runner: macos-26
             target: aarch64-apple-darwin
-          - runner: windows-2022
+          - runner: windows-2025
             target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: 1.90.0
+          toolchain: 1.100.0
           targets: ${{ matrix.target }}
       - name: Native musl C compiler
         if: contains(matrix.target, 'musl')
@@ -108,16 +108,16 @@ jobs:
           python3 scripts/verify-npm-packages.py --assets target/npm-assets --packages target/npm-packages --version "$version"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24.22.2
+          node-version: 26.13.1
       - name: Dry-run the release stage-publish command with the release's pinned npm CLI
         shell: bash
         env:
           VERSION: ${{ steps.pack.outputs.version }}
         run: |
-          curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/npm-12.2.1.tgz" https://registry.npmjs.org/npm/-/npm-12.2.1.tgz
-          echo "6ca0a6151553fc107e60f1186d9c10d57508dcde6de31292a54d4cc4e8e8ef3de25b3281274657442d7115d10df930bb3794ddcb0681cdfd9d317189abf7b63d  $RUNNER_TEMP/npm-12.2.1.tgz" | sha512sum --check
-          npm install -g --ignore-scripts --no-audit --no-fund "$RUNNER_TEMP/npm-12.2.1.tgz"
-          [[ "$(npm --version)" == 12.2.1 ]]
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/npm-12.2.3.tgz" https://registry.npmjs.org/npm/-/npm-12.2.3.tgz
+          echo "a2f98d4517bbe89bdca7513a88e78f43a1fd66be1730eaea81f69e18d86d46f3f75d29762e8fdaf42d4de7f8d194b2ebb2a09e9bfa268067591e96796baca7d5  $RUNNER_TEMP/npm-12.2.3.tgz" | sha512sum --check
+          npm install -g --ignore-scripts --no-audit --no-fund "$RUNNER_TEMP/npm-12.2.3.tgz"
+          [[ "$(npm --version)" == 12.2.3 ]]
           # Same layout and path form as the publish-npm job in release.yml. --force only
           # lets the dry run pass once this version is already on npm; nothing is uploaded.
           publish_dir="$RUNNER_TEMP/publish"

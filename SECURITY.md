@@ -26,13 +26,13 @@ cannot enable or verify them.
 - New releases are immutable after publication: assets cannot be replaced.
 - Release tags cannot be changed/deleted, and only repository admins (currently
   the sole owner) may create matching tags. Do not add other admins casually.
-- Rust is pinned to 1.90.0 for distribution, Cargo.lock pins crate versions and
+- Rust is pinned to 1.100.0 for distribution, Cargo.lock pins crate versions and
   registry checksums, dependencies are fetched with --locked, distribution builds run offline and
   reject any lockfile changes, and cargo-audit checks
   known advisories. Upgrades require maintainer review; an audit is not proof that
   a crate is free of malicious behavior.
 - Actions are pinned to commits and an allowlist is enforced in repository
-  settings. cargo-dist 0.33.1 archives are verified against committed SHA-256
+  settings. cargo-dist 0.34.0 archives are verified against committed SHA-256
   hashes before execution. No remote installer is piped into a shell in CI.
 - Builds and smoke tests have contents:read only. Only publish receives
   contents:write and attestations:write. Only publish and publish-npm receive
@@ -49,7 +49,7 @@ cannot enable or verify them.
   contents:read, attestations:read and id-token:write. It uses npm trusted
   publishing: OIDC replaces any npm token, none is stored anywhere, and npm
   records provenance tying each version to release.yml at the tag. It installs
-  npm 12.2.1 from a SHA-512-pinned tarball. It publishes only tarballs that the
+  npm 12.2.3 from a SHA-512-pinned tarball. It publishes only tarballs that the
   GitHub publish job attested, after checking every npm executable byte for byte
   against the attested release archive and the helpers against the attested
   helper bundle. It runs `npm stage publish` only (the trusted publisher allows

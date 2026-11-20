@@ -73,10 +73,10 @@ class ReleaseSecurityTests(unittest.TestCase):
         # --force belongs only to the dry run; the real publish must keep npm's protections.
         self.assertNotIn('--force', release_yml)
         # The dry run must use the same pinned npm CLI as the publish job.
-        pinned = 'https://registry.npmjs.org/npm/-/npm-12.2.1.tgz'
+        pinned = 'https://registry.npmjs.org/npm/-/npm-12.2.3.tgz'
         self.assertIn(pinned, release_yml)
         self.assertIn(pinned, ci)
-        digest = re.search(r'echo "([0-9a-f]{128})  \$RUNNER_TEMP/npm-12\.2\.1\.tgz"', release_yml).group(1)
+        digest = re.search(r'echo "([0-9a-f]{128})  \$RUNNER_TEMP/npm-12\.2\.3\.tgz"', release_yml).group(1)
         self.assertIn(digest, ci)
 
     def test_tool_download_rejects_tampering_before_writing_executable(self):

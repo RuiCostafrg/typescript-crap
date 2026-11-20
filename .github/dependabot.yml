@@ -24,3 +24,7 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     reviewers: [RuiCostafrg]
+    ignore:
+      # ts-jest 29.4.15 requires typescript < 7; drop this once ts-jest supports 7.
+      - dependency-name: typescript
+        versions: [">=7"]

@@ -41,7 +41,7 @@ jobs:
             target: aarch64-apple-darwin
           - runner: macos-26-intel
             target: x86_64-apple-darwin
-          - runner: windows-2022
+          - runner: windows-2025
             target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -49,7 +49,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
       - name: Download published CLI, helpers, checksums and provenance
         id: assets
         shell: bash

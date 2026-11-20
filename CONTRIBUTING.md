@@ -178,7 +178,7 @@ ordinary `fs::copy`. No application dependency is patched.
 ## Dependency auditing
 
 ```sh
-cargo install cargo-audit --version 0.22.2 --locked
+cargo install cargo-audit --version 0.23.0 --locked
 cargo audit --deny warnings
 ```
 
@@ -246,7 +246,7 @@ Only RuiCostafrg maintains the code. Report bugs and requests through issues;
 public pull requests are restricted to collaborators. Read [SECURITY.md](SECURITY.md)
 for the trust model and protections.
 
-Distribution uses checksum-pinned cargo-dist 0.33.1, pinned Rust 1.90.0 and the
+Distribution uses checksum-pinned cargo-dist 0.34.0, pinned Rust 1.100.0 and the
 committed Cargo.lock. The release workflow is deliberately hand-maintained to
 separate builds from privileged publication. `allow-dirty = ["ci"]` prevents
 cargo-dist from requiring its default workflow; do not overwrite release.yml

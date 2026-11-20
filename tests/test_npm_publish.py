@@ -79,10 +79,10 @@ class PublishJobShapeTests(unittest.TestCase):
 
     def test_npm_cli_is_pinned_by_sha512_and_installed_without_scripts(self):
         script = step(job('publish-npm'), 'Install the pinned npm CLI (staged trusted publishing needs npm 12)')
-        self.assertIn('https://registry.npmjs.org/npm/-/npm-12.2.1.tgz', script)
-        self.assertRegex(script, r'echo "[0-9a-f]{128}  \$RUNNER_TEMP/npm-12\.2\.1\.tgz" \| sha512sum --check')
+        self.assertIn('https://registry.npmjs.org/npm/-/npm-12.2.3.tgz', script)
+        self.assertRegex(script, r'echo "[0-9a-f]{128}  \$RUNNER_TEMP/npm-12\.2\.3\.tgz" \| sha512sum --check')
         self.assertIn('npm install -g --ignore-scripts', script)
-        self.assertIn('[[ "$(npm --version)" == 12.2.1 ]]', script)
+        self.assertIn('[[ "$(npm --version)" == 12.2.3 ]]', script)
 
 
 @unittest.skipUnless(TOOLS and os.name != 'nt', 'needs bash, jq, unzip, tar, openssl, cmp and diff')

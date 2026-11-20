@@ -72,7 +72,7 @@ jobs:
             target: aarch64-unknown-linux-gnu
           - runner: ubuntu-26.04
             target: x86_64-unknown-linux-gnu
-          - runner: windows-2022
+          - runner: windows-2025
             target: x86_64-pc-windows-msvc
           - runner: ubuntu-26.04
             target: x86_64-unknown-linux-musl
@@ -84,9 +84,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: 1.90.0
+          toolchain: 1.100.0
           targets: ${{ matrix.target }}
       - name: Install checksum-pinned cargo-dist
         env:
@@ -206,7 +206,7 @@ jobs:
           path: npm-packages
       # The npm tarballs are attested here but not attached to the release;
       # the publish-npm job releases only tarballs that verify against this workflow.
-      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             release-assets/*
@@ -249,14 +249,14 @@ jobs:
           path: npm-packages
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24.22.2
+          node-version: 26.13.1
       - name: Install the pinned npm CLI (staged trusted publishing needs npm 12)
         shell: bash
         run: |
-          curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/npm-12.2.1.tgz" https://registry.npmjs.org/npm/-/npm-12.2.1.tgz
-          echo "6ca0a6151553fc107e60f1186d9c10d57508dcde6de31292a54d4cc4e8e8ef3de25b3281274657442d7115d10df930bb3794ddcb0681cdfd9d317189abf7b63d  $RUNNER_TEMP/npm-12.2.1.tgz" | sha512sum --check
-          npm install -g --ignore-scripts --no-audit --no-fund "$RUNNER_TEMP/npm-12.2.1.tgz"
-          [[ "$(npm --version)" == 12.2.1 ]]
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/npm-12.2.3.tgz" https://registry.npmjs.org/npm/-/npm-12.2.3.tgz
+          echo "a2f98d4517bbe89bdca7513a88e78f43a1fd66be1730eaea81f69e18d86d46f3f75d29762e8fdaf42d4de7f8d194b2ebb2a09e9bfa268067591e96796baca7d5  $RUNNER_TEMP/npm-12.2.3.tgz" | sha512sum --check
+          npm install -g --ignore-scripts --no-audit --no-fund "$RUNNER_TEMP/npm-12.2.3.tgz"
+          [[ "$(npm --version)" == 12.2.3 ]]
       - name: Compare every npm executable and helper with the attested release
         shell: bash
         env:

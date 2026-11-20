@@ -1,6 +1,8 @@
-# The 2.x compatibility contract
+# The 3.x compatibility contract
 
-This contract applies starting with ts-crap 2.0.0. The CLI, helper bundle, and
+This contract applies starting with ts-crap 3.0.0. It continues the 2.x
+contract unchanged for the CLI, helpers, schemas, and every serialized document;
+3.0 changed only the Rust library API (see [the 3.0 migration guide](MIGRATING_TO_V3.md)). The CLI, helper bundle, and
 schemas are versioned together. Install helpers from the exact same release as
 the scanner. Native coverage, configuration, baseline, and JSON report documents currently use independent integer schema version **1**.
 
@@ -38,7 +40,7 @@ entry uses built-in defaults. Working config symlinks remain supported.
 Each explicit gate override wins over config and then built-in defaults
 (threshold 10; require_coverage/fail_on_empty false). Bare boolean flags mean true;
 `=false` explicitly disables a configured gate. Include/exclude replacement and
-exclusion precedence are documented in the README and remain stable in 2.x.
+exclusion precedence are documented in the README and remain stable in 3.x.
 
 LCOV helpers aggregate captures by testcase and source before source mapping,
 retain conservative overlap within each testcase, then add independent testcase
@@ -78,7 +80,8 @@ relabeling old imported evidence.
 
 ## Input documents and migration
 
-See [upgrading from v1](MIGRATING_TO_V2.md) for the current migration, or
+See [upgrading to 3.0](MIGRATING_TO_V3.md) for the current (Rust API only)
+migration, [upgrading from v1](MIGRATING_TO_V2.md) for the 2.0 behavior changes, or
 [upgrading from v0.4.0](MIGRATING_TO_V1.md) for the earlier CLI/Rust migration.
 
 [Versioned JSON Schemas](../schemas/README.md) cover config, native coverage,
@@ -146,8 +149,8 @@ descriptor reads.
 The public Rust API follows SemVer starting with 1.0.0. Removing/renaming public
 items, changing public struct fields or signatures, or adding variants to an
 exhaustively matchable public enum requires a major release. Nonbreaking new
-functions may be minor. Planned for 3.0: `FunctionScore::identity` becomes
-`FunctionIdentity` and `FunctionScore::path` becomes `Arc<str>`; see
+functions may be minor. In 3.0, `FunctionScore::identity` became
+`FunctionIdentity` and `FunctionScore::path` became `Arc<str>`; see
 [the 3.0 migration guide](MIGRATING_TO_V3.md). `ScanOptions` gate fields use
 `Option`: None inherits
 policy; Some(value), including Some(false), explicitly overrides it. The resolved

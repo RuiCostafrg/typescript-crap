@@ -1,14 +1,31 @@
 # Changelog
 
-## Unreleased
+## 3.0.0 — 2026-11-20
 
-### Breaking (library API, planned for 3.0)
+Major release for the Rust library API only. The CLI, GitHub Action, npm
+package, configuration, schemas, baselines, and every report format are
+unchanged and byte-identical to 2.6.1; CLI, Action, and npm users need no
+changes. Rust library users should read
+[the 3.0 migration guide](docs/MIGRATING_TO_V3.md).
+
+### Breaking (Rust library API)
 
 - `FunctionScore::identity` is now `FunctionIdentity` (the raw 32-byte SHA-256
   digest) and `FunctionScore::path` is `Arc<str>` shared by every function in a
   file, reducing per-function memory. Serialized reports, baselines, SARIF, and
   human-readable output stay byte-identical. See
   [the 3.0 migration guide](docs/MIGRATING_TO_V3.md). (#86)
+
+### Changed
+
+- Release binaries are built with Rust 1.100.0 (was 1.90.0) and Windows
+  binaries on the `windows-2025` runner image; release tooling moves to
+  cargo-dist 0.34.0 and npm 12.2.3. The minimum supported Rust version for the
+  library stays 1.90. (#110)
+- Dependencies refreshed: Rust crates to their latest compatible releases
+  (#109); CI tests Node 26 alongside the minimum supported Node 24, and the test
+  tooling and framework fixtures move to Babel 8, TypeScript 6 and Vitest 5.1
+  (#110, #111). Supported Vitest and Jest majors are unchanged.
 
 ## 2.6.1 — 2026-11-19
 

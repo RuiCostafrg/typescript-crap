@@ -1,8 +1,9 @@
 # Migrating to ts-crap 3.0
 
-ts-crap 3.0 changes two public fields of `FunctionScore` to cut per-function
+ts-crap 3.0 changes only the Rust library API: two public fields of `FunctionScore` to cut per-function
 memory. Every serialized report, baseline, SARIF document, and human-readable
-output keeps the same bytes.
+output keeps the same bytes, and the CLI, GitHub Action, npm package,
+configuration, and baselines need no changes.
 
 ## `FunctionScore::identity`
 

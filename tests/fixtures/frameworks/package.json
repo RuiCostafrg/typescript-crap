@@ -9,19 +9,19 @@
     "node": ">=24"
   },
   "devDependencies": {
-    "@babel/core": "7.29.7",
-    "@babel/plugin-transform-modules-commonjs": "7.29.7",
-    "@babel/preset-typescript": "7.29.7",
-    "@swc/core": "1.16.20",
+    "@babel/core": "8.1.2",
+    "@babel/plugin-transform-modules-commonjs": "8.1.2",
+    "@babel/preset-typescript": "8.0.7",
+    "@swc/core": "1.16.22",
     "@swc/jest": "0.2.39",
-    "@vitest/coverage-istanbul": "5.0.5",
-    "@vitest/coverage-v8": "5.0.5",
+    "@vitest/coverage-istanbul": "5.1.1",
+    "@vitest/coverage-v8": "5.1.1",
     "babel-jest": "30.5.2",
     "jest": "30.5.2",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "ts-jest": "29.4.15",
-    "typescript": "5.9.3",
-    "vitest": "5.0.5"
+    "typescript": "6.0.3",
+    "vitest": "5.1.1"
   }
 }

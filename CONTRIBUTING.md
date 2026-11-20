@@ -49,7 +49,7 @@ node --test tests/*.test.mjs
 ```
 
 Repository JavaScript tooling is pinned in `tests/tooling/package-lock.json`:
-oxlint 1.90.0 and oxfmt 0.75.0 apply only to `scripts/*.mjs`,
+oxlint 1.94.0 and oxfmt 0.79.0 apply only to `scripts/*.mjs`,
 `tests/*.test.mjs` and `examples/**/*.mjs` (excluding dependency directories).
 Use `npm run format --prefix tests/tooling` to format these files locally.
 CI checks formatting and never rewrites files. Tool updates must deliberately

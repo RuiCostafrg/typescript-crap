@@ -123,7 +123,7 @@ and checks stale-source and failed-test rejection.
 | --- | --- | --- | --- |
 | Vitest 3 | 3.2.7 | `istanbul`, `v8` | built-in (esbuild) |
 | Vitest 4 | 4.1.12 | `istanbul`, `v8` | built-in |
-| Vitest 5 | 5.0.5 | `istanbul`, `v8` | built-in |
+| Vitest 5 | 5.1.1 | `istanbul`, `v8` | built-in |
 | Jest 29 | 29.7.0 | `babel` | `babel-jest` 29.7.0 |
 | Jest 30 | 30.5.2 | `babel`, `v8` | `babel-jest` 30.5.2, `ts-jest` 29.4.15, `@swc/jest` 0.2.39 |
 

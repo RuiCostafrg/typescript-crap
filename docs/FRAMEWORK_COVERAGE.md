@@ -24,8 +24,8 @@ commit being released.
 ## Framework and reporter matrix
 
 The fixture pins Jest and babel-jest **30.5.2**, Vitest and
-@vitest/coverage-istanbul and @vitest/coverage-v8 **5.0.5**, Babel core, TypeScript
-preset and CommonJS transform **7.29.7**, and React/React DOM **19.3.1**.
+@vitest/coverage-istanbul and @vitest/coverage-v8 **5.1.1**, Babel core, TypeScript
+preset **8.0.7** and CommonJS transform **8.1.2**, and React/React DOM **19.3.1**.
 Transitive versions are recorded in the
 fixture's `package-lock.json`.
 
@@ -57,8 +57,8 @@ For each combination, the suite asserts:
 
 ## Jest transformers and coverage providers
 
-The shared fixture also runs Jest 30 with `ts-jest` 29.4.15 (TypeScript 5.9.3)
-and `@swc/jest` 0.2.39 (`@swc/core` 1.16.20), each with both coverage providers,
+The shared fixture also runs Jest 30 with `ts-jest` 29.4.15 (TypeScript 6.0.3)
+and `@swc/jest` 0.2.39 (`@swc/core` 1.16.22), each with both coverage providers,
 through `coverage-run.mjs`. Each run must show the requested provider and, for
 `v8`, the extra V8 line records. A fixture test also checks a per-config Jest
 global (`fixtureTransformer`), so a silent fallback to the baseline cannot pass. For JSON and LCOV, every pair must give the scanner

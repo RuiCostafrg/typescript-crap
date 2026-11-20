@@ -375,8 +375,8 @@ fn root_selection_order_deduplication_and_output_protection() {
     opts.paths = vec!["a.ts".into(), "source.ts".into(), "a.ts".into()];
     let r = scan(&opts).unwrap();
     assert_eq!(r.files_scanned, 2);
-    assert_eq!(r.functions[0].path, "a.ts");
-    assert_eq!(r.functions[1].path, "source.ts");
+    assert_eq!(&*r.functions[0].path, "a.ts");
+    assert_eq!(&*r.functions[1].path, "source.ts");
     assert!(r.is_source_path(&root.path().join("source.ts").canonicalize().unwrap()));
     assert!(!r.is_source_path(&root.path().join("missing.ts")));
     opts.paths = vec![];

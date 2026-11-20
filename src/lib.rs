@@ -4,6 +4,8 @@ mod analysis;
 pub mod baseline;
 mod config;
 mod coverage;
+mod identity;
+pub use identity::{FunctionIdentity, InvalidFunctionIdentity};
 mod mutation;
 pub use mutation::{
     EvidenceKind, FunctionMutation, MutationEvidence, MutatorScope, UnmatchedEquivalent,
@@ -17,7 +19,7 @@ mod validation;
 use anyhow::{Context, Result, bail};
 use clap::ValueEnum;
 use serde::Serialize;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum Format {
@@ -144,8 +146,9 @@ pub fn validate_threshold(value: f64) -> Result<()> {
 
 #[derive(Debug, Serialize)]
 pub struct FunctionScore {
-    pub identity: String,
-    pub path: String,
+    pub identity: FunctionIdentity,
+    /// Shared by every function in one file.
+    pub path: Arc<str>,
     pub name: String,
     pub line: usize,
     pub column: usize,

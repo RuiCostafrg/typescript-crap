@@ -171,7 +171,7 @@ impl EquivalentEntry {
     }
 
     fn matches(&self, method: &Method, mutant: &Mutant) -> bool {
-        self.identity == method.identity
+        method.identity.matches_hex(&self.identity)
             && self.operator == mutant.operator
             && self.original == mutant.original
             && self.replacement == mutant.replacement
@@ -480,7 +480,7 @@ impl FunctionMutation {
             name: method.name.clone(),
             line: method.line,
             column: method.column,
-            identity: method.identity.clone(),
+            identity: method.identity.to_string(),
             evidence: match (counts.total(), kill_ratio) {
                 (0, _) => EvidenceKind::None,
                 (_, None) => EvidenceKind::Inconclusive,

@@ -16,7 +16,7 @@ use std::{
     panic::{AssertUnwindSafe, catch_unwind, resume_unwind},
     path::PathBuf,
     sync::{
-        Mutex,
+        Arc, Mutex,
         mpsc::{self, Receiver, Sender},
     },
     thread,
@@ -190,6 +190,7 @@ pub(crate) fn analyze_file(
     let mut mutated = Vec::new();
     let mut functions = Vec::with_capacity(methods.len());
     let mut functions_missing = 0;
+    let path: Arc<str> = Arc::from(relative);
     for method in methods {
         let evidence = source_coverage
             .as_ref()
@@ -208,7 +209,7 @@ pub(crate) fn analyze_file(
         }
         functions.push(FunctionScore {
             identity: method.identity,
-            path: relative.to_owned(),
+            path: Arc::clone(&path),
             name: method.name,
             line: method.line,
             column: method.column,
@@ -339,11 +340,13 @@ fn must_wait(limits: Limits, handed_out: usize, in_flight_bytes: usize, size: us
 /// this took peak RSS from 1.36x to 1.14x of a sequential scan.
 fn rehome(outcome: &mut FileOutcome) {
     let functions = std::mem::take(&mut outcome.functions);
+    let mut shared_path: Option<Arc<str>> = None;
     let mut copied = Vec::with_capacity(functions.len());
     for function in &functions {
+        let path = shared_path.get_or_insert_with(|| Arc::from(function.path.as_ref()));
         copied.push(FunctionScore {
-            identity: function.identity.as_str().to_owned(),
-            path: function.path.as_str().to_owned(),
+            identity: function.identity,
+            path: Arc::clone(path),
             name: function.name.as_str().to_owned(),
             ..*function
         });

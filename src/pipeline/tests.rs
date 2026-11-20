@@ -197,7 +197,7 @@ fn peaks(sizes: &[usize], jobs: usize, limits: Limits) -> (Peaks, Totals) {
 }
 
 fn names(totals: &Totals) -> Vec<&str> {
-    totals.functions.iter().map(|f| f.path.as_str()).collect()
+    totals.functions.iter().map(|f| f.path.as_ref()).collect()
 }
 
 fn expected_names(count: usize) -> Vec<String> {
@@ -410,8 +410,8 @@ fn large_selections_really_run_on_workers_and_small_ones_do_not_in_child() {
 fn rehoming_keeps_every_field_of_a_worker_result() {
     let mut outcome = super::FileOutcome {
         functions: vec![crate::FunctionScore {
-            identity: "a".repeat(64),
-            path: "dir/ü.ts".to_owned(),
+            identity: "a".repeat(64).parse().unwrap(),
+            path: "dir/ü.ts".into(),
             name: "C::m".to_owned(),
             line: 3,
             column: 5,
@@ -440,11 +440,11 @@ fn rehoming_keeps_every_field_of_a_worker_result() {
     let function = &outcome.functions[0];
     assert_eq!(
         (
-            function.identity.as_str(),
-            function.path.as_str(),
+            function.identity.to_string(),
+            function.path.as_ref(),
             function.name.as_str()
         ),
-        ("a".repeat(64).as_str(), "dir/ü.ts", "C::m")
+        ("a".repeat(64), "dir/ü.ts", "C::m")
     );
     assert_eq!(
         (

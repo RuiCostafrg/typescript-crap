@@ -248,7 +248,7 @@ the ts-crap release they install. There are three ways to reference the action:
 | --- | --- | --- | --- |
 | Full commit SHA (**recommended**) | `@<full commit SHA> # vX.Y.Z` | Never | Most secure: the code you reviewed is the code that runs, even if a tag or branch moved. It is the only form accepted where SHA pinning is enforced, as it is in this repository. Dependabot can update it, and the comment records the release it came from. |
 | Release tag | `@vX.Y.Z` | Never here | Readable and immutable in this repository, where release tags cannot move or be deleted. You still trust that rule; a SHA does not. Works from the first release that contains the action. |
-| Floating major | `@v2` | With every 2.x release | Picks up fixes automatically, but the code that verifies your downloads can change without review. Rejected where SHA pinning is enforced. **Not offered yet:** release tags matching `v*` are immutable, so a moving `v2` would need a separate ref scheme. |
+| Floating major | `@v3` | With every 3.x release | Picks up fixes automatically, but the code that verifies your downloads can change without review. Rejected where SHA pinning is enforced. **Not offered yet:** release tags matching `v*` are immutable, so a moving `v3` would need a separate ref scheme. |
 
 Use the full commit SHA of a release commit with a `# vX.Y.Z` comment, as the
 examples above do. Until a release contains the action, use a commit on `main`. Get it with

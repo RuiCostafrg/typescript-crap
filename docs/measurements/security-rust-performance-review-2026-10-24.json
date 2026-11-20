@@ -1,0 +1,157 @@
+{
+  "reviewed_commit": "01d04c062ffe5423471e960a2dd1d0ff5b90c69e",
+  "date": "2026-10-24",
+  "environment": {
+    "rust": "1.96.0",
+    "cargo": "1.96.0",
+    "node": "26.3.1",
+    "git": "2.54.0",
+    "host": "aarch64-linux-android in proot"
+  },
+  "benchmark": {
+    "executable_sha256": "018c342e53b347b452e791c226535c85d221718cee7d2746cb69945d06bf2148",
+    "build": "cargo bench --locked --offline -j 1 --bench review --no-run",
+    "sample_policy": "one warmup and five sorted samples per fresh process; runs sequentially, with builds/tests complete",
+    "caveat": "RSS is process VmHWM including fixture setup/prescan; no optimization comparison and no general speedup claim",
+    "results": [
+      {
+        "median_ms": 1.290208,
+        "mode": "render-json",
+        "name_bytes": 8890,
+        "output_bytes": 642879,
+        "peak_rss_kib": 17224,
+        "samples_ms": [
+          1.2619790000000002,
+          1.288281,
+          1.290208,
+          1.327656,
+          2.083542
+        ],
+        "size": 2000,
+        "source_bytes": 122913
+      },
+      {
+        "median_ms": 32.045781000000005,
+        "mode": "render-sarif",
+        "name_bytes": 8890,
+        "output_bytes": 1447302,
+        "peak_rss_kib": 46192,
+        "samples_ms": [
+          31.755208,
+          31.967917,
+          32.045781000000005,
+          32.289219,
+          36.043854
+        ],
+        "size": 2000,
+        "source_bytes": 122913
+      },
+      {
+        "median_ms": 13.842395999999999,
+        "mode": "render-json",
+        "name_bytes": 48890,
+        "output_bytes": 3226882,
+        "peak_rss_kib": 57100,
+        "samples_ms": [
+          11.759844000000001,
+          12.809063,
+          13.842395999999999,
+          14.209427,
+          17.455728999999998
+        ],
+        "size": 10000,
+        "source_bytes": 618913
+      },
+      {
+        "median_ms": 142.949791,
+        "mode": "render-sarif",
+        "name_bytes": 48890,
+        "output_bytes": 7247304,
+        "peak_rss_kib": 201652,
+        "samples_ms": [
+          140.254843,
+          142.479323,
+          142.949791,
+          143.765937,
+          150.38020899999998
+        ],
+        "size": 10000,
+        "source_bytes": 618913
+      }
+    ]
+  },
+  "probe_observations": [
+    {
+      "item": 1,
+      "probe": "nested-root diff.relative",
+      "normal": {
+        "exit": 1,
+        "files_scanned": 1,
+        "crap": 12
+      },
+      "diff_relative_true": {
+        "exit": 0,
+        "files_scanned": 0
+      }
+    },
+    {
+      "item": 2,
+      "probe": "assume-unchanged with local passing replacement",
+      "committed_crap": 12,
+      "observed_exit": 0,
+      "observed_crap": 2
+    },
+    {
+      "item": 3,
+      "probe": "Unix src/a.ts and literal src\\a.ts with coverage only for src/a.ts",
+      "exit": 0,
+      "files_scanned": 2,
+      "reported_paths": [
+        "src/a.ts",
+        "src/a.ts"
+      ],
+      "coverage_fractions": [
+        1,
+        1
+      ]
+    },
+    {
+      "item": 4,
+      "probe": "baseline oldName arrow renamed newName",
+      "crap": 12,
+      "exit": 0,
+      "failed": false
+    },
+    {
+      "item": 5,
+      "probe": "XML method name containing literal U+FFFF",
+      "exit": 0,
+      "parser": "Python xml.etree.ElementTree",
+      "parse_error": "not well-formed (invalid token): line 3, column 36"
+    },
+    {
+      "item": 6,
+      "probe": "Istanbul s object with duplicate zero/positive counter",
+      "raw_counts": "{\"0\":0,\"0\":1}",
+      "collector_exit": 0,
+      "gate_exit": 0,
+      "coverage_fraction": 1,
+      "crap": 3
+    },
+    {
+      "item": 7,
+      "probe": "apply permissive baseline then strict baseline vs fresh strict comparison",
+      "execution": "disposable dependent Cargo project using local ts-crap library",
+      "process_exit": 0,
+      "stdout": "reused_failed=false fresh_failed=true"
+    }
+  ],
+  "validation": {
+    "cargo_test": "94 passed",
+    "cargo_fmt": "passed",
+    "strict_all_targets_clippy": "passed",
+    "python_unittest": "12 passed",
+    "cargo_audit": "unavailable: not installed",
+    "full_release_platform_coverage_mutation": "not run"
+  }
+}

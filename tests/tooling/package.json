@@ -6,21 +6,21 @@
     "node": ">=24"
   },
   "devDependencies": {
-    "@babel/core": "7.29.7",
-    "@babel/plugin-transform-modules-commonjs": "7.29.7",
-    "@babel/preset-typescript": "7.29.7",
-    "@vitest/coverage-istanbul": "5.0.5",
-    "ajv": "8.17.1",
+    "@babel/core": "8.1.2",
+    "@babel/plugin-transform-modules-commonjs": "8.1.2",
+    "@babel/preset-typescript": "8.0.7",
+    "@vitest/coverage-istanbul": "5.1.1",
+    "ajv": "8.20.0",
     "babel-jest": "30.5.2",
     "jest": "30.5.2",
-    "oxfmt": "0.75.0",
-    "oxlint": "1.90.0",
+    "oxfmt": "0.79.0",
+    "oxlint": "1.94.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "vitest": "5.0.5"
+    "vitest": "5.1.1"
   },
   "overrides": {
-    "minimatch": "11.0.1"
+    "minimatch": "11.0.9"
   },
   "scripts": {
     "lint": "node ../../scripts/js-tooling.mjs lint",

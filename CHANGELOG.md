@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Coverage helpers on Windows: an import no longer fails with `EPERM` when it
+  reads another import's reservation while that import is releasing it (Windows
+  reports `EPERM` for a file whose deletion is pending). The read now retries
+  briefly and treats the released reservation as gone.
+
 ## 3.0.0 — 2026-11-20
 
 Major release for the Rust library API only. The CLI, GitHub Action, npm

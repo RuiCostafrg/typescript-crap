@@ -332,6 +332,22 @@ function lcov(raw, root) {
   );
 }
 /**
+ * Read another import's claim; a claim that is being released reads as missing.
+ * Windows reports EPERM for a file whose deletion is pending, so retry briefly
+ * until it is gone instead of failing on a concurrent release.
+ */
+async function readClaim(filename) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fs.readFile(filename, "utf8");
+    } catch (error) {
+      if (error.code === "ENOENT") return undefined;
+      if (process.platform !== "win32" || error.code !== "EPERM" || attempt === 20) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+}
+/**
  * Reserve canonical input trees until publication and return their cleanup callback.
  * Publish complete claims before checking overlaps, outside reporter-managed paths.
  * This coordinates cooperating imports; abandoned claims require manual recovery.
@@ -392,9 +408,7 @@ async function reserveInputs(inputs) {
     for (const name of await fs.readdir(directory)) {
       if (!name.endsWith(".lock")) continue;
       const filename = path.join(directory, name);
-      const text = await fs.readFile(filename, "utf8").catch((error) => {
-        if (error.code !== "ENOENT") throw error;
-      });
+      const text = await readClaim(filename);
       if (text === undefined) continue;
       const claim = parseUniqueJson(text);
       if (claim.token === staging) continue;

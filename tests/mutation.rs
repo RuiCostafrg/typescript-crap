@@ -281,7 +281,7 @@ fn surviving_mutant_fails_at_100_percent_line_coverage_and_low_complexity() {
     assert_eq!(mutation.files_with_mutants, 1);
     assert_eq!(mutation.files_without_mutants, 0);
     for (function, evidence) in report.functions.iter().zip(&mutation.functions) {
-        assert_eq!(&evidence.path, &function.path);
+        assert_eq!(&evidence.path, &*function.path);
         assert_eq!((evidence.mutants, evidence.no_coverage), (1, 0));
         assert_eq!(evidence.evidence, EvidenceKind::Scored);
     }
@@ -937,7 +937,7 @@ fn all_formats_agree_on_the_mutation_gate() {
     );
     assert_eq!(
         findings[0]["partialFingerprints"]["function/v1"],
-        report.functions[2].identity
+        report.functions[2].identity.to_string().to_string()
     );
 }
 
@@ -1614,9 +1614,7 @@ fn an_acknowledged_survivor_leaves_the_inconclusive_count_and_the_table_row_exac
         let output = render(&report, format).unwrap();
         assert!(!output.contains("Equivalent mutants"), "{output}");
     }
-    let identity = report.functions[index_of(&report, "mixed")]
-        .identity
-        .clone();
+    let identity = report.functions[index_of(&report, "mixed")].identity;
     write_config(
         &root,
         &[

@@ -50,7 +50,7 @@ struct Finding<'a> {
 #[derive(Serialize)]
 struct Fingerprints<'a> {
     #[serde(rename = "function/v1")]
-    function: &'a str,
+    function: &'a crate::FunctionIdentity,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

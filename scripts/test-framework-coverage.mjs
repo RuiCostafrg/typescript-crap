@@ -35,12 +35,15 @@ const temporary = await fs.realpath(
 );
 const root = path.join(temporary, "workspace");
 
-function run(command, args, expected = 0, env = {}) {
+// npm ci can take several minutes on Windows runners; test commands keep 2 minutes.
+const INSTALL = { timeout: 600_000 };
+
+function run(command, args, expected = 0, env = {}, { timeout = 120_000 } = {}) {
   const result = spawnSync(command, args, {
     cwd: root,
     env: { ...process.env, FIXTURE_PARTIAL: "", FIXTURE_FAIL: "", ...env },
     encoding: "utf8",
-    timeout: 120_000,
+    timeout,
     maxBuffer: 16 * 1024 * 1024,
   });
   assert.ifError(result.error);
@@ -65,15 +68,17 @@ try {
   }
   // Invoke npm's JS entry point so Windows does not require a shell for npm.cmd.
   const npm = process.env.npm_execpath;
-  if (npm) run(process.execPath, [npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
+  const ci = ["ci", "--ignore-scripts", "--no-audit", "--no-fund"];
+  if (npm) run(process.execPath, [npm, ...ci], 0, {}, INSTALL);
   else if (process.platform === "win32") {
-    run(process.env.ComSpec ?? "cmd.exe", [
-      "/d",
-      "/s",
-      "/c",
-      "npm ci --ignore-scripts --no-audit --no-fund",
-    ]);
-  } else run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
+    run(
+      process.env.ComSpec ?? "cmd.exe",
+      ["/d", "/s", "/c", `npm ${ci.join(" ")}`],
+      0,
+      {},
+      INSTALL,
+    );
+  } else run("npm", ci, 0, {}, INSTALL);
 
   // Use real reporters first, then change source within the importer's child.
   const mutate = path.join(temporary, "mutate-after-tests.mjs");

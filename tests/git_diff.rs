@@ -596,7 +596,7 @@ fn diff_selection_respects_configured_excluded_directories() {
         scan()
             .functions
             .iter()
-            .all(|f| f.path != "src/build/new.ts")
+            .all(|f| &*f.path != "src/build/new.ts")
     );
     fs::write(
         root.join("ts-crap.json"),
@@ -607,7 +607,7 @@ fn diff_selection_respects_configured_excluded_directories() {
         scan()
             .functions
             .iter()
-            .any(|f| f.path == "src/build/new.ts")
+            .any(|f| &*f.path == "src/build/new.ts")
     );
 }
 

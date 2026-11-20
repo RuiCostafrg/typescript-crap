@@ -75,7 +75,7 @@ fn kill_ratio_follows_the_oximut_denominator() {
 
 fn method(identity: &str, start: usize, end: usize) -> Method {
     Method {
-        identity: identity.to_owned(),
+        identity: identity.parse().unwrap(),
         name: String::new(),
         line: 1,
         column: 1,
@@ -128,8 +128,10 @@ fn only_survivors_with_the_owner_identity_and_exact_edit_are_equivalent() {
         listed: false,
         spans,
     };
-    let methods = [method("id", 0, 10)];
-    let (hit, other_id, other_edit) = (entry("id", "b"), entry("zz", "b"), entry("id", "c"));
+    let id = "ab".repeat(32);
+    let other = "cd".repeat(32);
+    let methods = [method(&id, 0, 10)];
+    let (hit, other_id, other_edit) = (entry(&id, "b"), entry(&other, "b"), entry(&id, "c"));
     let (counts, matched) = source.assign(&methods, &[(0, &hit), (1, &other_id), (2, &other_edit)]);
     // One entry acknowledges both identical survivors; nothing else is touched.
     assert_eq!(matched.into_iter().collect::<Vec<_>>(), [0]);

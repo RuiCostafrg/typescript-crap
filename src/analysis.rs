@@ -1,3 +1,4 @@
+use crate::FunctionIdentity;
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
@@ -6,7 +7,7 @@ use tree_sitter::{Language, Node, Parser};
 #[derive(Debug)]
 pub struct Method {
     pub name: String,
-    pub identity: String,
+    pub identity: FunctionIdentity,
     pub line: usize,
     pub column: usize,
     pub column_utf16: usize,
@@ -485,7 +486,7 @@ impl<'t> Collector<'_, 't> {
             };
             // Identity, complexity and lines are filled in when the function is left.
             self.out.push(Method {
-                identity: String::new(),
+                identity: FunctionIdentity::from_bytes([0; 32]),
                 name,
                 line: node.start_position().row + 1,
                 column: node.start_position().column + 1,
@@ -535,7 +536,7 @@ impl<'t> Collector<'_, 't> {
             frame.lines.sort_unstable();
             frame.lines.dedup();
             let method = &mut self.out[frame.index];
-            method.identity = hex::encode(frame.hash.finalize());
+            method.identity = FunctionIdentity::from_bytes(frame.hash.finalize().into());
             method.complexity = frame.complexity;
             method.lines = frame.lines;
             self.spare.push(frame.buffer);
@@ -735,7 +736,7 @@ fn collect_oracle(node: Node<'_>, source: &str, kinds: &Kinds, out: &mut Vec<Met
             });
             hash.update(&buffer);
             out.push(Method {
-                identity: hex::encode(hash.finalize()),
+                identity: FunctionIdentity::from_bytes(hash.finalize().into()),
                 name,
                 line: node.start_position().row + 1,
                 column: node.start_position().column + 1,

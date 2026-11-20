@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Make the generated shell installer always select the static musl build on Linux.
 
-cargo-dist 0.33.1 installs the GNU archive when the system glibc is 2.43 or
-newer and falls back to the static musl archive otherwise. This rewrites only
-those two Linux GNU selection blocks so every Linux system gets the same
+cargo-dist 0.34.0 (its installer template is byte-identical to 0.33.1's) installs
+the GNU archive when the system glibc is 2.43 or newer and falls back to the
+static musl archive otherwise. This rewrites only those two Linux GNU selection
+blocks so every Linux system gets the same
 static binary. The musl archives' embedded SHA-256 values, all other platforms,
 and the GNU release archives themselves are unchanged.
 

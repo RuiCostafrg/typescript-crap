@@ -1,5 +1,5 @@
 //! Versioned regression snapshots. Ambiguous matches are treated as new findings.
-use crate::{FunctionScore, Report, validate_threshold};
+use crate::{FunctionIdentity, FunctionScore, Report, validate_threshold};
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
@@ -33,7 +33,7 @@ struct FunctionsView<'a>(&'a [FunctionScore]);
 struct EntryView<'a> {
     path: &'a str,
     name: &'a str,
-    identity: &'a str,
+    identity: &'a FunctionIdentity,
     crap: f64,
 }
 impl Serialize for FunctionsView<'_> {
@@ -60,9 +60,9 @@ impl Baseline {
                 .functions
                 .iter()
                 .map(|f| Entry {
-                    path: f.path.clone(),
+                    path: f.path.as_ref().to_owned(),
                     name: f.name.clone(),
-                    identity: f.identity.clone(),
+                    identity: f.identity.to_string(),
                     crap: f.crap,
                 })
                 .collect(),
@@ -131,7 +131,7 @@ impl Baseline {
             }
         }
         let mut named = HashMap::<(&str, &str), Vec<usize>>::new();
-        let mut fingerprints = HashMap::<&str, Vec<usize>>::new();
+        let mut fingerprints = HashMap::<FunctionIdentity, Vec<usize>>::new();
         for (index, f) in self.functions.iter().enumerate() {
             named
                 .entry((
@@ -140,30 +140,31 @@ impl Baseline {
                 ))
                 .or_default()
                 .push(index);
-            fingerprints.entry(&f.identity).or_default().push(index);
+            // An identity that is not a digest can never match a scanned function.
+            if let Ok(identity) = f.identity.parse() {
+                fingerprints.entry(identity).or_default().push(index);
+            }
         }
         let mut current_names = HashMap::new();
         let mut current_ids = HashMap::new();
         for f in &report.functions {
             *current_names
-                .entry((f.path.as_str(), f.name.as_str()))
+                .entry((&*f.path, f.name.as_str()))
                 .or_insert(0) += 1;
-            *current_ids.entry(f.identity.as_str()).or_insert(0) += 1;
+            *current_ids.entry(f.identity).or_insert(0) += 1;
         }
         let mut used = HashSet::new();
         let mut failures = Vec::with_capacity(report.functions.len());
         for f in &report.functions {
             let absolute_failed = f.crap > report.threshold;
             let mut failed = absolute_failed;
-            let by_name = named
-                .get(&(f.path.as_str(), f.name.as_str()))
-                .filter(|entries| {
-                    entries.len() == 1 && current_names[&(f.path.as_str(), f.name.as_str())] == 1
-                });
+            let by_name = named.get(&(&*f.path, f.name.as_str())).filter(|entries| {
+                entries.len() == 1 && current_names[&(&*f.path, f.name.as_str())] == 1
+            });
             let candidates = by_name.or_else(|| {
-                fingerprints.get(f.identity.as_str()).filter(|entries| {
+                fingerprints.get(&f.identity).filter(|entries| {
                     entries.len() == 1
-                        && current_ids[f.identity.as_str()] == 1
+                        && current_ids[&f.identity] == 1
                         && stable_name(&self.functions[entries[0]].name) == stable_name(&f.name)
                 })
             });

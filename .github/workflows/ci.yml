@@ -14,21 +14,29 @@ jobs:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     timeout-minutes: 30
     runs-on: ubuntu-latest
+    # Explicit name: the required checks are test (1.90) and test (stable).
+    name: test (${{ matrix.rust }})
     strategy:
       matrix:
-        rust: ["1.90", stable]
+        include:
+          # The MSRV leg runs the minimum supported Node (24, see README); the
+          # stable leg runs the current Active LTS.
+          - rust: "1.90"
+            node: 24
+          - rust: stable
+            node: 26
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
       - name: Python helper and release security regression tests
         run: python3 -B -m unittest discover -s tests -p "test_*.py"
       - run: cargo fmt --check
@@ -48,7 +56,7 @@ jobs:
         run: node --test tests/*.test.mjs
         env:
           TS_CRAP_SCANNER: ${{ github.workspace }}/target/debug/ts-crap
-      - name: Installed coverage helper bundle (Node 24)
+      - name: Installed coverage helper bundle (Node ${{ matrix.node }})
         run: |
           python3 scripts/bundle-coverage.py target/helper-bundle
           python3 scripts/verify-coverage-bundle.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap
@@ -99,23 +107,26 @@ jobs:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     timeout-minutes: 20
     runs-on: ${{ matrix.os }}
+    # Node 24 (the minimum supported) keeps its original check names.
+    name: platform-behavior (${{ matrix.os }}${{ matrix.node != 24 && format(', node {0}', matrix.node) || '' }})
     strategy:
       fail-fast: false
       matrix:
         os: [macos-latest, windows-latest]
+        node: [24, 26]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: "1.90"
+          toolchain: stable
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
       - name: Paths, Git selection, reports and real Node coverage
         run: cargo test --locked --test cli --test git_diff --test reports --test coverage_e2e --test adoption --test coverage_import --test project_policy --test example
-      - name: Installed coverage helper bundle (Node 24)
+      - name: Installed coverage helper bundle (Node ${{ matrix.node }})
         shell: bash
         run: |
           python3 scripts/bundle-coverage.py target/helper-bundle
@@ -126,20 +137,22 @@ jobs:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     timeout-minutes: 30
     runs-on: ${{ matrix.os }}
+    name: framework-coverage (${{ matrix.os }}${{ matrix.node != 24 && format(', node {0}', matrix.node) || '' }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [24, 26]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: "1.90"
+          toolchain: stable
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: tests/fixtures/frameworks/package-lock.json
       - run: cargo build --locked
@@ -154,22 +167,23 @@ jobs:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
     timeout-minutes: 20
     runs-on: ${{ matrix.os }}
-    name: framework-versions (${{ matrix.versions }}, ${{ matrix.os }})
+    name: framework-versions (${{ matrix.versions }}, ${{ matrix.os }}${{ matrix.node != 24 && format(', node {0}', matrix.node) || '' }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [24, 26]
         versions: [vitest-3, vitest-4, vitest-5, jest-29, jest-30]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: "1.90"
+          toolchain: stable
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: tests/fixtures/framework-versions/${{ matrix.versions }}/package-lock.json
       - run: cargo build --locked
@@ -189,9 +203,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2
+      - uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
         with:
-          tool: cargo-audit@0.22.2
+          tool: cargo-audit@0.23.0
       - run: cargo audit --deny warnings
   workflows:
     if: github.repository == 'RuiCostafrg/typescript-crap' && github.actor_id == '35194998'
@@ -218,12 +232,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: '1.90'
+          toolchain: stable
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
           cache-dependency-path: tests/tooling/package-lock.json
       - run: npm ci --ignore-scripts --no-audit --no-fund --prefix tests/tooling
@@ -256,12 +270,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: '1.90'
+          toolchain: stable
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
           cache-dependency-path: tests/tooling/package-lock.json
       - run: npm ci --ignore-scripts --no-audit --no-fund --prefix tests/tooling

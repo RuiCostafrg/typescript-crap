@@ -85,7 +85,7 @@ fn report_mode_scores_the_rest_and_fails_completeness_under_any_policy() {
     assert_eq!(report.files_scanned, 2);
     assert_eq!(report.files_missing_coverage, 2);
     assert_eq!(report.functions.len(), 1);
-    assert_eq!(report.functions[0].path, "a.ts");
+    assert_eq!(&*report.functions[0].path, "a.ts");
     assert!(report.completeness_failed && report.failed);
     // The pure library capture API may snapshot scored functions, but applying
     // that snapshot must never suppress a syntax completeness failure.

@@ -438,7 +438,7 @@ fn excluded_directories_replace_the_default_list() {
         ..Default::default()
     })
     .unwrap();
-    let mut selected: Vec<_> = report.functions.iter().map(|f| f.path.as_str()).collect();
+    let mut selected: Vec<_> = report.functions.iter().map(|f| &*f.path).collect();
     selected.dedup();
     assert_eq!(selected, ["coverage/e.ts", "node_modules/pkg/d.ts"]);
 }
@@ -541,7 +541,11 @@ fn walked_and_explicit_selection_agree_on_unicode_and_mixed_case_names() {
     })
     .unwrap();
     let names = |report: &ts_crap::Report| -> Vec<String> {
-        report.functions.iter().map(|f| f.path.clone()).collect()
+        report
+            .functions
+            .iter()
+            .map(|f| f.path.to_string())
+            .collect()
     };
     // `.CTS` is not a supported extension, so five files are scanned.
     assert_eq!(walked.files_scanned, 5);

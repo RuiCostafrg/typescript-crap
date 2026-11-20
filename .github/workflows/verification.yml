@@ -54,5 +54,5 @@ jobs:
       - uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
         with:
           tool: cargo-semver-checks@0.51.0
-      - name: Preserve the released v2 Rust API
-        run: cargo semver-checks --baseline-rev v2.0.0 --release-type patch
+      - name: Preserve the released v3 Rust API
+        run: cargo semver-checks --baseline-rev v3.0.0 --release-type patch

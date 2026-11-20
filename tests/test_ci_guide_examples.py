@@ -46,7 +46,7 @@ class CiGuideExampleTests(unittest.TestCase):
         for text in (vitest, jest):
             self.assertIn('git show "$BASE_SHA:crap-baseline.json"', text)
             self.assertIn('git show "$BASE_SHA:ts-crap.json"', text)
-        self.assertRegex(jest, r"TS_CRAP_VERSION: '2\.(?:[3-9]|\d{2,})\.\d+'",
+        self.assertRegex(jest, r"TS_CRAP_VERSION: '(?:2\.(?:[3-9]|\d{2,})|(?:[3-9]|\d{2,})\.\d+)\.\d+'",
                          'the Jest example needs a release whose helper bundle has coverage-run.mjs')
 
     def test_the_comparison_notices_a_changed_baseline_step(self):

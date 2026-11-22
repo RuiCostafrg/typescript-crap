@@ -49,6 +49,8 @@ export async function publishReport(
   contents,
   { replace = false, createParent = false, validate } = {},
 ) {
+  // The collector may have changed the destination since the initial check.
+  if (validate) await validate();
   if (createParent) await fs.mkdir(path.dirname(output), { recursive: true });
   // A random private sibling directory keeps staging on the destination filesystem.
   const directory = await fs.mkdtemp(path.join(path.dirname(output), ".ts-crap-coverage-"));

@@ -32,6 +32,12 @@ a red `signoff/<stage>` status automatically. Each status (green or red) is boun
 with `--commit` to the exact commit captured at the start of its stage, so a
 commit or push landing mid-run can never be green-lit for code it did not test.
 
+The runner and checksum are vendored from verified-release-kit. The checks
+for this repository live in `scripts/local-ci.stages.sh`. Signoff requires
+a clean checkout and uses the exact commit tested. Use `--no-signoff`
+to run most checks on local edits. Cargo package listing still requires a
+clean checkout, so commit or stash local edits before running `lint`.
+
 ## Optional: make sign-off a merge requirement
 
 ```bash

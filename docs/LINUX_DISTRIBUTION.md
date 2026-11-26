@@ -27,7 +27,8 @@ container matrix does not establish compatibility with older Linux kernels.
 
 From v2.3.0, the shell installer installs the static
 musl build on every Linux system, so all installer users run the same tested
-binary whatever their glibc version. Release assembly rewrites the two Linux
+binary whatever their glibc version. See the [distribution decision](adr/0002-default-to-static-musl-on-linux.md).
+Release assembly rewrites the two Linux
 GNU selection branches of cargo-dist's generated installer
 ([script](../scripts/prefer-static-linux-installer.py)). The rewrite is an
 exact text match and fails the release if the cargo-dist template changes.

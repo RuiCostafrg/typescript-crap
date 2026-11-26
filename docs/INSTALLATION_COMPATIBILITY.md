@@ -26,7 +26,7 @@ coverage, mutation, and release checks.
 ## Matrix and assertions
 
 - Shell: macOS 26 Apple Silicon/Intel and Ubuntu 26.04 ARM64/x86-64.
-- Pinned published installer: the README's verify-before-run flow for v2.2.1
+- Pinned published installer: the [verify-before-run flow](../SECURITY.md#verifying-downloads) for v2.2.1
   (real GitHub URLs, `gh attestation verify`, unmanaged install) on Ubuntu 26.04
   and 24.04 ARM64/x86-64 and macOS 26 Apple Silicon, plus inside stock
   `debian:12-slim` and `alpine:3.22` containers on both architectures. It
@@ -172,5 +172,4 @@ merged after all required checks passed. The subsequent
 [published-adoption run](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40494926411)
 passed every job: installed CLI/helpers and the CI guide on all five platforms,
 plus live v0.4.0 to v1.0.0 Homebrew upgrades, reinstalls, and fresh installs on
-macOS ARM64/Intel and Linux x86-64. The [acceptance ledger](RELEASE_V1.md)
-records the exact source, verifier, tap commits, and helper checksum.
+macOS ARM64/Intel and Linux x86-64.

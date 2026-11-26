@@ -238,6 +238,9 @@ otherwise later uploads replace earlier ones. `sarif` requires `scan`, and
 before anything is downloaded. The `token` is passed only to `gh`; the
 downloaded binary runs without it.
 
+See the [Action verification decision](adr/0004-verify-action-assets-with-fresh-trust.md)
+for why the trust root is fetched on every install.
+
 ### Choosing the action ref
 
 The action ref (after `@`) and the `version` input are independent. The ref
@@ -298,18 +301,15 @@ python3 scripts/verify-ci-guide.py \
 A [clean published-tool run](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40494926411)
 passed with v1.0.0's checksum/provenance-verified CLI and helper archive on all
 five targets: Linux ARM64/x86-64, macOS ARM64/Intel, and Windows x86-64. The Linux
-x86-64 job additionally passed actual Vitest/Istanbul collection. The
-[acceptance ledger](RELEASE_V1.md) records the immutable tag/source, helper
-checksum, and related installation evidence.
+x86-64 job additionally passed actual Vitest/Istanbul collection.
 
 For each new release, after publication and live Homebrew synchronization, dispatch
 [Verify published adoption](../.github/workflows/verify-published.yml) with the
 published version and previous upgrade fixture. Keep guide verification enabled.
 It downloads checksum/provenance-verified published CLI/helpers, runs this clean
 project on all five archive targets (plus actual Vitest on Linux x86-64), and
-checks unchanged live Homebrew URLs on its three supported targets. Record the
-run URL and source commit in the roadmap; a skipped guide check for legacy
-releases does not satisfy the new-release acceptance criterion.
+checks live Homebrew URLs on its three supported targets. Keep the workflow
+run URL and source commit with the release evidence.
 
 Hosted [contract/guide CI](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40420847597)
 passed on `bf8a52d7be37c871939746bfe3ceae807e2bdf49` with Node 24 and both

@@ -288,7 +288,7 @@ with `dist generate`. `dist plan` still validates the packaging configuration.
 4. For a stable release, dispatch **Sync verified release** in the Homebrew tap.
    Approve its environment, then review and merge the update PR after its checks
    pass.
-5. Run [Verify published adoption](.github/workflows/verify-published.yml)
+5. Run [Verify published adoption](https://github.com/RuiCostafrg/typescript-crap/blob/main/.github/workflows/verify-published.yml)
    after the tap updates. Supply both versions and enable guide, Linux, and npm
    verification. Update the pinned release and expectations in
    `github-action.yml` once that run passes.

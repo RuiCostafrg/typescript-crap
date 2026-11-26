@@ -123,7 +123,7 @@ installation is unnecessary for the downloaded CLI.
 
 ## GitHub Action
 
-The repository root contains a composite [setup action](../action.yml). It
+The repository root contains a composite [setup action](https://github.com/RuiCostafrg/typescript-crap/blob/main/action.yml). It
 replaces the manual install step in the example workflow. It installs the
 `version` you choose (2.2.1 or newer, no `latest`) for the runner:
 
@@ -259,7 +259,7 @@ examples above do. Until a release contains the action, use a commit on `main`. 
 Release tags are annotated, and the `^{}` suffix returns the commit rather
 than the tag object.
 
-For the owner's commits and PRs, [Action CI](../.github/workflows/github-action.yml)
+For the owner's commits and PRs, [Action CI](https://github.com/RuiCostafrg/typescript-crap/blob/main/.github/workflows/github-action.yml)
 runs the action against the published v3.0.0 release on Ubuntu 26.04 and 24.04
 (x86-64 and ARM64), macOS Apple Silicon and Intel, and Windows x86-64. It
 checks the Linux binary is static, scans with SARIF, uploads to code scanning
@@ -304,7 +304,7 @@ five targets: Linux ARM64/x86-64, macOS ARM64/Intel, and Windows x86-64. The Lin
 x86-64 job additionally passed actual Vitest/Istanbul collection.
 
 For each new release, after publication and live Homebrew synchronization, dispatch
-[Verify published adoption](../.github/workflows/verify-published.yml) with the
+[Verify published adoption](https://github.com/RuiCostafrg/typescript-crap/blob/main/.github/workflows/verify-published.yml) with the
 published version and previous upgrade fixture. Keep guide verification enabled.
 It downloads checksum/provenance-verified published CLI/helpers, runs this clean
 project on all five archive targets (plus actual Vitest on Linux x86-64), and

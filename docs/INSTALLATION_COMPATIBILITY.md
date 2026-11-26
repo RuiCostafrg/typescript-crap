@@ -12,9 +12,9 @@ with every distribution. Releases through v2.1.0 have no Alpine/musl archive;
 v2.2.1 adds separate musl builds. Android/Termux has no native release
 archive. Older v0.3.0 archives retain their earlier glibc 2.35+ baseline.
 
-The [installation workflow](../.github/workflows/installation.yml) verifies a
+The [installation workflow](https://github.com/RuiCostafrg/typescript-crap/blob/main/.github/workflows/installation.yml) verifies a
 pinned published upgrade pair, v0.3.0 to v0.4.0. The
-[release verification workflow](../.github/workflows/verify-release.yml) repeats
+[release verification workflow](https://github.com/RuiCostafrg/typescript-crap/blob/main/.github/workflows/verify-release.yml) repeats
 installation and upgrades using the candidate release assets before publication.
 The installer and Homebrew checks upgrade candidates from the published release
 set as `PREVIOUS_VERSION` in that workflow, which is moved to the latest

@@ -79,13 +79,14 @@ running the scan. See the [CLI reference](docs/CLI.md) for Git and PR modes,
 
 ## Gate pull requests
 
-Add this setup step to your GitHub Actions workflow. It pins both the action
-commit and the scanner version.
+After checking out the PR, add this step to install ts-crap and run a
+full-project scan. It pins both the action commit and the scanner version.
 
 ```yaml
 - uses: RuiCostafrg/typescript-crap@641bee77459d8bbf9ea981adbcbde2595c3af1b3 # v3.0.0
   with:
     version: 3.0.0
+    scan: true
 ```
 
 The action verifies release provenance and the archive digest before installing.

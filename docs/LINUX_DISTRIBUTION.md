@@ -109,7 +109,7 @@ There is no configured APT source, so `apt upgrade` cannot fetch newer releases.
 
 ## CI and release gates
 
-[Linux distribution CI](../.github/workflows/linux-distribution.yml) builds both
+[Linux distribution CI](https://github.com/RuiCostafrg/typescript-crap/blob/main/.github/workflows/linux-distribution.yml) builds both
 architectures natively with Rust 1.100 and musl. It rejects ELF interpreters and
 shared-library dependencies, checks package architecture, helper versions and
 asset checksums, and rebuilds each Debian package twice to compare exact bytes.

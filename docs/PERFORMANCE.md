@@ -8,7 +8,7 @@ runs. Compare builds measured together on the same runner.
 ## Real-corpus benchmark
 
 The CI guard uses synthetic fixtures. For numbers on a real project, the
-opt-in [corpus benchmark workflow](../.github/workflows/corpus-benchmark.yml) checks out
+opt-in [corpus benchmark workflow](https://github.com/RuiCostafrg/typescript-crap/blob/main/.github/workflows/corpus-benchmark.yml) checks out
 `microsoft/vscode` at the configured commit, builds the
 shipped `dist` profile for `x86_64-unknown-linux-gnu` and static
 `x86_64-unknown-linux-musl`, and runs

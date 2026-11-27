@@ -23,6 +23,11 @@ The example uses Node 24, Vitest's installed Istanbul provider, and an Ubuntu
 also run Jest or another compatible reporter. Use JSON when default-argument
 initializers matter: LCOV line records can omit their declaration-line evidence.
 
+For test suites split across projects and shards, run the framework's coverage
+gate on the combined report before importing it. See the runnable
+[Vitest](VITEST.md#multi-project-and-sharded-coverage) and
+[Jest](JEST.md#multi-project-and-sharded-coverage) recipes.
+
 ## Establish the reviewed baseline
 
 Install the CLI using a documented release installer or checksum-verified archive,

@@ -110,6 +110,89 @@ try {
       .join(", ")}`,
   );
 
+  // The sharding recipes target the versions pinned in the shared fixture.
+  if (!versions) {
+    const service = "packages/service/src/shipping.ts";
+    const core = "packages/core/src/price.ts";
+    const recipes = [
+      {
+        framework: "vitest",
+        collector: "collect-vitest-shards.mjs",
+        report: "coverage/coverage-final.json",
+        thresholdFailure: /Coverage for (?:lines|functions).*does not meet.*threshold/i,
+        sources: [
+          core,
+          service,
+          "packages/ui/coverage-gaps/DefaultPanel.tsx",
+          "packages/ui/src/Badge.tsx",
+          "packages/ui/src/panels/AsyncPanel.tsx",
+          "packages/ui/src/panels/OrderPanel.tsx",
+          "packages/ui/src/panels/Résumé.tsx",
+        ],
+      },
+      {
+        framework: "jest",
+        collector: "jest-sharded-coverage.cjs",
+        report: "coverage-final.json",
+        thresholdFailure: /Jest merged coverage threshold for branches \(100%\) not met/,
+        sources: [core, service],
+      },
+    ];
+    for (const { framework, collector, report, thresholdFailure, sources } of recipes) {
+      const label = `${framework} ${installed[framework]}/sharded`;
+      for (const partial of [false, true]) {
+        const directory = path.join(temporary, `${framework}-${partial ? "partial" : "full"}`);
+        const output = path.join(directory, "native.json");
+        const result = run(
+          process.execPath,
+          [
+            path.join(repository, "scripts/import-coverage.mjs"),
+            "--root",
+            root,
+            "--format",
+            "istanbul",
+            "--input",
+            path.join(directory, report),
+            "--output",
+            output,
+            "--",
+            process.execPath,
+            collector,
+            directory,
+          ],
+          partial ? 2 : 0,
+          { FIXTURE_PARTIAL: partial ? "1" : "" },
+        );
+        if (partial) {
+          assert.match(`${result.stdout}\n${result.stderr}`, thresholdFailure, label);
+          await assert.rejects(fs.access(output), { code: "ENOENT" }, label);
+          continue;
+        }
+        const native = JSON.parse(await fs.readFile(output, "utf8"));
+        assert.deepEqual(Object.keys(native.files).sort(), sources, label);
+        const scanned = JSON.parse(
+          run(scanner, [
+            "--root",
+            root,
+            ...sources,
+            "--coverage",
+            output,
+            "--require-coverage",
+            "--threshold",
+            "4",
+            "--format",
+            "json",
+          ]).stdout,
+        );
+        assert.equal(scanned.files_scanned, sources.length, label);
+        assert.equal(scanned.functions_missing_coverage, 0, label);
+        assert.deepEqual([...new Set(scanned.functions.map((f) => f.path))].sort(), sources, label);
+        assert(scanned.functions.every((f) => f.coverage === 1), label);
+      }
+      console.log(`PASS ${label}: merged projects pass, partial coverage prevents publication`);
+    }
+  }
+
   // The fixture has both configurations, so detection must refuse to guess.
   const ambiguous = run(
     process.execPath,

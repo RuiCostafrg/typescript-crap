@@ -187,7 +187,10 @@ try {
         assert.equal(scanned.files_scanned, sources.length, label);
         assert.equal(scanned.functions_missing_coverage, 0, label);
         assert.deepEqual([...new Set(scanned.functions.map((f) => f.path))].sort(), sources, label);
-        assert(scanned.functions.every((f) => f.coverage === 1), label);
+        assert(
+          scanned.functions.every((f) => f.coverage === 1),
+          label,
+        );
       }
       console.log(`PASS ${label}: merged projects pass, partial coverage prevents publication`);
     }

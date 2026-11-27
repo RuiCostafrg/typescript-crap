@@ -158,7 +158,7 @@ names the exact installed version (for example `vitest 3.2.7/v8/lcov`). The
 `vitest-5` and `jest-30` lockfiles were seeded from the shared fixture's lockfile,
 so they resolve the same transitive versions. The `framework-versions` CI job runs
 all five on Linux, macOS and Windows with Node 24. It keeps the owner-only numeric
-actor gate described in [DEPENDENCY_UPDATES.md](DEPENDENCY_UPDATES.md). The
+actor gate described in the [security policy](../SECURITY.md#release-trust-boundary). The
 supported-versions table is in [COMPATIBILITY.md](COMPATIBILITY.md#supported-test-frameworks).
 
 ## Complex Vitest/TSX scenarios

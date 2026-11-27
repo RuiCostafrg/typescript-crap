@@ -43,10 +43,10 @@ require users to install a proof tool. See the [Kani documentation](https://mode
 ## Rust API compatibility
 
 The Verification workflow also runs pinned `cargo-semver-checks` 0.51.0 against
-the immutable `v2.0.0` tag, explicitly enforcing patch-level API compatibility:
+the immutable `v3.0.0` tag, explicitly enforcing patch-level API compatibility:
 
 ```sh
-cargo semver-checks --baseline-rev v2.0.0 --release-type patch
+cargo semver-checks --baseline-rev v3.0.0 --release-type patch
 ```
 
 Update that baseline deliberately when adopting another major API contract.

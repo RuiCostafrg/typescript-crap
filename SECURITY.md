@@ -81,8 +81,14 @@ gh attestation verify ./ts-crap-aarch64-apple-darwin.tar.xz \
   --source-ref refs/tags/vVERSION --deny-self-hosted-runners
 ```
 
-Replace the platform archive and vVERSION with the desired release. For npm
-installs, `npm audit signatures` (npm 11 or later) checks the registry
+Replace the platform archive and vVERSION with the desired release. For a Unix
+shell install, download the pinned `ts-crap-installer.sh` and verify it with the
+same command before running it. The installer checks the chosen archive against
+the embedded SHA-256 when `sha256sum` is available. Require that command before
+running the script if you rely on its archive check. On macOS without
+`sha256sum`, verify the platform archive directly.
+
+For npm installs, `npm audit signatures` (npm 11 or later) checks the registry
 signatures and the trusted-publishing provenance of `typescript-crap` and its
 platform package; the published-release check requires both to verify. For a strict
 commit binding, add --source-digest with the expected 40-character commit SHA.
@@ -102,10 +108,9 @@ separate Apple/Windows signing credentials and is not configured here.
 
 Daily advisory scans are the narrowly scoped scheduling exception: they run only
 the default branch with read-only permissions and no publication secrets, even
-when GitHub records a scheduling actor other than the owner. Dependabot updates
-require owner review and an owner-authored PR; see
-[the dependency update process](docs/DEPENDENCY_UPDATES.md). PR actor gates remain
-unchanged. Coverage and mutation checks are required alongside ordinary CI before
+when GitHub records a scheduling actor other than the owner. See
+[reviewed dependency updates](CONTRIBUTING.md#dependency-auditing) for the
+owner-authored PR process. Coverage and mutation checks are required alongside ordinary CI before
 merging or releasing. New releases also require successful native Linux
 distribution CI on the exact main source commit. Candidate musl archives and
 Debian packages pass isolated runtime and package lifecycle checks before

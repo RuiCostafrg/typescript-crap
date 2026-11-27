@@ -8,7 +8,7 @@ the scanner. Native coverage, configuration, baseline, and JSON report documents
 
 ## Scoring and selection
 
-The normative scoring rules are the README's [scoring contract](../README.md#scoring-contract)
+The normative scoring rules are the [scoring contract](CLI.md#scoring-contract)
 and executable tests in `tests/core.rs`, `tests/cli.rs`, and `tests/adoption.rs`.
 CRAP is `CC² * (1 - coverage)³ + CC`, with coverage in [0, 1]. The gate uses the
 unrounded score and fails strictly above the effective threshold. Missing
@@ -40,7 +40,7 @@ entry uses built-in defaults. Working config symlinks remain supported.
 Each explicit gate override wins over config and then built-in defaults
 (threshold 10; require_coverage/fail_on_empty false). Bare boolean flags mean true;
 `=false` explicitly disables a configured gate. Include/exclude replacement and
-exclusion precedence are documented in the README and remain stable in 3.x.
+exclusion precedence are documented in the [CLI reference](CLI.md#project-configuration).
 
 LCOV helpers aggregate captures by testcase and source before source mapping,
 retain conservative overlap within each testcase, then add independent testcase
@@ -159,10 +159,9 @@ raising it requires a documented minor release and CI verification.
 
 Internal modules, dependency types not exposed through the public API, private
 layout, implementation algorithms, and performance timing are not stable APIs.
-The CLI runs trusted local test/Git commands with the caller's permissions. It
-makes no sandbox, hard CPU/memory budget, or subprocess timeout guarantee. Resource
-observations and the v1 budget decision are recorded in the adoption report;
-CI jobs should enforce their own time/memory limits for untrusted repositories.
+The CLI and collectors run local Git or test commands with the caller's
+permissions. Provide isolation and resource budgets at the calling boundary.
+See the [trusted-local execution decision](adr/0003-trusted-local-execution.md).
 
 ## Release acceptance
 

@@ -73,10 +73,19 @@ python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-covera
 python3 scripts/verify-ci-guide.py --archive target/helper-bundle/ts-crap-coverage-helpers.zip --scanner target/debug/ts-crap --jest tests/tooling/node_modules/jest/bin/jest.js
 ```
 
-[Independent adoption validation](docs/ADOPTION.md) documents the pinned upstream
-source harness and measurements. CI runs both checks separately and retains their
-reports. `verify-published.yml` verifies published assets and live Homebrew after
-release; candidate verification does not replace that publication evidence.
+The independent adoption harness checks pinned Hono, TanStack Table, and Vite
+sources from [the fixture manifest](tests/adoption/projects.json). It runs real
+Vitest/Istanbul tests, imports coverage, and compares two scanner reports.
+
+```sh
+cargo build --locked --release
+python3 scripts/measure-adoption.py --scanner target/release/ts-crap \
+  --build-profile release --workspace target/adoption --output target/adoption.json
+```
+
+Use the tooling install above. The [recorded adoption run](docs/measurements/adoption-v1.json)
+includes versions, gate exits, missing evidence, execution time, and peak scanner
+RSS. CI retains separate hosted artifacts.
 
 Use `-j 1` on the Termux/proot development machine to limit compiler/linker memory.
 The minimum supported Rust version is **1.90**, matching the current lockfile's
@@ -116,11 +125,17 @@ cancelled. They require no publishing credentials or external coverage-service t
   before publication; tagged releases require successful main installation CI.
   See [installation verification](docs/INSTALLATION_COMPATIBILITY.md) for limits.
 
-Coverage and mutation artifacts are retained for 14 days. Coverage enforces the production-source line floor documented in
-`docs/QUALITY_BASELINE.md`. Mutation score must be at least 90%; only assertion-killed
-mutants count as caught, unbuildable mutants are excluded, and timeouts or partial
-runs fail independently. Audit warnings/advisories fail. There is no
-`continue-on-error` hiding failures.
+Coverage and mutation artifacts are retained for 14 days. Production line
+coverage must reach 95% using integer counts. Malformed, missing, or empty reports
+fail. The mutation floor is 90%, calculated as caught / (caught + missed +
+timeout). Only assertion-killed mutants count as caught. Unviable mutants are
+reported separately. Timeouts, incomplete runs, failed baselines, and
+infrastructure errors fail independently. Inspect survivors and add behavioral
+tests when they expose gaps.
+
+Check successful owner-triggered runs for the latest PR head before merging.
+PR checks normally test GitHub's synthetic merge commit. Release checks require
+successful main runs on the exact source commit.
 
 The Cargo manifest has an explicit package allowlist: local reports, mutation logs,
 coverage data, and Python caches must not be included in a crate archive. This does
@@ -185,6 +200,13 @@ cargo audit --deny warnings
 CI uses the same pinned audit-tool version with the current RustSec database and no
 advisory ignores. The audit includes dev-dependencies. Results describe known
 advisories at the database revision used, not an assurance of no unknown flaws.
+
+Dependabot proposes weekly Cargo, GitHub Actions, and npm fixture/tooling
+updates. The owner reviews changelogs, lockfiles, MSRV, action permissions and
+immutable pins, then applies accepted updates in an owner-authored PR with the
+full checks. Daily advisory runs audit the default branch with read-only
+permissions. See the [release trust boundary](SECURITY.md#release-trust-boundary)
+for the actor policy.
 
 ## Safety and lint policy
 
@@ -252,18 +274,30 @@ separate builds from privileged publication. `allow-dirty = ["ci"]` prevents
 cargo-dist from requiring its default workflow; do not overwrite release.yml
 with `dist generate`. `dist plan` still validates the packaging configuration.
 
-1. Update Cargo.toml/Cargo.lock in an owner PR and merge after CI passes.
-2. Wait for successful main CI on the merged commit, then create/push the matching
-   SemVer tag, for example `git tag v0.2.0` and `git push origin v0.2.0`.
-   Protected tags cannot be moved or deleted.
-3. The Release workflow builds all five targets and verifies the archives.
-   Approve the pending **release** environment deployment after reviewing the
-   source SHA and checks. This publishes attested archives, installers and formula.
-4. The Homebrew tap checks hourly or can be manually dispatched via its
-   **Sync verified release** workflow. It rejects missing/wrong provenance or
-   downgrades. Approve its **homebrew** environment deployment to open an update PR, then
-   review and merge it after Tap CI passes.
-   Prereleases do not update Homebrew.
+1. Prepare the version in an owner PR. Update `Cargo.toml`, `Cargo.lock`, and
+   the changelog. Set `PREVIOUS_VERSION` in `verify-release.yml` to the latest
+   published release.
+2. Merge and check successful main CI, coverage, mutation, installation,
+   verification, Linux distribution, and npm-package workflows on that commit.
+   Push the matching annotated SemVer tag. Published tags are immutable.
+3. Approve the `release` environment for GitHub publication after reviewing the
+   candidate verification and source SHA. Then approve the separate npm staging
+   job. The job summary lists the stage IDs. Approve them with npm 2FA, platform
+   packages first. Check all five with `npm view` before approving the top-level
+   package.
+4. For a stable release, dispatch **Sync verified release** in the Homebrew tap.
+   Approve its environment, then review and merge the update PR after its checks
+   pass.
+5. Run [Verify published adoption](https://github.com/RuiCostafrg/typescript-crap/blob/main/.github/workflows/verify-published.yml)
+   after the tap updates. Supply both versions and enable guide, Linux, and npm
+   verification. Update the pinned release and expectations in
+   `github-action.yml` once that run passes.
+
+If npm staging fails after GitHub publication, fix the external cause and rerun
+the staging job while the package artifact remains available (30 days).
+The rerun skips already-published versions when their bytes match. Resolve an
+existing staged copy before staging again. A workflow bug at an immutable tag
+requires a new patch release after the fix merges.
 
 Manual dispatch of **Release** on main is a dry run: it builds and tests without
 publishing or requiring publishing credentials. It cannot publish an arbitrary
@@ -279,24 +313,14 @@ Future collaborators require an explicit reconsideration of this policy.
 
 ## Coverage and regression gates
 
-See the README for versioned selection config, source-bound Istanbul/LCOV imports,
-regression baselines, completeness flags, terminal escaping and SARIF. Baseline
-matching indexes identities once per report rather than scanning all prior
-functions for each current function. Coverage hashes and validation remain once
-per source; source-map rows and line counts are prepared once per imported file.
-
-Daily advisory scans and weekly reviewed dependency/action updates are documented
-in [docs/DEPENDENCY_UPDATES.md](docs/DEPENDENCY_UPDATES.md). Bot PR code never runs
-with trusted credentials. Release validation requires successful main CI, coverage
-and mutation runs for the exact tagged SHA, and all PR checks must pass before merge.
-
+See the [CLI reference](docs/CLI.md) for configuration, baselines, completeness
+flags, and SARIF. See [coverage helpers](docs/COVERAGE_HELPERS.md) for
+source-bound Istanbul and LCOV imports.
 
 ## Benchmarks and implementation notes
 
-See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the expanded multi-file and
-mixed-grammar benchmarks, parser reuse measurements and native Actions step timings.
-Required test/mutation checks and floors are preserved; the duplicate Python
-coverage-summary invocation was removed.
+See [performance benchmarks](docs/PERFORMANCE.md) for the real-corpus workflow,
+local stage benchmarks, and the PR regression guard.
 
 `scripts/coverage-lines.mjs` contains the pure V8 range sweep and independent-process
 line merging. `scripts/coverage.mjs` owns snapshots, child commands and publishing.

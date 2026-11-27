@@ -76,7 +76,7 @@ unused. They read only
 `excluded_directories` from `ROOT/ts-crap.json` (or `--config FILE`), and use the
 default list when the key or the default file is absent. An explicit `--config`
 must exist, and an invalid list is an error. See the README's
-[adoption gates](../README.md#adoption-gates-v02).
+[project configuration](CLI.md#project-configuration).
 
 Both helpers reject destinations at `ROOT/ts-crap.json`, whether or not it
 already exists. If the scanner uses an alternative policy, pass the same
@@ -208,11 +208,9 @@ abandoned reservation after confirming its collector has stopped. These are
 cooperative importer reservations, not a sandbox against arbitrary processes
 writing to the reports. Collectors must finish all writers before returning.
 
-This is the importer foundation for roadmap 1.6. Executed Vitest/Jest workspace
-and shard recipes are the follow-up; this example's collection script is supplied
-by the project. Preserve framework percentage thresholds when collecting shards:
-merge and check those thresholds separately, because ts-crap gates CRAP and
-coverage evidence rather than framework coverage percentages.
+Supply the collection script for your project. If collecting shards, merge
+the framework reports and check the project's percentage thresholds on the
+merged report. ts-crap checks CRAP scores and coverage evidence.
 
 LCOV `TN:` test groups are aggregated independently. Repeated records for the
 same test name and resolved `SF:` source add execution counts before mapping;

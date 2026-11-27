@@ -1,12 +1,9 @@
 # Mutation evidence
 
-This note records the proposed design for the opt-in Oximut mutation evidence in
-the next minor ts-crap release. It supersedes the corresponding parts of
-[MUTATION_EVIDENCE_PLAN.md](MUTATION_EVIDENCE_PLAN.md), which was the draft
-plan. Everything here is additive and opt-in: without a mutation report the
-scanner's output is unchanged. Oximut is read-only for ts-crap — the scanner
-consumes an Oximut report and never launches, configures, or modifies Oximut.
-Oximut itself was not changed by this work.
+Collect mutation testing results with Oximut, then pass the report to ts-crap
+to check them alongside line coverage and CRAP scores. Mutation evidence is
+opt-in. See the [gate decision](adr/0001-gate-mutation-evidence-separately.md)
+for the rationale.
 
 ## Supplying evidence
 
@@ -185,31 +182,6 @@ evidence when the report provides one. Two bindings exist, recorded in
 Under both bindings every mutant's recorded byte range must select exactly its
 recorded `original` text, and its line/UTF-16 column must agree with its byte
 offsets. Editing a bound source after the mutation run is rejected with exit 2.
-
-## Rejected alternatives
-
-1. **Gate on effective CRAP** (fail when `effective_crap` exceeds the
-   threshold). Rejected: it couples the mutation outcome to complexity and
-   coverage weighting, so a surviving mutant can hide behind a low-complexity
-   or well-covered function, and the gate outcome would swing with Oximut's
-   score denominator whenever mutants are inconclusive. It would also change
-   what a function's failure means per threshold, complicating baselines for no
-   safety gain.
-2. **Replace coverage with effective coverage in the existing CRAP score.**
-   Rejected: it silently changes every existing score, baseline meaning, and
-   the documented scoring contract — a breaking change for an additive,
-   opt-in feature, and one that makes scores depend on which mutator subset
-   happened to run.
-3. **Report-only, never fail.** Rejected: a surviving mutant with 100% line
-   coverage is precisely the case line coverage cannot see; leaving it out of
-   the gate makes the evidence decorative.
-4. **Fail only on `no_coverage`, tolerate survivors.** Rejected: a surviving
-   mutant means tests executed the mutated code and still passed, which is
-   evidence of weak assertions, not of adequacy.
-5. **Require a kill-ratio floor (for example 100%).** Rejected as redundant
-   under this gate: any survivor already fails, so the only non-failing scored
-   functions are those with all mutants killed; a floor adds threshold policy
-   without changing any outcome.
 
 ## Report surfaces
 

@@ -123,7 +123,7 @@ installation is unnecessary for the downloaded CLI.
 
 ## GitHub Action
 
-The repository root contains a composite [setup action](../action.yml). It
+The repository root contains a composite [setup action](https://github.com/RuiCostafrg/typescript-crap/blob/main/action.yml). It
 replaces the manual install step in the example workflow. It installs the
 `version` you choose (2.2.1 or newer, no `latest`) for the runner:
 
@@ -238,6 +238,9 @@ otherwise later uploads replace earlier ones. `sarif` requires `scan`, and
 before anything is downloaded. The `token` is passed only to `gh`; the
 downloaded binary runs without it.
 
+See the [Action verification decision](adr/0004-verify-action-assets-with-fresh-trust.md)
+for why the trust root is fetched on every install.
+
 ### Choosing the action ref
 
 The action ref (after `@`) and the `version` input are independent. The ref
@@ -256,7 +259,7 @@ examples above do. Until a release contains the action, use a commit on `main`. 
 Release tags are annotated, and the `^{}` suffix returns the commit rather
 than the tag object.
 
-For the owner's commits and PRs, [Action CI](../.github/workflows/github-action.yml)
+For the owner's commits and PRs, [Action CI](https://github.com/RuiCostafrg/typescript-crap/blob/main/.github/workflows/github-action.yml)
 runs the action against the published v3.0.0 release on Ubuntu 26.04 and 24.04
 (x86-64 and ARM64), macOS Apple Silicon and Intel, and Windows x86-64. It
 checks the Linux binary is static, scans with SARIF, uploads to code scanning
@@ -298,18 +301,15 @@ python3 scripts/verify-ci-guide.py \
 A [clean published-tool run](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40494926411)
 passed with v1.0.0's checksum/provenance-verified CLI and helper archive on all
 five targets: Linux ARM64/x86-64, macOS ARM64/Intel, and Windows x86-64. The Linux
-x86-64 job additionally passed actual Vitest/Istanbul collection. The
-[acceptance ledger](RELEASE_V1.md) records the immutable tag/source, helper
-checksum, and related installation evidence.
+x86-64 job additionally passed actual Vitest/Istanbul collection.
 
 For each new release, after publication and live Homebrew synchronization, dispatch
-[Verify published adoption](../.github/workflows/verify-published.yml) with the
+[Verify published adoption](https://github.com/RuiCostafrg/typescript-crap/blob/main/.github/workflows/verify-published.yml) with the
 published version and previous upgrade fixture. Keep guide verification enabled.
 It downloads checksum/provenance-verified published CLI/helpers, runs this clean
 project on all five archive targets (plus actual Vitest on Linux x86-64), and
-checks unchanged live Homebrew URLs on its three supported targets. Record the
-run URL and source commit in the roadmap; a skipped guide check for legacy
-releases does not satisfy the new-release acceptance criterion.
+checks live Homebrew URLs on its three supported targets. Keep the workflow
+run URL and source commit with the release evidence.
 
 Hosted [contract/guide CI](https://github.com/RuiCostafrg/typescript-crap/actions/runs/40420847597)
 passed on `bf8a52d7be37c871939746bfe3ceae807e2bdf49` with Node 24 and both

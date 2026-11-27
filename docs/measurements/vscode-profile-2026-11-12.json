@@ -1,6 +1,6 @@
 {
   "date": "2026-11-12",
-  "purpose": "Per-stage profile of a full scan on a large real project, and throwaway prototypes of four optimizations. Evidence for docs/PERFORMANCE_PLAN.md. Not a release measurement.",
+  "purpose": "Per-stage profile of a full scan on a large real project, and throwaway prototypes of four optimizations. Historical evidence from the initial scan profiling work. Not a release measurement.",
   "environment": {
     "machine": "Android/aarch64 phone, Ubuntu in proot (syscalls are intercepted, so filesystem-heavy stages are inflated relative to native Linux)",
     "cpu_max_khz": [1804800, 1804800, 1804800, 1804800, 2419200, 2419200, 2419200, 3091200],

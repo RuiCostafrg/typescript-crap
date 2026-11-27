@@ -1,807 +1,124 @@
 ![typescript-crap banner](assets/readme-banner.svg)
 
-<img src="assets/icon.svg" width="64" height="64" alt="">
-
 # ts-crap
 
-A Rust command-line quality gate for **TypeScript function CRAP scores**.
-Scans a project, selected files/directories, or files changed in a Git/GitHub PR diff.
-Reports each function's relative path, one-based start line/column, end line,
-cyclomatic complexity, coverage, CRAP score, and gate result.
+**Find TypeScript functions that are complex and under-tested.** ts-crap is a
+Rust CLI that combines cyclomatic complexity and line coverage into a CRAP score
+for each function. Scan a project while you work, or gate changed files in CI
+and use a baseline to catch new or worsening violations.
 
 ## Install
 
-Prebuilt releases require **no Rust toolchain, C compiler, or Node.js** to scan
-TypeScript. Available for macOS (Apple Silicon / Intel), Linux (ARM64 / x86-64),
-and Windows (x86-64). See the archive compatibility notes below for Linux runtime
-requirements.
-
-**GNU Linux archive minimum: Ubuntu 26.04 or a compatible glibc runtime for
-v0.4.0 and newer GNU builds.** The new release verification workflow checks both Linux
-architectures in a clean Ubuntu 26.04 container before publication. Earlier releases have different requirements; see
-the archive notes below. Build from source for other environments.
-
-v2.2.1 adds static musl archives and Debian packages for both Linux
-architectures. See [Linux distribution](docs/LINUX_DISTRIBUTION.md) for package
-installation, verification, and the CI compatibility matrix. These assets are
-not present in v2.1.0 or earlier releases.
-
-TypeScript projects should usually install from npm, which pins the version in
-`package.json` and the lockfile. For other setups, use the shell installer,
-Homebrew, PowerShell, a manual download or the GitHub Action below.
-
-### npm (TypeScript projects)
-
-Releases from v2.3.2 are published to npm as
-[`typescript-crap`](https://www.npmjs.com/package/typescript-crap). The
-installed command is still `ts-crap`:
+From your TypeScript project root:
 
 ```sh
-npm install --save-dev --save-exact typescript-crap   # or pnpm add -D -E, yarn add -D -E, bun add -d -E
-npx ts-crap --root . --threshold 30                   # or pnpm exec / yarn / bun run ts-crap
+npm install --save-dev --save-exact typescript-crap
+npx ts-crap --root . --only-failing --sort crap --top 20
 ```
 
-- `--save-exact` records the exact version in `package.json`; without it the
-  lockfile still pins the installed version, but a regenerated lockfile may
-  pick a newer release.
-- Under Yarn Plug'n'Play, run `yarn ts-crap`: `npx` can't see Plug'n'Play
-  commands and would fetch the unrelated npm package `ts-crap` instead.
-- Yarn 4.15 and later won't install a version for its first day on npm
-  (`npmMinimalAgeGate` defaults to 1 day; earlier 4.x releases default to 0). To adopt a new release sooner, add
-  `typescript-crap` and `typescript-crap-*` to `npmPreapprovedPackages` in
-  `.yarnrc.yml`, or wait a day.
+The npm package is `typescript-crap` and its installed command is `ts-crap`.
+For a one-off run, use `npx typescript-crap@3.0.0` to select this package. Keep optional npm
+dependencies enabled so your package manager installs the platform binary.
+On Yarn Plug'n'Play, run `yarn ts-crap`.
 
-- The scanner comes from a platform package (`typescript-crap-linux-x64`,
-  `-linux-arm64`, `-darwin-x64`, `-darwin-arm64`, `-win32-x64`) that your
-  package manager selects by `os` and `cpu`. Linux uses the static musl build,
-  so glibc and musl distributions both work. Each executable is byte-identical
-  to the attested release archive.
-- There is no install script, so `--ignore-scripts`, pnpm, Yarn (including
-  Plug'n'Play), Bun, offline caches and registry mirrors all work. Don't omit
-  optional dependencies (`--omit=optional`): the platform packages are optional
-  dependencies.
-- The package also contains the coverage helpers at the same version. The
-  one-step Vitest/Jest command is
-  `npx typescript-crap coverage --framework vitest --scan` (or
-  `--framework jest`; the default `auto` stops if both are configured). It needs Node.js 24
-  or later and Vitest or Jest in `node_modules` (Vitest also needs
-  `@vitest/coverage-v8` or `@vitest/coverage-istanbul`), so Yarn Plug'n'Play projects
-  set `nodeLinker: node-modules` first (see
-  [coverage helpers](docs/COVERAGE_HELPERS.md#install-with-npm)).
-- Framework quickstarts: [Vitest](docs/VITEST.md) and [Jest](docs/JEST.md) cover
-  configuration, the one-step command, `package.json` scripts, GitHub Actions and
-  troubleshooting.
-- For a one-off run without installing, use `npx typescript-crap@VERSION`, not
-  `npx ts-crap`: the npm name `ts-crap` belongs to an unrelated package.
-- Packages are staged from the release workflow with npm trusted publishing
-  and provenance, and go public only after the maintainer approves them with 2FA. `npm audit signatures` checks them (see
-  [SECURITY.md](SECURITY.md#verifying-downloads)).
+Prebuilt binaries support macOS (Apple Silicon and Intel), Linux (x86-64 and
+ARM64), and Windows (x86-64). The scanner runs without Node or Rust. On
+Android/Termux, build from source.
 
-### macOS and Linux
+- **Homebrew** — `brew install RuiCostafrg/tap/ts-crap`.
+- **Standalone** — shell and PowerShell installers and verified archives are
+  available on [GitHub Releases](https://github.com/RuiCostafrg/typescript-crap/releases/latest).
+  See [download verification](SECURITY.md#verifying-downloads) and
+  [Linux distribution](docs/LINUX_DISTRIBUTION.md) for musl, glibc, and Debian packages.
+- **Source** — run `cargo install --locked --path .` from this checkout with
+  Rust 1.90+ and a C compiler.
+
+## Use coverage from your tests
+
+With Node 24+ and Vitest or Jest installed, configure coverage to include your
+TypeScript sources and set `include` in `ts-crap.json` to scan those same sources.
+The [Vitest](docs/VITEST.md) and [Jest](docs/JEST.md) quickstarts have copyable
+configurations. Vitest also needs a matching provider such as
+`@vitest/coverage-v8`. Then collect coverage and scan in one command.
 
 ```sh
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/RuiCostafrg/typescript-crap/releases/latest/download/ts-crap-installer.sh | sh
+npx typescript-crap coverage --framework vitest --scan
+# For Jest, use --framework jest.
 ```
 
-The shell installer uses `curl` (or `wget`) and `tar`; Linux also needs `xz`
-(usually provided by the `xz-utils` package). It detects your platform and
-installs to `~/.local/bin`. Follow its
-PATH instructions, or open a new terminal, then run `ts-crap --help`.
-Run the same installer again to update to the latest release.
+On Yarn Plug’n’Play, set `nodeLinker: node-modules` for coverage collection.
+The collector binds coverage to the source bytes it tested. Without coverage
+evidence, the scanner treats a function as uncovered. A function with
+complexity 4 scores **20** at 0% coverage, **6** at 50%, and **4** at 100%.
 
-The `latest` URL changes with every release. For CI and other reproducible
-installs, pin a version instead. Each release's installer installs only that
-release and embeds the SHA-256 of every archive it can download:
+`CRAP = complexity² × (1 − coverage)³ + complexity`, where coverage is a
+fraction between 0 and 1. Scores strictly above the threshold fail. The
+default threshold is 10. See the [scoring contract](docs/CLI.md#scoring-contract)
+and [coverage helpers](docs/COVERAGE_HELPERS.md) for standalone collection and
+Istanbul or LCOV imports.
+
+## Scan and report
 
 ```sh
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/RuiCostafrg/typescript-crap/releases/download/v3.0.0/ts-crap-installer.sh | sh
+# Scan a directory and a file.
+npx ts-crap --root . src packages/api/index.ts
+
+# Score all functions in files changed since the merge base with origin/main.
+npx ts-crap --root . --diff origin/main --threshold 20
+
+# Use previously collected ts-crap coverage and write a browsable report.
+npx ts-crap --root . --coverage coverage.json --format html --output report.html
 ```
 
-To check the installer before running it, download it, verify its
-[build provenance](SECURITY.md#verifying-downloads) with the GitHub CLI, and
-only then run the verified file:
+The scanner supports `.ts`, `.tsx`, `.mts`, and `.cts` implementation files.
+It writes text by default and also supports JSON, XML, HTML, and SARIF. A
+valid scan writes its report even when the gate fails. Exit codes are **0**
+for a pass, **1** for a gate failure, and **2** for invalid input or an error
+running the scan. See the [CLI reference](docs/CLI.md) for Git and PR modes,
+`ts-crap.json`, coverage completeness, and report options.
 
-```sh
-version=3.0.0
-installer_dir=$(mktemp -d) &&
-curl --proto '=https' --tlsv1.2 -LsSf -o "$installer_dir/ts-crap-installer.sh" \
-  "https://github.com/RuiCostafrg/typescript-crap/releases/download/v$version/ts-crap-installer.sh" &&
-gh attestation verify "$installer_dir/ts-crap-installer.sh" --repo RuiCostafrg/typescript-crap \
-  --signer-workflow RuiCostafrg/typescript-crap/.github/workflows/release.yml \
-  --source-ref "refs/tags/v$version" --deny-self-hosted-runners &&
-command -v sha256sum >/dev/null &&
-sh "$installer_dir/ts-crap-installer.sh"
-```
+## Gate pull requests
 
-Each step runs only if the previous one succeeded, so a missing `gh` or a
-failed verification stops before the installer runs. The verified installer
-then checks the downloaded archive against its embedded checksum, but only
-when `sha256sum` is available: without it, the installer prints
-`skipping sha256 checksum verification` and installs anyway. The
-`command -v sha256sum` step stops the sequence in that case. On macOS without
-`sha256sum`, use Homebrew or the manual archive download instead. In CI, set `TS_CRAP_UNMANAGED_INSTALL` to a directory to install there
-without editing shell profiles or writing an install receipt, then add that
-directory to `PATH`. On Linux, installers from v2.3.0 on always
-install the static musl build. The v2.2.1 installer uses the GNU build when the
-system glibc is 2.43 or newer (Ubuntu 26.04), and otherwise the static musl build.
-
-### Homebrew (macOS and Linux)
-
-```sh
-brew install RuiCostafrg/tap/ts-crap
-# Upgrade later:
-brew update && brew upgrade ts-crap
-```
-
-Homebrew verification covers macOS Apple Silicon/Intel and Linux x86-64.
-Linux ARM64 is covered by the shell installer and manual archives.
-
-### Windows PowerShell
-
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/RuiCostafrg/typescript-crap/releases/latest/download/ts-crap-installer.ps1 | iex"
-```
-
-### Manual download
-
-Download the archive for your OS and CPU from [GitHub Releases](https://github.com/RuiCostafrg/typescript-crap/releases/latest),
-verify its SHA-256 using the accompanying `.sha256` file, extract it, and place
-`ts-crap` (or `ts-crap.exe`) in a directory on your PATH. Unix archives use
-`.tar.xz`; Windows archives use `.zip`. New release builds and archive smoke tests use
-Ubuntu 26.04 (ARM64 and x86-64) and macOS 26 (Apple Silicon and Intel).
-GNU Linux archives from these builds require Ubuntu 26.04 or a compatible glibc
-runtime; the v0.3.0 and earlier Linux archives retain their glibc 2.35+ baseline.
-v2.2.1 adds separate static musl archives for Alpine and other Linux
-userlands. Android/Termux and Windows ARM64 have no native release builds.
-
-### GitHub Actions
-
-The repository's [setup action](action.yml) downloads a pinned release for the
-runner (static musl on Linux), verifies its build provenance and SHA-256, and
-adds `ts-crap` to `PATH`. It can also run the gate and upload SARIF:
+After checking out the PR, add this step to install ts-crap and run a
+full-project scan. It pins both the action commit and the scanner version.
 
 ```yaml
-- uses: RuiCostafrg/typescript-crap@<full commit SHA> # vX.Y.Z
+- uses: RuiCostafrg/typescript-crap@641bee77459d8bbf9ea981adbcbde2595c3af1b3 # v3.0.0
   with:
     version: 3.0.0
+    scan: true
 ```
 
-Pinning the full commit SHA, with the release as a comment, is the recommended
-and most secure reference. An immutable `@vX.Y.Z` release tag also works, and
-a floating `@v2` is not offered yet. See
-[choosing the action ref](docs/CI_ADOPTION.md#choosing-the-action-ref) for the
-trade-offs, and [CI adoption](docs/CI_ADOPTION.md#github-action) for inputs and
-SARIF upload.
-
-#### Why use the Action in CI
-
-The Action is the recommended way to run ts-crap in GitHub workflows:
-
-- **It verifies what it runs.** Every install checks the release's build
-  provenance against this repository's release workflow and its SHA-256 before
-  the binary executes. `npm install` doesn't check build provenance; you have to
-  add `npm audit signatures` yourself.
-- **It's pinned by design.** `version` is required and `latest` is rejected, so
-  a job can't silently pick up a new release.
-- **SARIF upload is built in.** The Action can publish findings to GitHub code
-  scanning with no separate upload step. See
-  [CI adoption](docs/CI_ADOPTION.md#github-action) for the inputs and
-  permissions it needs.
-- **The scanner doesn't need Node or a `package.json`.** It works in any
-  repository, adds nothing to your lockfile, and the same step runs on Linux,
-  macOS and Windows runners. Only the optional coverage helpers need Node 24+.
-
-The verification has a small cost, and almost all of it is one TUF refresh:
-`gh` updates the Sigstore trusted root on every run, which takes about 3 seconds
-on GitHub-hosted runners. These are install-only medians from
-hosted runners in November 2026, with v2.4.0 assets and empty caches
-([raw numbers](docs/measurements/install-action-2026-11-14.json)):
-
-| Install path | Ubuntu | macOS | Windows | Checked before the tool first runs |
-| --- | ---: | ---: | ---: | --- |
-| npm (`npm install --save-exact`) | 0.5 s | 1.2 s | 1.0 s | Registry integrity hashes, recorded in the lockfile. Build provenance only if you also run `npm audit signatures` |
-| Shell installer, pinned version | 0.4 s | 0.7 s | — | The archive's SHA-256 against the installer's embedded checksum, when `sha256sum` is available. Build provenance only if you [verify the installer first](#macos-and-linux) |
-| GitHub Action | 3.9 s | 4.3 s | 4.4 s | Build provenance against this repository's release workflow at the tag, then that the attestation records the archive's SHA-256 under its exact name, then the reported version |
-
-npm is the fastest path. The Action figures are for releases after v2.4.0, which
-fetch the trusted root while the archive downloads; the v2.4.0 Action takes about
-0.6 seconds longer.
-
-Prefer npm if your job already runs `npm ci` and Node, or you want the same
-pinned version for local runs and CI. Adding ts-crap as a devDependency then
-costs almost nothing extra, and
-[`npx typescript-crap coverage`](#npm-typescript-projects) is already available.
-
-See [installation verification](docs/INSTALLATION_COMPATIBILITY.md) for tested
-install/upgrade paths, runtime boundaries, and outstanding release-time evidence.
-
-Git is needed for diff mode, and authenticated `gh` for GitHub PR discovery.
-Starting with v1.0.0, the optional coverage collectors ship as
-`ts-crap-coverage-helpers.zip` in GitHub Releases, with a SHA-256 checksum. Download the bundle from the same release as your CLI, verify and extract
-it, and keep its directory intact. The helpers require Node 24+; the prebuilt CLI
-itself does not. See the [standalone helper installation and usage guide](docs/COVERAGE_HELPERS.md).
-
-## Build from source
-
-Requires Rust 1.90+ and a C compiler (for the Tree-sitter parser). Node is **not**
-required to analyze code; Node 24+ is required for the bundled coverage collector
-and the full end-to-end test suite. Git is needed for diff mode, and authenticated
-`gh` for GitHub PR discovery.
-
-```sh
-cargo build --locked -j 1
-./target/debug/ts-crap --help
-# Or install the CLI on your PATH:
-cargo install --locked --path . -j 1
-```
-
-**Termux / Ubuntu proot:** your existing Termux Cargo/Rust/Clang can be used from
-proot when they are on PATH. Single-job builds (`-j 1`) worked in the development
-environment after the linker failed during a parallel build. No second toolchain
-is required. A Termux-built executable targets Android; build with a native Linux
-toolchain instead when distributing to ordinary Linux machines.
-
-## Usage
-
-```sh
-# Entire project, threshold defaults to 10
-ts-crap --root /path/to/project
-
-# Several files and directories, deduplicated
-ts-crap --root /path/to/project src/a.ts src/b.ts src/components
-
-# A score strictly ABOVE 20 fails; a score equal to 20 passes
-ts-crap --root /path/to/project --threshold 20
-
-# Files changed between merge-base(origin/main, HEAD) and HEAD
-ts-crap --root /path/to/project --diff origin/main
-
-# Current PR, or a specific PR (already checked out locally)
-ts-crap --root /path/to/project --pr
-ts-crap --root /path/to/project --pr=42
-ts-crap --root /path/to/project --pr=https://github.com/owner/repo/pull/42
-
-# Restrict diff selection further
-ts-crap --root /path/to/project src --diff origin/main
-
-# Optional machine-readable or standalone HTML reports
-ts-crap --root /path/to/project --format json --output report.json
-ts-crap --root /path/to/project --format xml --output report.xml
-ts-crap --root /path/to/project --format html --output report.html
-```
-
-Positional source paths are relative to `--root` (absolute paths inside that root
-also work). Coverage and output paths are relative to the **calling directory**.
-Without `--output`, the selected report is written to stdout. Output parent
-directories must already exist. Reports are still emitted when the quality gate
-fails; input/processing errors instead produce stderr and no new report.
-Do not reuse an existing report after a failed command—check its exit code.
-
-### Finding and navigating failures
-
-```sh
-ts-crap --root . --only-failing --sort crap --top 20
-ts-crap --root . --format html --sort crap --output report.html
-```
-
-Text and HTML reports support `--only-failing`, descending `--sort crap` (ties
-use path/line/column), and positive `--top N`. Filtering happens before sorting
-and limiting. Default ordering remains path/line/column. The full selection
-always determines gate exits, completeness counts, totals and written baselines;
-rows hidden from view cannot hide a failure. JSON/XML/SARIF keep their complete
-schemas and reject presentation options that would filter, reorder or limit them.
-
-Standalone HTML includes a path/function search and an “Only failing” checkbox.
-Search is literal and case-insensitive; both controls combine. All rows remain
-readable with JavaScript disabled. Syntax errors include a one-based line and
-UTF-8 byte column plus a bounded source-line snippet, with terminal controls
-escaped in CLI diagnostics.
-
-### Exit codes
-
-- **0:** all analyzed functions pass (also for an empty selection).
-- **1:** at least one score is strictly greater than the threshold, or a
-  function fails the mutation gate (`--mutation-report`).
-- **2:** invalid arguments, invalid TypeScript, missing/stale inputs or coverage,
-  Git/gh errors, or report I/O errors.
-
-By default a selected file that does not parse aborts the whole scan (exit 2).
-`--on-syntax-error report` (ts-crap 2.4.0 or later) scores every other file
-instead and lists each unparsable file at its first syntax error. It appears as
-`syntax_errors` in JSON, a `Syntax errors` section in text and HTML, a
-`<syntax-error>` element in XML, and a located `TSCRAP002` result in SARIF. Any
-unparsable file fails the completeness gate (exit 1) whatever the coverage
-policy, and `--write-baseline` is refused until every selected file parses.
-Reports for scans without syntax errors are byte-identical in both modes.
-
-The default text report explicitly identifies empty selections. JSON/XML/HTML
-include file/function counts or records, so an empty result is distinguishable
-from a nonempty passing scan. Thresholds must be finite and nonnegative.
-
-### File and diff selection
-
-- Parses `.ts`, `.tsx`, `.mts`, and `.cts` using Tree-sitter—not regular
-  expressions. Excludes `.d.ts`, `.d.mts`, and `.d.cts`.
-- Directory scans honor `.gitignore`/`.ignore`, skip hidden entries and symbolic
-  links, and skip directories named `node_modules`, `.git`, `target`, `dist`,
-  `build` or `coverage` at any depth. `excluded_directories` in `ts-crap.json`
-  replaces that list, for example to scan a real `src/build/` directory.
-  An explicitly named supported source file bypasses ignore rules but cannot
-  bypass the excluded directories. Missing explicit files are errors.
-- Diff/PR mode takes tracked changes directly from Git, so tracked ignored/hidden
-  files cannot silently disappear from the gate (generated-directory exclusions
-  still apply).
-- Diff mode scores **all functions in changed files**, not only changed functions
-  or changed lines. Added, modified, copied, renamed, and type-changed sources are
-  included; committed deletions are not scored. No changes is a successful empty scan.
-- Diff mode is **committed changes only**. Selected files must match HEAD:
-  uncommitted selected-file edits or missing changed files are errors. Unrelated
-  untracked files are not part of a diff scan. Use ordinary file/project mode to
-  scan work-in-progress code.
-  Git selection ignores `diff.relative`; committed object IDs pin the source
-  comparison independently of `assume-unchanged` and `skip-worktree` flags.
-  CRLF/LF differences are allowed; all other bytes must match the HEAD blob,
-  including when clean/smudge filters would hide a difference from `git diff`.
-  Parsing and coverage hashes use the actual worktree bytes. Verification does
-  not run filters or modify index flags, and uses one Git batch process per scan.
-- PR mode obtains base/head OIDs with `gh pr view`, verifies local HEAD is the
-  PR head, then uses the same merge-base selection. Both objects must be locally
-  available: fetch/checkout the PR yourself. The tool never fetches, changes
-  branches, creates a PR, or uploads reports.
-- `--diff` and `--pr` are mutually exclusive. A shallow checkout missing a base
-  commit is an error; fetch sufficient history (e.g. `fetch-depth: 0` in CI).
-- Selections of 32 files or more are parsed and scored on up to `--jobs N`
-  worker threads (default: the available cores, at most 4). Files are still read
-  and verified against Git in order on one thread. Reports, baselines, exit
-  codes and the reported error (always the first failing file in path order) do
-  not depend on `N`. `--jobs 1` analyzes on one thread.
-
-### Report output safety
-
-`--output` paths are relative to the caller's current directory. Reports are
-written to a securely created sibling temporary file, synced, then atomically
-replaced at the destination. A failed write preserves the previous report.
-TypeScript destinations (`.ts`, `.tsx`, `.mts`, `.cts`, including declarations
-and case variants), symbolic links, directories, coverage-input aliases, and
-hardlinks to TypeScript files anywhere under the project root are rejected.
-The alias check includes hidden, ignored and unselected sources; directory
-symlinks are not followed. Concurrent project mutation is not supported.
-
-Analysis uses iterative tree traversal so deeply nested valid expressions do
-not consume the application's call stack.
-
-## Scoring contract
-
-```text
-CRAP = CC² × (1 − coverage)³ + CC
-```
-
-Coverage is a fraction in `[0, 1]`. **Missing coverage is 0%, never 100%.**
-For example, complexity 4 scores **20** uncovered, **6** at 50% coverage,
-and **4** fully covered. Decisions about failure use the unrounded score.
-
-Each implemented function starts at complexity **1**. Add one for each:
-
-- `if` (including each `else if`), `for`/`for…in`/`for…of`, `while`, `do…while`;
-- `catch`, non-default `case`, and ternary expression;
-- short-circuit `&&`, `||`, `??`, `&&=`, `||=`, `??=`.
-
-Plain `else`, `default`, `try`, `finally`, optional chaining and type-only syntax
-do not add complexity in this tool's convention. Comments and strings never count.
-
-Includes declarations/expressions, arrows, generators, constructors, getters,
-setters, class/object methods, and implemented overloads. Declaration-only
-signatures are not scored. Nested functions are separate records and their
-decisions are excluded from the enclosing function. Names are inferred where
-possible; anonymous callbacks use `<anonymous@line:column>`. Class and nested
-function names carry scope qualifiers; locations disambiguate duplicate names.
-Columns are one-based **UTF-8 byte columns**, matching Tree-sitter.
-
-Coverage is measured over the unique **executable statement-start lines owned by
-the function**, excluding nested function bodies. Default parameter/destructuring
-initializers also own their expression's starting line. Expression-bodied arrows use
-their expression's starting line. Missing hits are uncovered, and empty functions
-conservatively get 0% coverage. This is a documented line-based approximation:
-multiple statements/functions on one line share line evidence, so prefer normal
-multiline formatting. It is not branch or function-invocation coverage.
-
-## Real coverage from TypeScript tests
-
-With the npm package, run `npx typescript-crap coverage` for the one-step
-Vitest/Jest command, or `node node_modules/typescript-crap/coverage/coverage.mjs`
-and `.../import-coverage.mjs` for the helpers below.
-Installed users can run `node "/tools/ts-crap-coverage-helpers/coverage.mjs"`
-or `node "/tools/ts-crap-coverage-helpers/import-coverage.mjs"` with the same options
-shown below; replace `/tools/ts-crap-coverage-helpers` with the extracted bundle
-directory. The examples using `scripts/` are for a source checkout. Always use
-helpers from the exact same release as the scanner; `version.json` in the bundle
-records compatibility metadata. No npm dependencies are needed by the helpers.
-
-The optional Node helper runs your actual tests with V8 coverage and emits the
-source-hashed JSON consumed by the Rust binary. It snapshots source **before**
-running tests; changed source is rejected by Rust instead of using stale coverage.
-A Node loader hook also checks the source returned by the loader against that
-snapshot, rejecting changes made before import—even if restored later. This is an
-integrity check for trusted test commands, not a sandbox against hostile tests.
-
-After a successful child command and coverage conversion, the helper writes through
-an exclusively created file handle in a private random directory beside the output,
-syncs and closes the file, and atomically renames it over an existing regular
-report. Failed collection leaves the previous report intact. TypeScript output
-names (including declarations and case variants) are rejected even outside the
-source snapshot; output symlinks, including dangling ones, and directories are
-also rejected. The
-destination policy is checked again immediately before publication. This protects
-ordinary local-filesystem publication; it does not sandbox a hostile same-user test
-command or prevent concurrent replacement of parent directories. The Istanbul/LCOV
-importer stages the complete report beside the destination and publishes it by
-exclusive link, so a failed write leaves no partial file and a destination created
-concurrently is never replaced.
-Fresh-destination publication requires hard-link support on the destination
-filesystem; failures are reported without falling back to a partial direct write.
-
-Both helpers reserve `ROOT/ts-crap.json`, even when absent. Pass `--config FILE`
-before `--` to also protect an alternative policy file; the path is relative to
-the calling directory, just like the scanner's `--config`. This helper option
-only protects the destination and does not load policy or forward it to tests.
-The importer reserves both its raw input and native output against these paths.
-Existing directory aliases and config symlink targets are checked too.
-
-```sh
-mkdir -p reports
-node scripts/coverage.mjs \
-  --root examples/shop --output reports/shop-coverage.json -- \
-  node --experimental-strip-types test.mjs
-
-./target/debug/ts-crap --root examples/shop \
-  --coverage reports/shop-coverage.json --format html --output reports/shop.html
-```
-
-The child command runs in the specified root. Use raw TypeScript supported by
-Node's built-in stripping (or `.mts` as in the example); **there is no transpiler
-or source-map remapping**. The Rust parser supports TSX, but Node's built-in type
-stripper cannot execute JSX or every TypeScript construct. For transpiled TS/TSX
-projects, supply source-mapped coverage in the native schema using an adapter;
-Istanbul/LCOV inputs use the source-snapshot collection adapter described below.
-
-V8 offsets are mapped as UTF-16 code units (including Unicode). If an uncovered
-branch occupies part of a line, that line is conservatively uncovered. Hits from
-multiple Node processes are combined. Sources not loaded by tests have no hits.
-A failing test command propagates its exit code and publishes no new coverage
-report (any pre-existing report remains unchanged).
-
-### Native coverage schema (v1)
-
-```json
-{
-  "version": 1,
-  "files": {
-    "src/example.ts": {
-      "sha256": "<64 hex characters: SHA-256 of the exact source bytes>",
-      "lines": { "2": 1, "3": 0, "4": 3 }
-    }
-  }
-}
-```
-
-Paths must be normalized root-relative slash paths. Source paths containing literal
-backslashes or colons cannot be represented by schema v1 and are rejected by the
-scanner and collectors; actual Windows directory separators are encoded as `/`.
-Line keys are canonical,
-positive one-based decimal integers; hits are nonnegative integers. Duplicate file
-paths or line keys are errors, including equivalent JSON-escaped keys. Unknown
-fields, invalid hashes/versions/counts, out-of-range lines in selected sources, and
-selected source/hash mismatches are errors. Missing files/line hits mean 0% coverage.
-Unselected coverage entries may refer to files outside the scan; their source
-hashes are not validated because those files are not analyzed. Hashes ensure
-freshness, not trust: use coverage generated by your own test pipeline.
-
-## Mutation evidence
-
-`--mutation-report FILE` (since 2.6.0) accepts an Oximut
-mutation-testing report (`schemaVersion` 1, tested against 1.0.0-rc.1) as
-extra evidence. The report must come from the same checkout and the same
-`--root`, because Oximut records absolute paths. ts-crap only reads the
-report; it never runs or changes Oximut — produce the report with Oximut as
-its own documentation describes, then pass its path here. A surviving mutant
-that cannot change behaviour can be acknowledged with a reviewed
-`mutation.equivalent` entry in `ts-crap.json` (see `docs/MUTATION_EVIDENCE.md`).
-
-```sh
-# Run Oximut against the same root as documented by Oximut, then:
-ts-crap --root . --coverage coverage.json --mutation-report oximut-report.json
-```
-
-### Separate mutation gate
-
-**A function fails a separate mutation gate when it owns at least one mutant
-that survived or that no test reached (`no_coverage`), regardless of its
-complexity or CRAP threshold.** Existing CRAP scores, coverage, thresholds and
-baselines are unchanged; this gate is additive:
-
-- A function at 100% line coverage with a surviving mutant fails the scan
-  (exit 1), marked `FAIL (mutation)` in text and HTML and reported under the
-  SARIF rule `TSCRAP003`. CRAP-only failures keep `TSCRAP001`.
-- Regression baselines cannot suppress mutation-gate failures: snapshots hold
-  CRAP scores only.
-- A function with no mutants keeps its line-coverage result alone — that is
-  not evidence of test adequacy. A function whose every mutant is inconclusive
-  (timeout, invalid, …) is unchanged too; incomplete runs are labelled.
-- `mutators` records whether the run covered all declared mutator families
-  (`all`), only named ones (`subset`), or an unnamed set (`unknown`). Subset
-  and unknown are partial evidence: they can fail functions but never prove
-  complete adequacy.
-- `kill_ratio`, `effective_coverage` (`min(coverage, kill_ratio)`) and
-  `effective_crap` are informational estimates only and decide nothing.
-
-Mutants belong to the innermost function containing their whole edit, like
-CRAP ownership; mutants with no owning function fail no gate.
-
-### Freshness and its limits
-
-When the report lists per-file source hashes (Oximut's `sources` field),
-every listed selected file must still hash to the recorded SHA-256, including
-files that produced no mutants, and any change since the run is rejected with
-exit 2 (`source_binding: "oximut-source-sha256"`). Selected files the list
-does not name are counted in `files_not_in_report`. Reports without
-`sources`, such as Oximut 1.0.0-rc.1, fall back to recomputing each mutant's ID
-from the root-relative path, the whole source bytes and the edit. **That
-reproduces a pinned rc1 behavior, not a public stable hash contract**, and a
-file with no mutants then carries no freshness binding. Details, load validation, and
-the rejected alternatives are in
-[the mutation evidence note](docs/MUTATION_EVIDENCE.md).
-
-### Where evidence appears
-
-JSON reports name the pinned freshness check in `mutation.source_binding`
-and carry the additive `mutation` object
-([schema](schemas/report-v1.schema.json)), with per-function counts
-(`killed`, `survived`, `no_coverage`, inconclusive outcomes separately) and a
-`functions` list parallel to the report's functions. Text and HTML add a
-mutation section and a table of functions with surviving or uncovered mutants;
-XML adds `<mutation-evidence>` and per-function attributes. Machine output is
-never filtered by `--only-failing`, `--sort`, or `--top`.
-
-## Rust development
-
-The crate now exposes a reusable library via `ts_crap::scan` / `ts_crap::render`,
-with a thin CLI entry point. `render_to` and `render_to_with_options` stream to
-`std::io::Write`; writer errors can leave partial bytes in the caller's writer.
-The CLI stages file output and buffers stdout before writing. Each baseline
-application compares absolute scores anew, independently of earlier comparisons.
-See **[CONTRIBUTING.md](CONTRIBUTING.md)** for folder
-conventions, enforced safety/lint rules, release settings, benchmarks and quality
-commands. See [verification contracts](docs/VERIFICATION.md) for bounded Kani
-proofs and the released Rust API compatibility check. These rules reduce risk; they are not proof of maximum performance or
-of safety in third-party/native dependencies.
-
-## Reproducible example and tests
-
-The real shop TypeScript source is in `examples/shop/src/pricing.mts`; its
-assertion-based tests are in `examples/shop/test.mjs`.
-
-Two additional runnable projects exercise everyday TypeScript:
-
-- `examples/inventory`: a stock service with class methods, a discriminated
-  result union, normalized Unicode keys and business/validation failures.
-- `examples/retry`: a generic asynchronous retry function with optional settings,
-  transient-error policy, exceptions and bounded attempts.
-
-Run either project's assertions directly with `node examples/inventory/test.mjs`
-or `node examples/retry/test.mjs`. Pass `--partial` to intentionally exercise less
-code. To compare coverage-driven scores, substitute either root for
-`examples/shop` in the collection command above and use a separate output file.
-Integration tests collect partial and full V8 coverage, verify exact complexity,
-require complete evidence, compare scores, and reject stale source for both.
-
-```sh
-# Expected exit 1: discount scores 12 and shipping scores 20 without coverage
-./target/debug/ts-crap --root examples/shop
-
-# Collect real coverage using the command above, then expected exit 0:
-./target/debug/ts-crap --root examples/shop --coverage reports/shop-coverage.json
-# Fully covered scores: discount=3, shipping=4, total=1
-
-cargo test --locked -j 1
-cargo fmt --check
-cargo clippy --locked -j 1 --all-targets -- -D warnings
-```
-
-Tests invoke the compiled binary on actual TypeScript fixtures and temporary
-projects, execute real TypeScript through Node/V8, and use real local Git repos.
-They cover known scores, partial/full/missing coverage, stale source hashes,
-threshold boundaries, passing/failing exits, multiple files, ignores, TSX,
-nested functions/methods, syntax errors, missing files, empty scans, Git merge-base,
-renames/deletions, relative paths, and JSON/XML/HTML escaping/report I/O.
-Only the external GitHub lookup is stubbed at the process boundary; no live PR
-or network access is needed for the tests.
-
-GitHub Actions runs Rust 1.90/stable debug/release tests, formatting, strict
-Clippy, rustdoc, Node/helper checks, dependency auditing, and workflow linting.
-Separate workflows produce Rust coverage artifacts (LCOV/JSON/HTML) and run
-mutation tests with downloadable diffs/logs. See CONTRIBUTING.md for triggers,
-artifact names, safety settings, and the distinction from TypeScript coverage.
-
-## Contributions and security
-
-This project is maintained by RuiCostafrg. Please use issues for bugs and feature
-requests; pull requests are restricted to collaborators. See [SECURITY.md](SECURITY.md)
-for private vulnerability reporting, release protections and download verification.
-The original v0.1.0 predates artifact attestations; future hardened releases include
-provenance. Public source and forks remain available under MIT.
-
-## Adoption gates (v0.2)
-
-`ts-crap.json` in the project root configures selection and gate policy. Unknown
-fields and unknown versions are errors. Globs use forward slashes relative to
-`--root`; `*` stops at directory boundaries and `**` matches
-across directories. Includes default to all supported sources and excludes default
-to empty. Built-in generated/dependency exclusions and ignore rules still apply.
-Explicit paths and Git selection intersect these rules. Excludes always win.
-`--config FILE` selects a config relative to the caller; repeated `--include` or
-`--exclude` flags replace the corresponding configured list. No environment or
-ancestor config is loaded, so results do not depend on the caller's directory.
-
-```json
-{
-  "version": 1,
-  "include": ["packages/**/src/**/*.ts", "packages/**/src/**/*.tsx"],
-  "exclude": ["**/*.test.ts", "**/*.test.tsx"],
-  "threshold": 10,
-  "require_coverage": true,
-  "fail_on_empty": true
-}
-```
-
-`excluded_directories` (ts-crap 2.4.0 or later) replaces the built-in excluded
-directory names. Each entry is one non-empty directory name, matched at any depth. Path
-separators (`/`, `\`), NUL characters, `.`, `..` and duplicates are invalid;
-`[]` excludes nothing. Omitting it keeps the
-defaults `["node_modules", ".git", "target", "dist", "build", "coverage"]`. Keep
-`node_modules` and `.git` when you replace the list. The coverage helpers read
-this key from the same file (`ROOT/ts-crap.json` or `--config`), so they skip
-the same directory names as the scanner. They do not apply `.gitignore` or skip
-hidden entries, so they may record extra files the scanner never selects; those
-records are unused. Older scanners reject the key as unknown.
-
-```json
-{
-  "version": 1,
-  "include": ["src/**"],
-  "excluded_directories": ["node_modules", ".git", "target", "dist", "coverage"]
-}
-```
-
-Gate settings resolve independently: an explicit CLI value overrides the project
-config, which overrides the built-in defaults (`threshold: 10`,
-`require_coverage: false`, `fail_on_empty: false`). A threshold must be finite and
-nonnegative; zero is valid. Boolean settings must be JSON booleans. Nulls,
-duplicate fields, and invalid gate settings are errors even when overridden by
-the CLI. Existing selection-only configs keep their previous behavior.
-
-Bare boolean flags enable their gates. Use `=false` to disable a configured gate,
-or `=true` to enable it explicitly. Boolean values require `=` so a following path
-is never consumed as a value:
-
-```sh
-ts-crap --coverage imported-coverage.json
-ts-crap --threshold 20 --require-coverage=false --fail-on-empty=false
-```
-
-The resolved threshold appears in reports and baselines. Baseline comparison
-still requires matching thresholds, and a baseline cannot suppress a configured
-completeness failure. In the Rust API, `ScanOptions.threshold`,
-`require_coverage`, and `fail_on_empty` are `Option` overrides: `None` inherits
-policy; `Some(value)` explicitly overrides it, including `Some(false)`.
-
-`--require-coverage` fails when any selected file has no coverage entry or any
-function-owned statement start has no line entry. A recorded zero is evidence of
-an uncovered line; it still affects CRAP normally. Reports count files and
-functions missing evidence. `--fail-on-empty` fails selections with no implemented
-functions. Both are opt-in through config or flags; empty diffs keep passing by
-default. Completeness failures remain failures when using a regression baseline.
-
-### Regression baselines
-
-```sh
-ts-crap --root . --write-baseline crap-baseline.json # absolute gate exit still applies
-ts-crap --root . --baseline crap-baseline.json
-# A function edited while moving files needs an explicit mapping:
-ts-crap --baseline crap-baseline.json --baseline-rename src/old.ts=src/new.ts
-```
-
-Review and commit the version-1 baseline. It stores absolute scores, threshold,
-paths, qualified names and SHA256 token identities, without source text. Valid
-hexadecimal identities are normalized to lowercase when loaded, so letter case
-does not affect matching. The threshold must match. Only scores strictly above
-the threshold and strictly above the matched baseline score fail. New violations
-fail; removed/improved violations pass. Absolute gates remain the default. Baseline creation never changes gate
-exit codes or silently updates an existing baseline during comparison.
-
-A unique path plus qualified function name matches edits. Token fingerprints
-ignore comments, formatting and separately scored descendant functions and match unique unchanged functions across file
-moves, including anonymous functions whose locations shifted. Renamed functions,
-including inferred variable/property/field names,
-are new identities; edited moves require the explicit mapping above. Ambiguous
-matches fail conservatively as new violations. Duplicate names should be given
-unique scopes before relying on name-based matching. Prefer full-project baselines;
-a diff-generated baseline only records the selected functions. Baselines are
-reviewed policy inputs, not authenticated proof of past code quality.
-
-### Istanbul and LCOV collection
-
-For Vitest and Jest, the one-step helper chooses fresh paths and reporter flags
-for you (see the [helper guide](docs/COVERAGE_HELPERS.md#one-step-vitest-or-jest-coverage)):
-
-```sh
-node scripts/coverage-run.mjs --framework vitest --scan   # or --framework jest
-```
-
-The manual importer commands below remain supported.
-
-Jest/nyc `coverage-final.json`, Vitest's Istanbul reporter, and LCOV line records
-can be collected through the dependency-free Node adapter. Use fresh input/output
-paths (the adapter rejects existing destinations). Paths passed on the command
-line are relative to the caller; the test command runs inside `--root`.
-
-```sh
-node scripts/import-coverage.mjs --root . --format istanbul \
-  --input coverage/coverage-final.json --output imported-coverage.json -- \
-  npx jest --coverage --coverageReporters=json
-node scripts/import-coverage.mjs --root . --format lcov \
-  --input coverage/lcov.info --output imported-coverage.json -- \
-  npx vitest run --coverage --coverage.reporter=lcov
-ts-crap --coverage imported-coverage.json --require-coverage
-```
-
-Source hashes are captured **before** running the trusted test command and verified
-after collection. Imports never invent freshness by hashing only when importing an
-old file. A failing test command, changed source, empty report, invalid counters,
-unmappable location, or source outside the collected TypeScript snapshot rejects
-the entire import. Missing file records remain missing coverage evidence.
-
-Already remapped TypeScript paths work directly. Generated JavaScript uses
-Istanbul's `inputSourceMap`, or its final `sourceMappingURL` (external JSON or inline
-base64). Flat source maps v3, relative paths, `sourceRoot`, and file URLs are
-supported. Maps must embed `sourcesContent` matching the pre-test snapshot;
-URL schemes such as webpack virtual paths and indexed maps are rejected with an
-error. Configure the reporter to remap these to original TypeScript instead.
-Statement starts and direct Istanbul `default-arg` initializer counters map using
-their UTF-16 generated column; LCOV maps line segments and may omit default
-initializer declaration lines. Use JSON for complete evidence in those functions.
-Uncovered overlapping statements/segments keep a line uncovered. This conservative
-line approximation does not claim branch coverage. Existing native V8 collection
-remains available for Node's direct TypeScript execution.
-
-The [real Jest/Vitest integration suite](docs/FRAMEWORK_COVERAGE.md) exercises
-both JSON and LCOV reporters, Vitest's Istanbul and V8 providers, complex TSX,
-and shared workspace imports. It records the
-pinned framework versions, repeat-run checks, and source-map limitations.
-
-### Review output
-
-`--format sarif --output crap.sarif` emits SARIF 2.1.0 with stable `TSCRAP001`
-(score), `TSCRAP002` (completeness), and — with `--mutation-report` —
-`TSCRAP003` (surviving or uncovered mutants) rule IDs, relative
-percent-encoded URIs and function fingerprints. Upload it with your
-repository's SARIF integration; output does not change gate exit codes. Text
-and error diagnostics escape controls and bidirectional formatting
-characters; JSON retains raw values for machine readers.
-
-### Compatibility and CI adoption
-
-The [3.x compatibility contract](docs/COMPATIBILITY.md) defines scoring, exit codes,
-configuration, report fields, baseline identities, migrations, and Rust API
-stability. [Versioned JSON Schemas and examples](schemas/README.md) cover the four
-machine-readable documents.
-
-Rust library users upgrading from 2.x should read the
-[3.0 migration guide](docs/MIGRATING_TO_V3.md); CLI, Action, and npm users need no
-changes. For v1 installations, follow the [v2 migration guide](docs/MIGRATING_TO_V2.md),
-including fresh LCOV collection and review of changed gate/baseline results.
-
-The [CI adoption guide](docs/CI_ADOPTION.md) and
-[copyable GitHub workflow](examples/ci/github-actions.yml) cover reviewed baselines,
-fresh Vitest coverage, PR selection, and reports retained on failed gates.
-[Independent adoption measurements](docs/ADOPTION.md) record the actual projects,
-versions, coverage limits, runtime, memory, and v1 resource-budget decision.
+The action verifies release provenance and the archive digest before installing.
+For an existing codebase, capture and review a baseline, then use
+`--baseline` to fail new or worsening violations. See the
+[CI adoption guide](docs/CI_ADOPTION.md) for coverage collection, baseline
+review, checkout setup, and SARIF upload.
+
+## Performance
+
+On one GitHub-hosted Linux x86-64 runner, the compact-score build that preceded
+v3.0.0 scanned the pinned VS Code corpus and wrote a 184 MB JSON report. It
+reported 431,594 functions from 15,246 files and flagged 50 files it could
+not parse. The v2.6.1 baseline and the compact-score build produced identical
+report bytes.
+
+| Linux build | Scan + JSON, median (range) | Peak RSS, v2.6.1 → compact-score build |
+| --- | ---: | ---: |
+| glibc | 15.2 s (15.2–15.4 s) | 259 → 242 MiB |
+| static musl | 19.1 s (19.0–19.2 s) | 213 → 201 MiB |
+
+Three runs per build after warmup with the output initially absent. Peak RSS
+figures are medians. The timing ranges overlap with v2.6.1 on both builds.
+See the [raw results](docs/measurements/vscode-hosted-compact-score-2026-11-20.json)
+and [benchmark instructions](docs/PERFORMANCE.md#real-corpus-benchmark).
+
+## Documentation
+
+- [Versioned JSON schemas](schemas/README.md) and the [compatibility contract](docs/COMPATIBILITY.md).
+- [Optional Oximut mutation gate](docs/MUTATION_EVIDENCE.md) for surviving and uncovered mutants.
+- [3.0 migration guide](docs/MIGRATING_TO_V3.md) for Rust library users.
+- [Changelog](CHANGELOG.md), [contributor guide](CONTRIBUTING.md), and [security policy](SECURITY.md).
+
+Report bugs and feature requests through [GitHub Issues](https://github.com/RuiCostafrg/typescript-crap/issues).
+Pull requests are restricted to collaborators. Licensed under [MIT](LICENSE).

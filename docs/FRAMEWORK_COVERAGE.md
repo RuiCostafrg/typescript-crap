@@ -24,8 +24,9 @@ commit being released.
 ## Framework and reporter matrix
 
 The fixture pins Jest and babel-jest **30.5.2**, Vitest and
-@vitest/coverage-istanbul and @vitest/coverage-v8 **5.1.1**, Babel core, TypeScript
-preset **8.0.7** and CommonJS transform **8.1.2**, and React/React DOM **19.3.1**.
+@vitest/coverage-istanbul and @vitest/coverage-v8 **5.1.1**, Babel core and
+CommonJS transform **8.1.3**, Babel TypeScript preset **8.0.7**, and React/React DOM
+**19.3.1**.
 Transitive versions are recorded in the
 fixture's `package-lock.json`.
 

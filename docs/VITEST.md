@@ -96,6 +96,44 @@ Run `npm run crap` locally and in CI. To keep the native report, pass
 `--output coverage/ts-crap.json` (it must not exist yet), then scan it separately,
 for example with `--format sarif`.
 
+## Multi-project and sharded coverage
+
+Vitest's root config sets `test.projects` and the suite-wide coverage policy.
+For sharded tests, collect coverage in each blob, then run the existing
+percentage thresholds on the merged result. The importer runs the entire
+collection and merge within one source snapshot before `ts-crap` scores it.
+
+The [Vitest 5 fixture config](../tests/fixtures/frameworks/vitest.sharded.config.mjs)
+defines `ui` and `service` projects and requires 100% line and function coverage.
+Its [collector](../tests/fixtures/frameworks/collect-vitest-shards.mjs) runs two
+`vitest run --shard` commands with the blob reporter and coverage enabled. Only
+these commands set `VITEST_COVERAGE_SHARD=1`, which defers the percentage gate.
+`vitest run --merge-reports` restores the thresholds and writes Istanbul JSON.
+
+Run this example from the repository root in a POSIX shell with Rust and Node 24+.
+The commands use the lockfile and run both shards in the same checkout.
+
+```sh
+cargo build --locked
+repo="$PWD"
+cd tests/fixtures/frameworks
+npm ci --ignore-scripts
+mkdir -p coverage
+run_dir="$(mktemp -d coverage/vitest-shards.XXXXXX)"
+
+node "$repo/scripts/import-coverage.mjs" --root . --format istanbul \
+  --input "$run_dir/run/coverage/coverage-final.json" --output "$run_dir/native.json" -- \
+  node collect-vitest-shards.mjs "$run_dir/run" &&
+  "$repo/target/debug/ts-crap" --root . \
+    --include 'packages/*/src/**/*.{ts,tsx}' --include 'packages/ui/coverage-gaps/*.tsx' \
+    --threshold 4 --coverage "$run_dir/native.json" --require-coverage
+```
+
+A test failure or a failed percentage threshold stops the importer before it
+publishes `native.json`. For this fixture, set `FIXTURE_PARTIAL=1` on the import
+command in a fresh run directory to see the merged percentage gate fail. For
+your project, use your own suite-wide thresholds and source patterns.
+
 ## GitHub Actions
 
 ```yaml

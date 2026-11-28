@@ -77,6 +77,53 @@ instead.
 - Failing tests, or a failing `coverageThreshold`, publish no coverage. Source
   edited during the run is rejected.
 
+## Multi-project and sharded coverage
+
+Define `projects` and `coverageThreshold` in the top-level Jest config, use a
+stable `displayName` for each project, and collect uncovered source files with
+`collectCoverageFrom`. To shard the suite, write each shard's Istanbul JSON to
+its own fresh directory. Merge the reports with `istanbul-lib-coverage` and
+apply the original coverage thresholds to the merged totals. The CRAP gate
+runs after Jest's percentage gate passes. [Jest configuration](https://jestjs.io/docs/configuration#projects-arraystring--projectconfig)
+
+The [runnable example](../tests/fixtures/frameworks/jest-sharded-coverage.cjs)
+splits two [Jest projects](../tests/fixtures/frameworks/jest.sharded.config.cjs)
+over two shards. It leaves `coverageThreshold` in the regular configuration
+and omits it from the configuration passed to the shard runs. After merging the
+shards, the script reads every `coverageThreshold.global` minimum from that same
+configuration. This example supports global percentage thresholds. It rejects
+file, directory and glob thresholds, and negative uncovered-count limits.
+
+Run from this repository's root in a POSIX shell with Node.js 24 or later, npm
+and Rust installed:
+
+```sh
+cargo build --locked
+fixture="$PWD/tests/fixtures/frameworks"
+npm ci --ignore-scripts --prefix "$fixture"
+run=$(mktemp -d)
+node scripts/import-coverage.mjs --root "$fixture" --format istanbul \
+  --input "$run/jest/coverage-final.json" --output "$run/native.json" \
+  -- node "$fixture/jest-sharded-coverage.cjs" "$run/jest" &&
+  target/debug/ts-crap --root "$fixture" --coverage "$run/native.json" \
+    --require-coverage packages/core/src packages/service/src
+```
+
+The importer starts before the shard runs so it can check that source files
+stay unchanged through collection. Import only the final merged report. The
+per-shard JSON files under `shard-1` and `shard-2` are useful for debugging.
+Both projects reach 100% coverage in the normal run. The importer also finds
+uncovered UI fixtures, which are outside the two source directories scanned
+by this command. Set `FIXTURE_PARTIAL=1` on the importer command with a fresh
+`run` directory to see both test suites pass while the merged branch, line
+and statement percentages fail the Jest gate. The importer publishes no
+native coverage on that run.
+
+When adapting the script to your project, add `istanbul-lib-coverage` as a dev
+dependency and use your own project config. Keep the source paths and Jest
+coverage provider consistent across shards. The example runs both shards in
+the same checkout and merges Istanbul counters by source file.
+
 ## JSON or LCOV
 
 Use the default `--format json` (Istanbul JSON). It carries statement and
